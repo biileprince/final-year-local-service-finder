@@ -1,0 +1,35 @@
+# ==============================================================================
+# Grafana Datasources - Local Service Finder
+# ==============================================================================
+
+apiVersion: 1
+
+datasources:
+  # ============================================================================
+  # Prometheus - Primary metrics store
+  # ============================================================================
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"
+      httpMethod: POST
+
+  # ============================================================================
+  # PostgreSQL - Direct database queries
+  # ============================================================================
+  - name: PostgreSQL
+    type: postgres
+    url: postgres:5432
+    database: ${POSTGRES_DB:-local_service_finder}
+    user: ${POSTGRES_USER:-lsf_user}
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD:-lsf_password}
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400

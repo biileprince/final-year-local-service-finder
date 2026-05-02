@@ -1,0 +1,49 @@
+# ==============================================================================
+# Prometheus Configuration - Local Service Finder
+# ==============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files
+rule_files:
+  - "alerts.yml"
+
+# Scrape configs
+scrape_configs:
+  # ============================================================================
+  # Prometheus self-monitoring
+  # ============================================================================
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ============================================================================
+  # NestJS Backend API
+  # ============================================================================
+  - job_name: "lsf-backend"
+    static_configs:
+      - targets: ["backend:3001"]
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+
+  # ============================================================================
+  # Redis Metrics (via redis-exporter)
+  # ============================================================================
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  # ============================================================================
+  # PostgreSQL Metrics (via postgres-exporter)
+  # ============================================================================
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]

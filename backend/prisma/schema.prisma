@@ -1,0 +1,662 @@
+// =============================================================================
+// Local Service Finder - Production Prisma Schema
+// Backend Configuration
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum NotificationType {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+enum FileType {
+  IMAGE
+  DOCUMENT
+  VIDEO
+  OTHER
+}
+
+enum FileContext {
+  AVATAR
+  GALLERY
+  MESSAGE
+  REVIEW
+  VERIFICATION
+  BOOKING
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+  FATAL
+}
+
+// =============================================================================
+// FILE STORAGE
+// =============================================================================
+
+model File {
+  id              String      @id @default(uuid())
+  originalName    String      @map("original_name")
+  fileName        String      @map("file_name")
+  mimeType        String      @map("mime_type")
+  fileSize        Int         @map("file_size")
+  fileType        FileType    @default(OTHER) @map("file_type")
+  storageProvider String      @default("cloudinary") @map("storage_provider")
+  storageKey      String      @map("storage_key")
+  url             String
+  thumbnailUrl    String?     @map("thumbnail_url")
+  context         FileContext
+  uploadedById    String      @map("uploaded_by")
+  width           Int?
+  height          Int?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  deletedAt       DateTime?   @map("deleted_at")
+
+  // Relations
+  uploadedBy          User                @relation("UserUploadedFiles", fields: [uploadedById], references: [id], onDelete: Cascade)
+  categoryImages      Category[]          @relation("CategoryImage")
+  providerIdDocuments Provider[]          @relation("ProviderIdDocument")
+  providerLicenses    Provider[]          @relation("ProviderLicense")
+  galleryItems        ProviderGallery[]
+  reviewImages        ReviewImage[]
+  bookingAttachments  BookingAttachment[]
+  messages            Message[]
+
+  @@index([uploadedById])
+  @@index([context])
+  @@index([fileType])
+  @@map("files")
+}
+
+// =============================================================================
+// USERS
+// =============================================================================
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  password        String    @map("password_hash")
+  name            String
+  phone           String?
+  profileImage    String?   @map("avatar_url")
+  role            UserRole  @default(CUSTOMER)
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  phoneVerifiedAt DateTime? @map("phone_verified_at")
+  lastLoginAt     DateTime? @map("last_login_at")
+  lastLoginIp     String?   @map("last_login_ip")
+  loginCount      Int       @default(0) @map("login_count")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  createdById     String?   @map("created_by")
+  updatedById     String?   @map("updated_by")
+  deletedAt       DateTime? @map("deleted_at")
+
+  // Relations
+  createdBy               User?                   @relation("UserCreatedBy", fields: [createdById], references: [id])
+  updatedBy               User?                   @relation("UserUpdatedBy", fields: [updatedById], references: [id])
+  usersCreated            User[]                  @relation("UserCreatedBy")
+  usersUpdated            User[]                  @relation("UserUpdatedBy")
+  uploadedFiles           File[]                  @relation("UserUploadedFiles")
+  provider                Provider?
+  customerBookings        Booking[]               @relation("CustomerBookings")
+  bookingsCreated         Booking[]               @relation("BookingCreatedBy")
+  bookingStatusChanges    Booking[]               @relation("BookingStatusChangedBy")
+  bookingCancellations    Booking[]               @relation("BookingCancelledBy")
+  bookingAttachments      BookingAttachment[]
+  customerReviews         Review[]                @relation("CustomerReviews")
+  moderatedReviews        Review[]                @relation("ModeratedReviews")
+  conversationsAsCustomer Conversation[]          @relation("CustomerConversations")
+  sentMessages            Message[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference?
+  refreshTokens           RefreshToken[]
+  auditLogs               AuditLog[]
+  applicationLogs         ApplicationLog[]
+  apiRequestLogs          ApiRequestLog[]
+  providersVerified       Provider[]              @relation("VerifiedProviders")
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+// =============================================================================
+// CATEGORIES
+// =============================================================================
+
+model Category {
+  id            String    @id @default(uuid())
+  name          String    @unique
+  slug          String    @unique
+  description   String?
+  icon          String?
+  color         String?
+  imageId       String?   @map("image_id")
+  parentId      String?   @map("parent_id")
+  displayOrder  Int       @default(0) @map("display_order")
+  isActive      Boolean   @default(true) @map("is_active")
+  providerCount Int       @default(0) @map("provider_count")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  // Relations
+  image     File?              @relation("CategoryImage", fields: [imageId], references: [id], onDelete: SetNull)
+  parent    Category?          @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children  Category[]         @relation("CategoryHierarchy")
+  providers ProviderCategory[]
+
+  @@index([slug])
+  @@index([isActive, displayOrder])
+  @@map("categories")
+}
+
+// =============================================================================
+// PROVIDERS
+// =============================================================================
+
+model Provider {
+  id                     String             @id @default(uuid())
+  userId                 String             @unique @map("user_id")
+  bio                    String?
+  hourlyRate             Decimal            @map("hourly_rate") @db.Decimal(10, 2)
+  yearsExperience        Int                @default(0) @map("years_experience")
+  location               String
+  latitude               Decimal?           @db.Decimal(10, 8)
+  longitude              Decimal?           @db.Decimal(11, 8)
+  serviceRadiusKm        Int                @default(50) @map("service_radius_km")
+  verificationStatus     VerificationStatus @default(PENDING) @map("verification_status")
+  verifiedAt             DateTime?          @map("verified_at")
+  verifiedById           String?            @map("verified_by")
+  idDocumentId           String?            @map("id_document_id")
+  businessLicenseId      String?            @map("business_license_id")
+  featured               Boolean            @default(false)
+  isActive               Boolean            @default(true) @map("is_active")
+  rating                 Decimal            @default(0) @db.Decimal(3, 2)
+  reviewCount            Int                @default(0) @map("review_count")
+  totalBookings          Int                @default(0) @map("total_bookings")
+  completedBookings      Int                @default(0) @map("completed_bookings")
+  galleryCount           Int                @default(0) @map("gallery_count")
+  responseRate           Decimal            @default(0) @map("response_rate") @db.Decimal(5, 2)
+  avgResponseTimeMinutes Int?               @map("avg_response_time_minutes")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+  deletedAt              DateTime?          @map("deleted_at")
+
+  // Relations
+  user                    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verifiedBy              User?               @relation("VerifiedProviders", fields: [verifiedById], references: [id])
+  idDocument              File?               @relation("ProviderIdDocument", fields: [idDocumentId], references: [id], onDelete: SetNull)
+  businessLicense         File?               @relation("ProviderLicense", fields: [businessLicenseId], references: [id], onDelete: SetNull)
+  categories              ProviderCategory[]
+  specialties             ProviderSpecialty[]
+  gallery                 ProviderGallery[]
+  availability            Availability[]
+  bookings                Booking[]
+  reviews                 Review[]
+  conversationsAsProvider Conversation[]
+
+  @@index([userId])
+  @@index([verificationStatus])
+  @@index([featured])
+  @@index([rating(sort: Desc)])
+  @@map("providers")
+}
+
+model ProviderCategory {
+  id         String   @id @default(uuid())
+  providerId String   @map("provider_id")
+  categoryId String   @map("category_id")
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, categoryId])
+  @@index([providerId])
+  @@index([categoryId])
+  @@map("provider_categories")
+}
+
+model ProviderSpecialty {
+  id         String   @id @default(uuid())
+  providerId String   @map("provider_id")
+  specialty  String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, specialty])
+  @@index([providerId])
+  @@map("provider_specialties")
+}
+
+model ProviderGallery {
+  id           String    @id @default(uuid())
+  providerId   String    @map("provider_id")
+  fileId       String    @map("file_id")
+  title        String?
+  description  String?
+  displayOrder Int       @default(0) @map("display_order")
+  isFeatured   Boolean   @default(false) @map("is_featured")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  file     File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, fileId])
+  @@index([providerId, displayOrder])
+  @@map("provider_gallery")
+}
+
+// =============================================================================
+// AVAILABILITY
+// =============================================================================
+
+model Availability {
+  id          String   @id @default(uuid())
+  providerId  String   @map("provider_id")
+  date        DateTime @db.Date
+  isAvailable Boolean  @default(true) @map("is_available")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  provider  Provider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  timeSlots TimeSlot[]
+
+  @@unique([providerId, date])
+  @@index([providerId])
+  @@index([date])
+  @@map("availabilities")
+}
+
+model TimeSlot {
+  id             String   @id @default(uuid())
+  availabilityId String   @map("availability_id")
+  startTime      DateTime @map("start_time") @db.Time
+  endTime        DateTime @map("end_time") @db.Time
+  isAvailable    Boolean  @default(true) @map("is_available")
+  isFastest      Boolean  @default(false) @map("is_fastest")
+  bookingId      String?  @map("booking_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  availability Availability @relation(fields: [availabilityId], references: [id], onDelete: Cascade)
+
+  @@index([availabilityId])
+  @@index([availabilityId, isAvailable])
+  @@map("time_slots")
+}
+
+// =============================================================================
+// BOOKINGS
+// =============================================================================
+
+model Booking {
+  id                 String        @id @default(uuid())
+  bookingNumber      String        @unique @map("booking_number")
+  customerId         String        @map("customer_id")
+  providerId         String        @map("provider_id")
+  scheduledDate      DateTime      @map("scheduled_date") @db.Date
+  scheduledStartTime DateTime      @map("scheduled_start_time") @db.Time
+  scheduledEndTime   DateTime?     @map("scheduled_end_time") @db.Time
+  actualStartTime    DateTime?     @map("actual_start_time")
+  actualEndTime      DateTime?     @map("actual_end_time")
+  serviceAddress     String        @map("service_address")
+  serviceLatitude    Decimal?      @map("service_latitude") @db.Decimal(10, 8)
+  serviceLongitude   Decimal?      @map("service_longitude") @db.Decimal(11, 8)
+  problemDescription String        @map("problem_description")
+  serviceNotes       String?       @map("service_notes")
+  status             BookingStatus @default(PENDING)
+  statusChangedAt    DateTime?     @default(now()) @map("status_changed_at")
+  statusChangedById  String?       @map("status_changed_by")
+  estimatedAmount    Decimal?      @map("estimated_amount") @db.Decimal(10, 2)
+  finalAmount        Decimal?      @map("final_amount") @db.Decimal(10, 2)
+  paymentStatus      PaymentStatus @default(UNPAID) @map("payment_status")
+  paymentMethod      String?       @map("payment_method")
+  paymentReference   String?       @map("payment_reference")
+  paidAt             DateTime?     @map("paid_at")
+  cancellationReason String?       @map("cancellation_reason")
+  cancelledAt        DateTime?     @map("cancelled_at")
+  cancelledById      String?       @map("cancelled_by")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+  createdById        String?       @map("created_by")
+  deletedAt          DateTime?     @map("deleted_at")
+  version            Int           @default(1)
+
+  customer        User                @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: Restrict)
+  provider        Provider            @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  statusChangedBy User?               @relation("BookingStatusChangedBy", fields: [statusChangedById], references: [id])
+  cancelledBy     User?               @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
+  createdBy       User?               @relation("BookingCreatedBy", fields: [createdById], references: [id])
+  review          Review?
+  attachments     BookingAttachment[]
+  conversations   Conversation[]
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([bookingNumber])
+  @@map("bookings")
+}
+
+model BookingAttachment {
+  id             String   @id @default(uuid())
+  bookingId      String   @map("booking_id")
+  fileId         String   @map("file_id")
+  attachmentType String   @map("attachment_type")
+  description    String?
+  uploadedById   String   @map("uploaded_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  booking    Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  file       File    @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  uploadedBy User    @relation(fields: [uploadedById], references: [id])
+
+  @@index([bookingId])
+  @@index([bookingId, attachmentType])
+  @@map("booking_attachments")
+}
+
+// =============================================================================
+// REVIEWS
+// =============================================================================
+
+model Review {
+  id                  String    @id @default(uuid())
+  bookingId           String?   @unique @map("booking_id")
+  customerId          String    @map("customer_id")
+  providerId          String    @map("provider_id")
+  rating              Int
+  title               String?
+  comment             String
+  providerResponse    String?   @map("provider_response")
+  providerRespondedAt DateTime? @map("provider_responded_at")
+  isVisible           Boolean   @default(true) @map("is_visible")
+  isReported          Boolean   @default(false) @map("is_reported")
+  reportReason        String?   @map("report_reason")
+  moderatedAt         DateTime? @map("moderated_at")
+  moderatedById       String?   @map("moderated_by")
+  helpfulCount        Int       @default(0) @map("helpful_count")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  deletedAt           DateTime? @map("deleted_at")
+
+  booking     Booking?      @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  customer    User          @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: Restrict)
+  provider    Provider      @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  moderatedBy User?         @relation("ModeratedReviews", fields: [moderatedById], references: [id])
+  images      ReviewImage[]
+
+  @@unique([customerId, providerId])
+  @@index([providerId])
+  @@index([providerId, rating])
+  @@map("reviews")
+}
+
+model ReviewImage {
+  id           String   @id @default(uuid())
+  reviewId     String   @map("review_id")
+  fileId       String   @map("file_id")
+  displayOrder Int      @default(0) @map("display_order")
+  caption      String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  file   File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+  @@map("review_images")
+}
+
+// =============================================================================
+// MESSAGING
+// =============================================================================
+
+model Conversation {
+  id                  String    @id @default(uuid())
+  bookingId           String?   @map("booking_id")
+  customerId          String    @map("customer_id")
+  providerId          String    @map("provider_id")
+  isActive            Boolean   @default(true) @map("is_active")
+  lastMessageAt       DateTime? @map("last_message_at")
+  lastMessagePreview  String?   @map("last_message_preview")
+  customerLastReadAt  DateTime? @map("customer_last_read_at")
+  providerLastReadAt  DateTime? @map("provider_last_read_at")
+  customerUnreadCount Int       @default(0) @map("customer_unread_count")
+  providerUnreadCount Int       @default(0) @map("provider_unread_count")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  booking  Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  customer User      @relation("CustomerConversations", fields: [customerId], references: [id], onDelete: Cascade)
+  provider Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([customerId, providerId])
+  @@index([customerId, lastMessageAt(sort: Desc)])
+  @@index([providerId, lastMessageAt(sort: Desc)])
+  @@map("conversations")
+}
+
+model Message {
+  id             String    @id @default(uuid())
+  conversationId String    @map("conversation_id")
+  senderId       String    @map("sender_id")
+  content        String
+  messageType    String    @default("text") @map("message_type")
+  fileId         String?   @map("file_id")
+  isRead         Boolean   @default(false) @map("is_read")
+  readAt         DateTime? @map("read_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  editedAt       DateTime? @map("edited_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  file         File?        @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([conversationId, isRead])
+  @@map("messages")
+}
+
+// =============================================================================
+// NOTIFICATIONS
+// =============================================================================
+
+model Notification {
+  id            String           @id @default(uuid())
+  userId        String           @map("user_id")
+  title         String
+  body          String
+  type          NotificationType
+  referenceType String?          @map("reference_type")
+  referenceId   String?          @map("reference_id")
+  isRead        Boolean          @default(false) @map("is_read")
+  readAt        DateTime?        @map("read_at")
+  sentAt        DateTime?        @map("sent_at")
+  deliveredAt   DateTime?        @map("delivered_at")
+  failedReason  String?          @map("failed_reason")
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id                  String   @id @default(uuid())
+  userId              String   @unique @map("user_id")
+  emailBookingUpdates Boolean  @default(true) @map("email_booking_updates")
+  emailMessages       Boolean  @default(true) @map("email_messages")
+  emailReviews        Boolean  @default(true) @map("email_reviews")
+  emailPromotions     Boolean  @default(false) @map("email_promotions")
+  smsBookingUpdates   Boolean  @default(true) @map("sms_booking_updates")
+  smsMessages         Boolean  @default(false) @map("sms_messages")
+  smsReminders        Boolean  @default(true) @map("sms_reminders")
+  pushEnabled         Boolean  @default(true) @map("push_enabled")
+  pushBookingUpdates  Boolean  @default(true) @map("push_booking_updates")
+  pushMessages        Boolean  @default(true) @map("push_messages")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// =============================================================================
+// AUTHENTICATION
+// =============================================================================
+
+model RefreshToken {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  tokenHash     String    @unique @map("token_hash")
+  deviceName    String?   @map("device_name")
+  deviceType    String?   @map("device_type")
+  ipAddress     String?   @map("ip_address")
+  userAgent     String?   @map("user_agent")
+  expiresAt     DateTime  @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  revokedReason String?   @map("revoked_reason")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+// =============================================================================
+// LOGGING & AUDIT
+// =============================================================================
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  tableName     String   @map("table_name")
+  recordId      String   @map("record_id")
+  action        String
+  oldValues     Json?    @map("old_values")
+  newValues     Json?    @map("new_values")
+  changedFields String[] @map("changed_fields")
+  userId        String?  @map("user_id")
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([tableName, recordId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ApplicationLog {
+  id             String   @id @default(uuid())
+  level          LogLevel
+  message        String
+  context        Json?
+  source         String?
+  functionName   String?  @map("function_name")
+  fileName       String?  @map("file_name")
+  lineNumber     Int?     @map("line_number")
+  requestId      String?  @map("request_id")
+  userId         String?  @map("user_id")
+  ipAddress      String?  @map("ip_address")
+  userAgent      String?  @map("user_agent")
+  httpMethod     String?  @map("http_method")
+  httpPath       String?  @map("http_path")
+  httpStatus     Int?     @map("http_status")
+  responseTimeMs Int?     @map("response_time_ms")
+  errorName      String?  @map("error_name")
+  errorMessage   String?  @map("error_message")
+  stackTrace     String?  @map("stack_trace")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([level])
+  @@index([createdAt(sort: Desc)])
+  @@index([source, createdAt(sort: Desc)])
+  @@map("application_logs")
+}
+
+model ApiRequestLog {
+  id                String   @id @default(uuid())
+  requestId         String   @map("request_id")
+  method            String
+  path              String
+  queryParams       Json?    @map("query_params")
+  userId            String?  @map("user_id")
+  ipAddress         String   @map("ip_address")
+  userAgent         String?  @map("user_agent")
+  statusCode        Int      @map("status_code")
+  responseTimeMs    Int      @map("response_time_ms")
+  responseSizeBytes Int?     @map("response_size_bytes")
+  errorCode         String?  @map("error_code")
+  errorMessage      String?  @map("error_message")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([path, method])
+  @@index([statusCode])
+  @@map("api_request_logs")
+}

@@ -1,0 +1,17 @@
+# ==============================================================================
+# Grafana Dashboard Provisioning - Local Service Finder
+# ==============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: "Local Service Finder Dashboards"
+    orgId: 1
+    folder: "Local Service Finder"
+    folderUid: "lsf"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
