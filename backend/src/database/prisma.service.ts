@@ -6,13 +6,33 @@ import {
 } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { applySoftDelete } from "./soft-delete.extension";
+import { applyAudit } from "./audit.extension";
 
+function buildExtendedClient(client: PrismaClient) {
+  return applyAudit(applySoftDelete(client) as unknown as PrismaClient);
+}
+
+type ExtendedClient = ReturnType<typeof buildExtendedClient>;
+
+/**
+ * PrismaService extends PrismaClient for lifecycle hooks ($connect/$disconnect)
+ * and exposes the soft-delete-aware extended client transparently:
+ *
+ *   prisma.user.findMany()  -> filtered (deletedAt IS NULL) automatically
+ *   prisma.user.delete(...) -> rewritten to set deletedAt = now()
+ *
+ * Caveat: queries issued inside `$transaction` callbacks receive the un-extended
+ * `tx` client by Prisma design. Use `executeInTransaction` below — it re-wraps
+ * the tx client with the same extension so soft-delete behavior is preserved.
+ */
 @Injectable()
 export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
+  private readonly extended: ExtendedClient;
 
   constructor() {
     const adapter = new PrismaPg({
@@ -27,13 +47,33 @@ export class PrismaService
         { emit: "stdout", level: "error" },
       ],
     });
+
+    this.extended = buildExtendedClient(this);
+
+    // Forward model accessors (user, booking, …) to the extended client so
+    // existing `prisma.user.findMany()` callsites pick up the soft-delete
+    // extension automatically. Non-model props ($connect, $transaction,
+    // $queryRaw, our custom helpers) stay on `this`.
+    return new Proxy(this, {
+      get: (target, prop, receiver) => {
+        if (
+          typeof prop === "string" &&
+          !prop.startsWith("$") &&
+          !prop.startsWith("_") &&
+          prop in this.extended &&
+          typeof (this.extended as any)[prop] === "object"
+        ) {
+          return (this.extended as any)[prop];
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as PrismaService;
   }
 
   async onModuleInit() {
     await this.$connect();
     this.logger.log("Database connection established");
 
-    // Log slow queries in development
     if (process.env.NODE_ENV === "development") {
       // @ts-ignore - Prisma event typing
       this.$on("query", (e: any) => {
@@ -50,8 +90,8 @@ export class PrismaService
   }
 
   /**
-   * Clean database for testing purposes
-   * WARNING: Only use in test environment
+   * Clean database for testing purposes.
+   * WARNING: only callable when NODE_ENV=test.
    */
   async cleanDatabase() {
     if (process.env.NODE_ENV !== "test") {
@@ -74,24 +114,22 @@ export class PrismaService
   }
 
   /**
-   * Execute operations within a transaction
+   * Run `operation` inside an interactive transaction. The `tx` passed to the
+   * callback is wrapped with the soft-delete extension so writes/reads behave
+   * the same as outside a transaction.
    */
   async executeInTransaction<T>(
-    operation: (
-      tx: Omit<
-        PrismaClient,
-        | "$connect"
-        | "$disconnect"
-        | "$on"
-        | "$transaction"
-        | "$use"
-        | "$extends"
-      >,
-    ) => Promise<T>,
+    operation: (tx: ExtendedClient) => Promise<T>,
   ): Promise<T> {
-    return this.$transaction(operation, {
-      maxWait: 5000,
-      timeout: 10000,
-    });
+    return this.$transaction(
+      async (rawTx) => {
+        const tx = buildExtendedClient(rawTx as unknown as PrismaClient);
+        return operation(tx);
+      },
+      {
+        maxWait: 5000,
+        timeout: 10000,
+      },
+    );
   }
 }

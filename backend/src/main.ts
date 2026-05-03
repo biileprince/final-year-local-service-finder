@@ -2,13 +2,21 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import helmet from "helmet";
+import * as cookieParser from "cookie-parser";
+import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module";
+import { AllExceptionsFilter } from "./common/filters/http-exception.filter";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+
+  // Replace Nest's default logger with Pino — JSON in prod, pretty in dev,
+  // request-id correlation, sensitive-field redaction (see logger.config.ts).
+  app.useLogger(app.get(Logger));
 
   // Security
   app.use(helmet());
+  app.use(cookieParser(process.env.COOKIE_SECRET));
   app.enableCors({
     origin: process.env.FRONTEND_URL || "http://localhost:3000",
     credentials: true,
@@ -28,6 +36,9 @@ async function bootstrap() {
       },
     }),
   );
+
+  // Global exception filter — typed business errors + Prisma error translation
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Swagger documentation
   const config = new DocumentBuilder()
@@ -50,7 +61,12 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}`);
-  console.log(`Swagger docs available at: http://localhost:${port}/api/docs`);
+
+  const logger = app.get(Logger);
+  logger.log(`Application is running on: http://localhost:${port}`, "Bootstrap");
+  logger.log(
+    `Swagger docs available at: http://localhost:${port}/api/docs`,
+    "Bootstrap",
+  );
 }
 bootstrap();

@@ -1,8 +1,13 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard } from "@nestjs/throttler";
+import { LoggerModule } from "nestjs-pino";
+import { validateEnv } from "./config/env.validation";
+import { loggerConfig } from "./config/logger.config";
+import { AuditContextMiddleware } from "./common/audit/audit.middleware";
+import { CsrfGuard } from "./common/security/csrf.guard";
 
 // Core modules
 import { DatabaseModule } from "./database/database.module";
@@ -29,7 +34,11 @@ import { AdminModule } from "./modules/admin/admin.module";
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [".env.local", ".env"],
+      validate: validateEnv,
     }),
+
+    // Structured logging (Pino) — JSON in prod, pretty in dev
+    LoggerModule.forRoot(loggerConfig),
 
     // Rate limiting
     ThrottlerModule.forRoot([
@@ -74,6 +83,15 @@ import { AdminModule } from "./modules/admin/admin.module";
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    // CSRF guard is no-op unless CSRF_ENABLED=true (see CsrfGuard).
+    {
+      provide: APP_GUARD,
+      useClass: CsrfGuard,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(AuditContextMiddleware).forRoutes("*");
+  }
+}

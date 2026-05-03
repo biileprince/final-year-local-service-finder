@@ -154,6 +154,7 @@ model User {
   notifications           Notification[]
   notificationPreferences NotificationPreference?
   refreshTokens           RefreshToken[]
+  verificationTokens      VerificationToken[]
   auditLogs               AuditLog[]
   applicationLogs         ApplicationLog[]
   apiRequestLogs          ApiRequestLog[]
@@ -580,6 +581,32 @@ model RefreshToken {
   @@index([userId])
   @@index([tokenHash])
   @@map("refresh_tokens")
+}
+
+enum VerificationPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+/// One-time tokens for email verification + password reset. Phone OTP lives
+/// in Redis (short TTL, attempt counters) and intentionally not modeled here.
+model VerificationToken {
+  id        String              @id @default(uuid())
+  userId    String              @map("user_id")
+  purpose   VerificationPurpose
+  tokenHash String              @unique @map("token_hash")
+  expiresAt DateTime            @map("expires_at")
+  usedAt    DateTime?           @map("used_at")
+  ipAddress String?             @map("ip_address")
+  userAgent String?             @map("user_agent")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("verification_tokens")
 }
 
 // =============================================================================

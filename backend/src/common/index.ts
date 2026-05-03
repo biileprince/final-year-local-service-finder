@@ -1,6 +1,9 @@
 // Filters
 export * from "./filters/http-exception.filter";
 
+// Errors
+export * from "./errors";
+
 // Interceptors
 export * from "./interceptors/logging.interceptor";
 export * from "./interceptors/transform.interceptor";
