@@ -15,6 +15,6 @@ import { SmsService } from "./services/sms.service";
     SmsService,
   ],
   controllers: [NotificationsController],
-  exports: [NotificationsService],
+  exports: [NotificationsService, EmailService, SmsService],
 })
 export class NotificationsModule {}

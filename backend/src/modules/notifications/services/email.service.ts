@@ -166,6 +166,65 @@ export class EmailService {
         </html>
       `,
 
+      "password-reset": (d) => `
+        <!DOCTYPE html>
+        <html>
+        <head><style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #4F46E5; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background: #f9f9f9; }
+          .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
+          .button { display: inline-block; padding: 12px 24px; background: #4F46E5; color: white; text-decoration: none; border-radius: 4px; margin: 16px 0; }
+          .small { font-size: 12px; color: #666; word-break: break-all; }
+        </style></head>
+        <body>
+          <div class="container">
+            <div class="header"><h1>Reset your password</h1></div>
+            <div class="content">
+              <p>Hi ${d.name || "there"},</p>
+              <p>${d.message}</p>
+              <p style="text-align:center"><a class="button" href="${d.resetUrl}">Reset password</a></p>
+              <p class="small">If the button doesn't work, paste this link into your browser:<br>${d.resetUrl}</p>
+              <p>If you didn't request a reset, you can safely ignore this email — your password won't change.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} Local Service Finder</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+
+      "email-verification": (d) => `
+        <!DOCTYPE html>
+        <html>
+        <head><style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #10B981; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background: #f9f9f9; }
+          .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
+          .button { display: inline-block; padding: 12px 24px; background: #10B981; color: white; text-decoration: none; border-radius: 4px; margin: 16px 0; }
+          .small { font-size: 12px; color: #666; word-break: break-all; }
+        </style></head>
+        <body>
+          <div class="container">
+            <div class="header"><h1>Verify your email</h1></div>
+            <div class="content">
+              <p>Hi ${d.name || "there"},</p>
+              <p>${d.message}</p>
+              <p style="text-align:center"><a class="button" href="${d.verifyUrl}">Verify email</a></p>
+              <p class="small">If the button doesn't work, paste this link into your browser:<br>${d.verifyUrl}</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} Local Service Finder</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+
       default: (d) => `
         <!DOCTYPE html>
         <html>
