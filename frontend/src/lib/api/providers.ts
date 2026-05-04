@@ -1,5 +1,10 @@
 import { apiClient, buildQueryString } from "./client";
-import type { Provider, Review, PaginatedResponse, Availability } from "@/types";
+import type {
+  Provider,
+  Review,
+  PaginatedResponse,
+  Availability,
+} from "@/types";
 
 export interface SearchProvidersParams {
   categoryId?: string;
@@ -27,7 +32,46 @@ export interface ProviderSearchResult {
 export const providersService = {
   async search(params?: SearchProvidersParams): Promise<ProviderSearchResult> {
     const queryString = buildQueryString(params || {});
-    return apiClient.get<ProviderSearchResult>(`/providers${queryString}`);
+    const result = await apiClient.get<
+      | ProviderSearchResult
+      | {
+          items?: Provider[];
+          total?: number;
+          page?: number;
+          limit?: number;
+          totalPages?: number;
+        }
+      | Provider[]
+    >(`/providers${queryString}`);
+
+    if (Array.isArray(result)) {
+      return {
+        providers: result,
+        total: result.length,
+        page: 1,
+        totalPages: 1,
+      };
+    }
+
+    if (Array.isArray(result?.providers)) {
+      return result;
+    }
+
+    if (Array.isArray(result?.items)) {
+      const total = result.total ?? result.items.length;
+      const page = result.page ?? 1;
+      const limit = result.limit ?? (result.items.length || 1);
+      const totalPages =
+        result.totalPages ?? Math.max(1, Math.ceil(total / limit));
+      return {
+        providers: result.items,
+        total,
+        page,
+        totalPages,
+      };
+    }
+
+    return { providers: [], total: 0, page: 1, totalPages: 1 };
   },
 
   async getById(id: string): Promise<Provider> {
@@ -42,28 +86,37 @@ export const providersService = {
     return apiClient.get<Provider>("/providers/me", true);
   },
 
-  async updateProfile(data: Partial<{
-    bio: string;
-    hourlyRate: number;
-    yearsExperience: number;
-    location: string;
-    latitude: number;
-    longitude: number;
-    serviceRadiusKm: number;
-  }>): Promise<Provider> {
+  async updateProfile(
+    data: Partial<{
+      bio: string;
+      hourlyRate: number;
+      yearsExperience: number;
+      location: string;
+      latitude: number;
+      longitude: number;
+      serviceRadiusKm: number;
+    }>,
+  ): Promise<Provider> {
     return apiClient.patch<Provider>("/providers/me", data, true);
   },
 
   async getReviews(
     providerId: string,
-    params?: { page?: number; limit?: number }
+    params?: { page?: number; limit?: number },
   ): Promise<PaginatedResponse<Review>> {
     const queryString = buildQueryString(params || {});
-    return apiClient.get<PaginatedResponse<Review>>(`/providers/${providerId}/reviews${queryString}`);
+    return apiClient.get<PaginatedResponse<Review>>(
+      `/providers/${providerId}/reviews${queryString}`,
+    );
   },
 
-  async getAvailability(providerId: string, month: string): Promise<Availability[]> {
-    return apiClient.get<Availability[]>(`/availability/provider/${providerId}?month=${month}`);
+  async getAvailability(
+    providerId: string,
+    month: string,
+  ): Promise<Availability[]> {
+    return apiClient.get<Availability[]>(
+      `/availability/provider/${providerId}?month=${month}`,
+    );
   },
 
   async getFeatured(limit = 6): Promise<Provider[]> {
@@ -76,7 +129,7 @@ export const providersService = {
       verified: true,
       sortBy: "rating",
       sortOrder: "desc",
-      limit
+      limit,
     });
     return result.providers;
   },

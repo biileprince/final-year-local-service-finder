@@ -1,10 +1,19 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Atkinson_Hyperlegible, Fraunces } from "next/font/google";
 import "@/styles/globals.css";
 
-const inter = Inter({
+const bodyFont = Atkinson_Hyperlegible({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-body",
+  weight: ["400", "700"],
+  display: "swap",
+});
+
+const headingFont = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-heading",
+  weight: ["400", "600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -51,8 +60,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="min-h-screen bg-white font-sans antialiased">
+    <html
+      lang="en"
+      className={`${bodyFont.variable} ${headingFont.variable}`}
+      data-scroll-behavior="smooth"
+      suppressHydrationWarning
+    >
+      <body
+        className="min-h-screen bg-white font-sans antialiased text-gray-900"
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>

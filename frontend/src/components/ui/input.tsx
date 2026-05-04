@@ -33,10 +33,11 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             type={type}
             id={inputId}
             className={cn(
-              "flex h-10 w-full rounded-lg border border-secondary-300 bg-white px-3 py-2 text-sm text-secondary-900 placeholder:text-secondary-400",
-              "transition-colors duration-200",
+              "flex h-11 w-full rounded-xl border-2 border-gray-200 bg-white px-3.5 py-2 text-sm font-medium text-gray-900 placeholder:text-gray-400",
+              "transition-all duration-200",
+              "hover:border-gray-300",
               "focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20",
-              "disabled:cursor-not-allowed disabled:bg-secondary-50 disabled:text-secondary-500",
+              "disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500",
               error && "border-error-500 focus:border-error-500 focus:ring-error-500/20",
               leftIcon && "pl-10",
               rightIcon && "pr-10",

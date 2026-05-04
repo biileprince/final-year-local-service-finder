@@ -20,7 +20,10 @@ import { bookingsService, messagesService } from "@/lib/api";
 import type { Booking, Conversation } from "@/types";
 import { formatDate, formatTime, formatCurrency } from "@/lib/utils";
 
-const statusColors: Record<string, "default" | "success" | "warning" | "error"> = {
+const statusColors: Record<
+  string,
+  "default" | "success" | "warning" | "error"
+> = {
   PENDING: "warning",
   CONFIRMED: "info",
   IN_PROGRESS: "default",
@@ -61,8 +64,11 @@ export default function DashboardPage() {
       setConversations(conversationsData.slice(0, 3));
       setStats({
         totalBookings: bookingsData.pagination?.total || 0,
-        pendingBookings: bookingsData.data?.filter((b) => b.status === "PENDING").length || 0,
-        completedBookings: bookingsData.data?.filter((b) => b.status === "COMPLETED").length || 0,
+        pendingBookings:
+          bookingsData.data?.filter((b) => b.status === "PENDING").length || 0,
+        completedBookings:
+          bookingsData.data?.filter((b) => b.status === "COMPLETED").length ||
+          0,
         unreadMessages: unreadCount.total || 0,
       });
     } catch (error) {
@@ -286,7 +292,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="flex flex-wrap gap-3">
               <Button asChild>
-                <Link href="/search">Find a Service Provider</Link>
+                <Link href="/search">Find a service provider</Link>
               </Button>
               <Button variant="outline" asChild>
                 <Link href="/bookings">View All Bookings</Link>
