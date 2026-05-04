@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import Image from "next/image";
 import { cn, getInitials } from "@/lib/utils";
@@ -36,26 +38,67 @@ function Avatar({
   src,
   alt,
   name,
+  children,
   ...props
 }: AvatarProps) {
-  const initials = name ? getInitials(name) : "?";
+  const initials = name ? getInitials(name) : null;
 
   return (
     <div className={cn(avatarVariants({ size }), className)} {...props}>
-      {src ? (
+      {children ? (
+        children
+      ) : src ? (
         <Image
           src={src}
           alt={alt || name || "Avatar"}
           fill
+          sizes="(max-width: 768px) 64px, 96px"
           className="object-cover"
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center bg-primary-100 font-medium text-primary-700">
-          {initials}
+        <div className="flex h-full w-full items-center justify-center bg-primary-100 font-semibold text-primary-700">
+          {initials ?? "?"}
         </div>
       )}
     </div>
   );
 }
 
-export { Avatar, avatarVariants };
+export interface AvatarImageProps {
+  src?: string | null;
+  alt?: string;
+  className?: string;
+}
+
+function AvatarImage({ className, src, alt = "" }: AvatarImageProps) {
+  if (!src) return null;
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      fill
+      sizes="(max-width: 768px) 64px, 96px"
+      className={cn("object-cover", className)}
+    />
+  );
+}
+
+function AvatarFallback({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn(
+        "flex h-full w-full items-center justify-center bg-primary-100 font-semibold text-primary-700",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
+
+export { Avatar, AvatarImage, AvatarFallback, avatarVariants };

@@ -1,33 +1,43 @@
 import Link from "next/link";
-import { Facebook, Twitter, Instagram, Mail, Phone, MapPin } from "lucide-react";
+import {
+  Facebook,
+  Twitter,
+  Instagram,
+  Mail,
+  Phone,
+  MapPin,
+  Search,
+  ArrowRight,
+  type LucideIcon,
+} from "lucide-react";
 
 const footerLinks = {
   services: [
-    { label: "Find Providers", href: "/search" },
-    { label: "Categories", href: "/categories" },
-    { label: "How It Works", href: "/how-it-works" },
-    { label: "Pricing", href: "/pricing" },
+    { label: "Browse service providers", href: "/search" },
+    { label: "All categories", href: "/search" },
+    { label: "How it works", href: "/#how-it-works" },
+    { label: "For service providers", href: "/register?role=provider" },
   ],
   company: [
-    { label: "About Us", href: "/about" },
+    { label: "About", href: "/about" },
     { label: "Careers", href: "/careers" },
     { label: "Blog", href: "/blog" },
     { label: "Press", href: "/press" },
   ],
   support: [
-    { label: "Help Center", href: "/help" },
-    { label: "Contact Us", href: "/contact" },
+    { label: "Help center", href: "/help" },
+    { label: "Contact", href: "/contact" },
     { label: "FAQs", href: "/faqs" },
-    { label: "Community", href: "/community" },
+    { label: "Status", href: "/status" },
   ],
   legal: [
-    { label: "Privacy Policy", href: "/privacy" },
-    { label: "Terms of Service", href: "/terms" },
-    { label: "Cookie Policy", href: "/cookies" },
+    { label: "Privacy", href: "/privacy" },
+    { label: "Terms", href: "/terms" },
+    { label: "Cookies", href: "/cookies" },
   ],
 };
 
-const socialLinks = [
+const socials: { icon: LucideIcon; href: string; label: string }[] = [
   { icon: Facebook, href: "https://facebook.com", label: "Facebook" },
   { icon: Twitter, href: "https://twitter.com", label: "Twitter" },
   { icon: Instagram, href: "https://instagram.com", label: "Instagram" },
@@ -35,125 +45,142 @@ const socialLinks = [
 
 export function Footer() {
   return (
-    <footer className="border-t border-secondary-200 bg-secondary-50">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-4 lg:grid-cols-5">
+    <footer className="relative isolate overflow-hidden bg-white text-gray-700 dark:bg-gray-950 dark:text-gray-300">
+      <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-2 gap-10 md:grid-cols-4 lg:grid-cols-6">
           {/* Brand */}
-          <div className="col-span-2 lg:col-span-1">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600">
-                <span className="text-lg font-bold text-white">L</span>
-              </div>
-              <span className="text-xl font-bold text-secondary-900">
-                LocalService
+          <div className="col-span-2">
+            <Link
+              href="/"
+              className="group inline-flex items-center gap-2.5"
+              aria-label="Home"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary-500/30">
+                <Search className="h-5 w-5 text-white" strokeWidth={2.5} />
+              </span>
+              <span className="flex flex-col leading-tight">
+                <span className="font-display text-base font-bold tracking-tight text-gray-900 dark:text-white">
+                  Local Service
+                </span>
+                <span className="text-[10px] font-bold tracking-[0.2em] text-primary-600 dark:text-primary-400">
+                  FINDER
+                </span>
               </span>
             </Link>
-            <p className="mt-4 text-sm text-secondary-600">
-              Connecting you with trusted local service providers in Ghana.
-              Quality services at your fingertips.
+            <p className="mt-5 max-w-sm text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+              Verified plumbers, electricians, cleaners, and more across Ghana.
+              Rated by people near you and ready to help.
             </p>
-            <div className="mt-6 flex gap-4">
-              {socialLinks.map((social) => (
+
+            <div className="mt-6 flex items-center gap-2">
+              {socials.map((s) => (
                 <a
-                  key={social.label}
-                  href={social.href}
+                  key={s.label}
+                  href={s.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-secondary-400 transition-colors hover:text-primary-600"
-                  aria-label={social.label}
+                  aria-label={s.label}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 transition-all hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:border-primary-400/40 dark:hover:text-primary-400"
                 >
-                  <social.icon className="h-5 w-5" />
+                  <s.icon className="h-4 w-4" />
                 </a>
               ))}
             </div>
           </div>
 
-          {/* Services */}
-          <div>
-            <h3 className="text-sm font-semibold text-secondary-900">Services</h3>
-            <ul className="mt-4 space-y-3">
-              {footerLinks.services.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-secondary-600 transition-colors hover:text-primary-600"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {/* Links */}
+          <FooterColumn title="Services" links={footerLinks.services} />
+          <FooterColumn title="Company" links={footerLinks.company} />
+          <FooterColumn title="Support" links={footerLinks.support} />
 
-          {/* Company */}
-          <div>
-            <h3 className="text-sm font-semibold text-secondary-900">Company</h3>
-            <ul className="mt-4 space-y-3">
-              {footerLinks.company.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-secondary-600 transition-colors hover:text-primary-600"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Support */}
-          <div>
-            <h3 className="text-sm font-semibold text-secondary-900">Support</h3>
-            <ul className="mt-4 space-y-3">
-              {footerLinks.support.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-secondary-600 transition-colors hover:text-primary-600"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+          {/* Newsletter / CTA */}
+          <div className="col-span-2 md:col-span-4 lg:col-span-1">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-gray-600 dark:text-gray-500">
+              Get the app
+            </p>
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+              Book any service provider from your phone - coming soon to iOS and
+              Android.
+            </p>
+            <Link
+              href="/search"
+              className="group mt-5 inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-900 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-gray-800 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+            >
+              Find a service provider now
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
           </div>
         </div>
 
-        {/* Contact Info */}
-        <div className="mt-12 flex flex-wrap items-center gap-6 border-t border-secondary-200 pt-8 text-sm text-secondary-600">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            <span>Accra, Ghana</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Phone className="h-4 w-4" />
-            <span>+233 XX XXX XXXX</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Mail className="h-4 w-4" />
-            <span>support@localservice.com</span>
-          </div>
+        {/* Contact strip */}
+        <div className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-gray-200 pt-8 text-sm text-gray-600 dark:border-white/10 dark:text-gray-400">
+          <ContactItem icon={MapPin}>Accra, Ghana</ContactItem>
+          <ContactItem icon={Phone}>+233 XX XXX XXXX</ContactItem>
+          <ContactItem icon={Mail}>support@localservicefinder.com</ContactItem>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-secondary-200 pt-8 sm:flex-row">
-          <p className="text-sm text-secondary-500">
-            &copy; {new Date().getFullYear()} LocalService Finder. All rights reserved.
+        {/* Bottom bar */}
+        <div className="mt-8 flex flex-col items-start justify-between gap-4 border-t border-gray-200 pt-8 text-xs text-gray-600 dark:border-white/10 dark:text-gray-500 sm:flex-row sm:items-center">
+          <p>
+            &copy; {new Date().getFullYear()} Local Service Finder. All rights
+            reserved.
           </p>
-          <div className="flex gap-6">
-            {footerLinks.legal.map((link) => (
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            {footerLinks.legal.map((l) => (
               <Link
-                key={link.href}
-                href={link.href}
-                className="text-sm text-secondary-500 transition-colors hover:text-secondary-700"
+                key={l.href}
+                href={l.href}
+                className="font-semibold transition-colors hover:text-gray-900 dark:hover:text-gray-300"
               >
-                {link.label}
+                {l.label}
               </Link>
             ))}
           </div>
         </div>
       </div>
     </footer>
+  );
+}
+
+function FooterColumn({
+  title,
+  links,
+}: {
+  title: string;
+  links: { label: string; href: string }[];
+}) {
+  return (
+    <div>
+      <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-gray-600 dark:text-gray-500">
+        {title}
+      </h3>
+      <ul className="mt-4 space-y-3">
+        {links.map((l) => (
+          <li key={l.href}>
+            <Link
+              href={l.href}
+              className="text-sm font-semibold text-gray-600 transition-colors hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
+            >
+              {l.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ContactItem({
+  icon: Icon,
+  children,
+}: {
+  icon: LucideIcon;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Icon className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+      <span className="font-medium">{children}</span>
+    </div>
   );
 }

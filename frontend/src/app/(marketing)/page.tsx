@@ -1,121 +1,346 @@
+import Image from "next/image";
 import Link from "next/link";
-import { Search, Shield, Clock, Star, ArrowRight, CheckCircle } from "lucide-react";
+import {
+  Search,
+  Shield,
+  Clock,
+  Star,
+  ArrowRight,
+  CheckCircle,
+  MapPin,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-const features = [
+const heroBgImage =
+  "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1800&q=80";
+const heroImage =
+  "https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=1400&q=80";
+const stepsImage =
+  "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1400&q=80";
+const ctaImage =
+  "https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?auto=format&fit=crop&w=1800&q=80";
+
+const heroStats = [
+  { label: "Verified service providers", value: "850+" },
+  { label: "Average reply time", value: "Under 2 hours" },
+  { label: "Bookings made", value: "12k+" },
+];
+
+const serviceChips = [
+  "Plumbing",
+  "Electrical",
+  "Cleaning",
+  "Painting",
+  "Carpentry",
+  "AC Repair",
+  "Handyman",
+  "Laundry",
+];
+
+const categories = [
   {
-    icon: Shield,
-    title: "Verified Providers",
-    description: "All service providers are thoroughly vetted and verified for your peace of mind.",
+    name: "Plumbing",
+    count: 150,
+    description: "Fix leaks, install pipes, and repair taps and toilets.",
+    image:
+      "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80",
   },
   {
-    icon: Clock,
-    title: "Quick Booking",
-    description: "Book services in minutes with our easy-to-use platform. No hassle, no waiting.",
+    name: "Electrical",
+    count: 120,
+    description: "Wiring, lights, sockets, and safety checks for your home.",
+    image:
+      "https://images.unsplash.com/photo-1519750157634-b6d493a0f77c?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    name: "Cleaning",
+    count: 200,
+    description: "Home, office, and move-in or move-out cleaning services.",
+    image:
+      "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    name: "Painting",
+    count: 80,
+    description: "Walls, rooms, fences, and small touch-ups.",
+    image:
+      "https://images.unsplash.com/photo-1501045661006-fcebe0257c3f?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    name: "Carpentry",
+    count: 90,
+    description: "Shelves, doors, furniture, and wood repairs.",
+    image:
+      "https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    name: "AC Repair",
+    count: 70,
+    description: "AC installation, servicing, and gas refills.",
+    image:
+      "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=800&q=80",
+  },
+];
+
+const howItWorksCustomer = [
+  {
+    title: "Search for a service or a provider",
+    description:
+      "Type the service you need and your location so we can show nearby options.",
+  },
+  {
+    title: "Compare profiles and prices",
+    description:
+      "Read reviews, check ratings, and see prices before you choose.",
+  },
+  {
+    title: "Book and message",
+    description:
+      "Pick a day and time, then message the service provider if you have questions.",
+  },
+];
+
+const howItWorksProvider = [
+  {
+    title: "Create a profile",
+    description:
+      "Add your name, contact details, location, and the services you offer.",
+  },
+  {
+    title: "List your services",
+    description:
+      "Set your prices and the areas you can serve so customers can find you.",
+  },
+  {
+    title: "Get booking requests",
+    description:
+      "Reply to customers, confirm bookings, and get paid after the job.",
+  },
+];
+
+const benefits = [
+  {
+    icon: Shield,
+    title: "Verified service providers",
+    description:
+      "We check service providers before they appear on the platform.",
   },
   {
     icon: Star,
-    title: "Quality Guaranteed",
-    description: "Read reviews from real customers and choose the best providers for your needs.",
-  },
-];
-
-const popularCategories = [
-  { name: "Plumbing", icon: "🔧", count: 150 },
-  { name: "Electrical", icon: "⚡", count: 120 },
-  { name: "Cleaning", icon: "🧹", count: 200 },
-  { name: "Painting", icon: "🎨", count: 80 },
-  { name: "Carpentry", icon: "🪚", count: 90 },
-  { name: "AC Repair", icon: "❄️", count: 70 },
-];
-
-const howItWorks = [
-  {
-    step: "1",
-    title: "Search for a Service",
-    description: "Browse categories or search for the specific service you need.",
+    title: "Real reviews",
+    description:
+      "Read feedback from real customers so you can choose with confidence.",
   },
   {
-    step: "2",
-    title: "Choose a Provider",
-    description: "Compare providers based on ratings, reviews, and pricing.",
-  },
-  {
-    step: "3",
-    title: "Book & Relax",
-    description: "Schedule your appointment and let the professional handle the rest.",
+    icon: Clock,
+    title: "Fast response",
+    description:
+      "Many service providers respond quickly, so you can book without delay.",
   },
 ];
 
 export default function HomePage() {
   return (
-    <div>
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-accent-50">
-        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:px-8">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-secondary-900 sm:text-5xl lg:text-6xl">
-              Find Trusted{" "}
-              <span className="text-primary-600">Local Services</span>
-              <br />
-              in Ghana
-            </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-lg text-secondary-600">
-              Connect with verified local service providers. From plumbers to
-              electricians, cleaners to carpenters – find the help you need in minutes.
-            </p>
-
-            {/* Search Bar */}
-            <div className="mx-auto mt-10 max-w-xl">
-              <div className="flex gap-2 rounded-xl bg-white p-2 shadow-lg">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-secondary-400" />
-                  <input
-                    type="text"
-                    placeholder="What service do you need?"
-                    className="h-12 w-full rounded-lg bg-secondary-50 pl-10 pr-4 text-secondary-900 placeholder:text-secondary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
-                <Button size="lg" asChild>
-                  <Link href="/search">Search</Link>
-                </Button>
-              </div>
-              <p className="mt-3 text-sm text-secondary-500">
-                Popular: Plumber, Electrician, House Cleaning, AC Repair
+    <div className="bg-white">
+      {/* Hero */}
+      <section className="relative overflow-hidden bg-white">
+        <Image
+          src={heroBgImage}
+          alt=""
+          fill
+          className="object-cover opacity-10"
+          sizes="100vw"
+          priority
+        />
+        <div className="absolute inset-0 bg-white/85" />
+        <div className="relative mx-auto max-w-7xl px-4 pb-20 pt-16 sm:px-6 sm:pb-28 sm:pt-20 lg:px-8">
+          <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-secondary-500">
+                Local Service Finder
               </p>
+              <h1 className="mt-3 text-4xl font-bold tracking-tight text-secondary-900 sm:text-5xl lg:text-6xl">
+                Find and book trusted service providers in Ghana
+              </h1>
+              <p className="mt-5 max-w-2xl text-lg text-secondary-600">
+                Local Service Finder helps you find plumbers, electricians,
+                cleaners, painters, carpenters, and more. If you provide a
+                service, you can create a profile and list the services you
+                offer so customers can find you.
+              </p>
+
+              <form
+                action="/search"
+                method="get"
+                className="mt-6 rounded-2xl border border-secondary-200 bg-white p-4 shadow-sm"
+              >
+                <div className="grid items-end gap-3 sm:grid-cols-[1.2fr_1fr_auto]">
+                  <div>
+                    <label
+                      htmlFor="home-service"
+                      className="text-xs font-semibold text-secondary-600"
+                    >
+                      Service
+                    </label>
+                    <div className="mt-2 flex items-center gap-2 rounded-xl border border-secondary-200 bg-secondary-50 px-3 py-2">
+                      <Search className="h-4 w-4 text-secondary-400" />
+                      <input
+                        id="home-service"
+                        name="q"
+                        type="text"
+                        placeholder="Plumber, electrician, cleaning"
+                        className="w-full bg-transparent text-sm font-medium text-secondary-900 outline-none placeholder:text-secondary-400"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="home-location"
+                      className="text-xs font-semibold text-secondary-600"
+                    >
+                      Location
+                    </label>
+                    <div className="mt-2 flex items-center gap-2 rounded-xl border border-secondary-200 bg-secondary-50 px-3 py-2">
+                      <MapPin className="h-4 w-4 text-secondary-400" />
+                      <input
+                        id="home-location"
+                        name="location"
+                        type="text"
+                        placeholder="Accra, Kumasi, Takoradi"
+                        className="w-full bg-transparent text-sm font-medium text-secondary-900 outline-none placeholder:text-secondary-400"
+                      />
+                    </div>
+                  </div>
+                  <Button type="submit" size="lg" className="w-full sm:w-auto">
+                    Search services
+                  </Button>
+                </div>
+                <p className="mt-3 text-xs text-secondary-500">
+                  You can search by service name or service provider name.
+                </p>
+              </form>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-secondary-600">
+                <span className="font-semibold text-secondary-700">
+                  Common services:
+                </span>
+                {serviceChips.map((service) => (
+                  <span
+                    key={service}
+                    className="rounded-full border border-secondary-200 bg-white px-3 py-1"
+                  >
+                    {service}
+                  </span>
+                ))}
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-secondary-200 bg-secondary-50 p-4">
+                <p className="text-sm font-semibold text-secondary-900">
+                  For service providers
+                </p>
+                <p className="mt-1 text-sm text-secondary-600">
+                  Create a profile, list your services, set your prices, and get
+                  bookings from customers near you.
+                </p>
+                <Link
+                  href="/register?role=provider"
+                  className="mt-2 inline-flex items-center text-sm font-semibold text-primary-600"
+                >
+                  Register as a service provider
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Link>
+              </div>
+
+              <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                {heroStats.map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="rounded-2xl border border-secondary-200 bg-white px-4 py-3"
+                  >
+                    <p className="text-sm font-semibold text-secondary-900">
+                      {stat.value}
+                    </p>
+                    <p className="text-xs text-secondary-500">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="relative">
+              <div className="overflow-hidden rounded-3xl border border-secondary-200 bg-white shadow-sm">
+                <Image
+                  src={heroImage}
+                  alt="Service provider at work"
+                  width={1000}
+                  height={760}
+                  className="h-auto w-full object-cover"
+                  priority
+                />
+              </div>
+              <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-secondary-700 shadow-sm">
+                <CheckCircle className="h-3.5 w-3.5 text-primary-600" />
+                Verified service providers
+              </div>
+              <div className="absolute bottom-4 right-4 rounded-2xl bg-white px-4 py-3 text-xs shadow-sm">
+                <p className="font-semibold text-secondary-900">Easy booking</p>
+                <p className="text-secondary-500">Pick a day and time</p>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Decorative elements */}
-        <div className="absolute -bottom-24 -left-24 h-96 w-96 rounded-full bg-primary-100 opacity-50 blur-3xl" />
-        <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-accent-100 opacity-50 blur-3xl" />
       </section>
 
-      {/* Features Section */}
-      <section className="py-20">
+      {/* Popular services */}
+      <section id="popular-services" className="py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold text-secondary-900">
-              Why Choose LocalService?
-            </h2>
-            <p className="mt-4 text-lg text-secondary-600">
-              We make finding and booking local services simple and reliable.
-            </p>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-bold text-secondary-900">
+                Popular services
+              </h2>
+              <p className="mt-2 text-secondary-600">
+                We cover many services. If you provide a service, you can list
+                it and reach customers who need it.
+              </p>
+            </div>
+            <Button variant="outline" asChild>
+              <Link href="/categories">
+                View all categories <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
 
-          <div className="mt-16 grid gap-8 md:grid-cols-3">
-            {features.map((feature) => (
-              <Card key={feature.title} className="text-center">
-                <CardContent className="pt-6">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary-100">
-                    <feature.icon className="h-7 w-7 text-primary-600" />
-                  </div>
-                  <h3 className="mt-4 text-lg font-semibold text-secondary-900">
-                    {feature.title}
+          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {categories.map((category) => (
+              <Card key={category.name} className="overflow-hidden">
+                <div className="h-44 w-full overflow-hidden">
+                  <Image
+                    src={category.image}
+                    alt={category.name}
+                    width={800}
+                    height={600}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <CardContent className="pt-5">
+                  <h3 className="text-lg font-semibold text-secondary-900">
+                    {category.name}
                   </h3>
-                  <p className="mt-2 text-secondary-600">{feature.description}</p>
+                  <p className="mt-1 text-sm text-secondary-600">
+                    {category.description}
+                  </p>
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-sm text-secondary-500">
+                      {category.count}+ service providers
+                    </p>
+                    <Link
+                      href={`/search?category=${category.name.toLowerCase()}`}
+                      className="inline-flex items-center text-sm font-semibold text-primary-600"
+                    >
+                      View
+                    </Link>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -123,110 +348,195 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Popular Categories */}
-      <section className="bg-secondary-50 py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex items-end justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-secondary-900">
-                Popular Categories
-              </h2>
-              <p className="mt-2 text-secondary-600">
-                Explore our most requested services
-              </p>
-            </div>
-            <Button variant="outline" asChild>
-              <Link href="/categories">
-                View All <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-
-          <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            {popularCategories.map((category) => (
-              <Link
-                key={category.name}
-                href={`/search?category=${category.name.toLowerCase()}`}
-                className="group rounded-xl bg-white p-6 text-center shadow-soft transition-all hover:-translate-y-1 hover:shadow-soft-lg"
-              >
-                <span className="text-4xl">{category.icon}</span>
-                <h3 className="mt-3 font-medium text-secondary-900 group-hover:text-primary-600">
-                  {category.name}
-                </h3>
-                <p className="mt-1 text-sm text-secondary-500">
-                  {category.count}+ providers
-                </p>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold text-secondary-900">How It Works</h2>
-            <p className="mt-4 text-lg text-secondary-600">
-              Get started in three simple steps
+      {/* How it works */}
+      <section id="how-it-works" className="relative bg-secondary-50 py-20">
+        <Image
+          src={stepsImage}
+          alt=""
+          fill
+          className="object-cover opacity-5"
+          sizes="100vw"
+        />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="max-w-3xl">
+            <h2 className="text-3xl font-bold text-secondary-900">
+              How it works for customers and service providers
+            </h2>
+            <p className="mt-3 text-lg text-secondary-600">
+              The steps are simple and clear so everyone can use the platform.
             </p>
           </div>
 
-          <div className="mt-16 grid gap-8 md:grid-cols-3">
-            {howItWorks.map((item, index) => (
-              <div key={item.step} className="relative text-center">
-                {index < howItWorks.length - 1 && (
-                  <div className="absolute left-1/2 top-8 hidden h-0.5 w-full bg-primary-100 md:block" />
-                )}
-                <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-600 text-2xl font-bold text-white">
-                  {item.step}
-                </div>
-                <h3 className="mt-6 text-lg font-semibold text-secondary-900">
-                  {item.title}
-                </h3>
-                <p className="mt-2 text-secondary-600">{item.description}</p>
-              </div>
-            ))}
+          <div className="mt-10 grid gap-8 lg:grid-cols-2">
+            <div className="rounded-3xl border border-secondary-200 bg-white p-6 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-600">
+                For customers
+              </p>
+              <h3 className="mt-2 text-xl font-semibold text-secondary-900">
+                Find help and book a service
+              </h3>
+              <ol className="mt-5 space-y-4">
+                {howItWorksCustomer.map((step, index) => (
+                  <li key={step.title} className="flex gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="text-base font-semibold text-secondary-900">
+                        {step.title}
+                      </p>
+                      <p className="text-sm text-secondary-600">
+                        {step.description}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="rounded-3xl border border-secondary-200 bg-white p-6 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary-600">
+                For service providers
+              </p>
+              <h3 className="mt-2 text-xl font-semibold text-secondary-900">
+                List your services and get bookings
+              </h3>
+              <ol className="mt-5 space-y-4">
+                {howItWorksProvider.map((step, index) => (
+                  <li key={step.title} className="flex gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="text-base font-semibold text-secondary-900">
+                        {step.title}
+                      </p>
+                      <p className="text-sm text-secondary-600">
+                        {step.description}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="bg-primary-600 py-20">
-        <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-white">
-            Ready to Find Your Perfect Service Provider?
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-lg text-primary-100">
-            Join thousands of satisfied customers who have found reliable local
-            services through our platform.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Button size="lg" variant="secondary" asChild>
-              <Link href="/search">Find Services</Link>
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="border-white text-white hover:bg-white/10"
-              asChild
-            >
-              <Link href="/register?role=provider">Become a Provider</Link>
-            </Button>
+      {/* Benefits */}
+      <section className="bg-white py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+            <div>
+              <h2 className="text-3xl font-bold text-secondary-900">
+                Why people use Local Service Finder
+              </h2>
+              <p className="mt-3 text-lg text-secondary-600">
+                We make it easy to find trusted service providers and book a
+                service with clear information.
+              </p>
+              <div className="mt-8 grid gap-6 sm:grid-cols-3">
+                {benefits.map((benefit) => (
+                  <div
+                    key={benefit.title}
+                    className="rounded-2xl border border-secondary-200 bg-white p-5"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100">
+                      <benefit.icon className="h-5 w-5 text-primary-600" />
+                    </div>
+                    <h3 className="mt-4 text-base font-semibold text-secondary-900">
+                      {benefit.title}
+                    </h3>
+                    <p className="mt-2 text-sm text-secondary-600">
+                      {benefit.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-3xl border border-secondary-200 bg-secondary-50 p-6">
+              <div className="flex items-center gap-2 text-sm font-semibold text-secondary-700">
+                <MapPin className="h-4 w-4 text-primary-600" />
+                Across Ghana
+              </div>
+              <h3 className="mt-4 text-2xl font-bold text-secondary-900">
+                Find service providers close to you
+              </h3>
+              <p className="mt-3 text-sm text-secondary-600">
+                Search by area or service. You can message a service provider
+                and ask questions before you book.
+              </p>
+              <div className="mt-6 rounded-2xl border border-secondary-200 bg-white p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-semibold text-secondary-900">
+                    Accra
+                  </span>
+                  <span className="text-secondary-500">340 providers</span>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <span className="font-semibold text-secondary-900">
+                    Kumasi
+                  </span>
+                  <span className="text-secondary-500">210 providers</span>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <span className="font-semibold text-secondary-900">
+                    Takoradi
+                  </span>
+                  <span className="text-secondary-500">95 providers</span>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+      </section>
 
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-8 text-white">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-primary-200" />
-              <span>Free to use</span>
+      {/* CTA */}
+      <section className="py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid gap-10 rounded-3xl border border-secondary-200 bg-secondary-50 p-8 lg:grid-cols-[1.05fr_0.95fr] lg:p-10">
+            <div>
+              <h2 className="text-3xl font-bold text-secondary-900">
+                Ready to book a service or list your services?
+              </h2>
+              <p className="mt-4 text-lg text-secondary-600">
+                Customers can find trusted service providers and book a time.
+                Service providers can create a profile, list services, and get
+                new customers.
+              </p>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <Button size="lg" asChild>
+                  <Link href="/search">Find a service provider</Link>
+                </Button>
+                <Button size="lg" variant="outline" asChild>
+                  <Link href="/register?role=provider">
+                    Register as a provider
+                  </Link>
+                </Button>
+              </div>
+              <div className="mt-6 space-y-2 text-sm text-secondary-600">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-primary-600" />
+                  Clear profiles and real reviews
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-primary-600" />
+                  Talk to a service provider before you book
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-primary-600" />
+                  Pay the service provider directly after the work
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-primary-200" />
-              <span>No hidden fees</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-primary-200" />
-              <span>Verified providers</span>
+            <div className="overflow-hidden rounded-2xl border border-secondary-200 bg-white">
+              <Image
+                src={ctaImage}
+                alt="Customer speaking with a service provider"
+                width={900}
+                height={720}
+                className="h-full w-full object-cover"
+              />
             </div>
           </div>
         </div>

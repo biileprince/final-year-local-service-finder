@@ -55,6 +55,14 @@ export const authService = {
     return apiClient.post("/auth/reset-password", { token, password });
   },
 
+  async verifyEmail(token: string): Promise<void> {
+    return apiClient.get(`/auth/verify-email?token=${encodeURIComponent(token)}`);
+  },
+
+  async sendVerification(): Promise<void> {
+    return apiClient.post("/auth/send-verification", {}, true);
+  },
+
   isAuthenticated(): boolean {
     if (typeof window === "undefined") return false;
     return !!localStorage.getItem("accessToken");

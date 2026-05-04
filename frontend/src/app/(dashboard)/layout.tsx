@@ -48,7 +48,8 @@ export default function DashboardLayout({
   const { user, isLoading, isAuthenticated } = useRequireAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const navItems = user?.role === "PROVIDER" ? providerNavItems : customerNavItems;
+  const navItems =
+    user?.role === "PROVIDER" ? providerNavItems : customerNavItems;
 
   if (isLoading) {
     return <Loading fullScreen text="Loading your dashboard..." />;
@@ -72,7 +73,7 @@ export default function DashboardLayout({
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-lg transition-transform duration-300 ease-in-out lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex h-full flex-col">
@@ -120,7 +121,7 @@ export default function DashboardLayout({
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   pathname === item.href
                     ? "bg-primary-50 text-primary-700"
-                    : "text-secondary-600 hover:bg-secondary-100 hover:text-secondary-900"
+                    : "text-secondary-600 hover:bg-secondary-100 hover:text-secondary-900",
                 )}
               >
                 <item.icon className="h-5 w-5" />
@@ -136,7 +137,7 @@ export default function DashboardLayout({
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary-600 transition-colors hover:bg-error-50 hover:text-error-600"
             >
               <LogOut className="h-5 w-5" />
-              Sign Out
+              Logout
             </Link>
           </div>
         </div>

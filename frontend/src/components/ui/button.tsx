@@ -4,24 +4,29 @@ import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800",
-        secondary: "bg-secondary-100 text-secondary-900 hover:bg-secondary-200 active:bg-secondary-300",
-        outline: "border border-secondary-300 bg-white text-secondary-700 hover:bg-secondary-50 hover:border-secondary-400",
-        ghost: "text-secondary-600 hover:bg-secondary-100 hover:text-secondary-900",
-        destructive: "bg-error-500 text-white hover:bg-error-600 active:bg-error-600",
-        link: "text-primary-600 underline-offset-4 hover:underline",
+        default:
+          "bg-primary-500 text-white shadow-lg hover:bg-primary-600 active:bg-primary-700",
+        secondary:
+          "bg-secondary-100 text-secondary-900 hover:bg-secondary-200 active:bg-secondary-300",
+        outline:
+          "border-2 border-gray-200 bg-white text-gray-700 hover:border-primary-500 hover:text-primary-600",
+        ghost:
+          "text-gray-700 hover:bg-gray-50 hover:text-primary-600",
+        destructive:
+          "bg-error-500 text-white shadow-md hover:bg-error-600 active:bg-error-700",
+        link: "text-primary-600 underline-offset-4 hover:underline shadow-none",
       },
       size: {
-        sm: "h-8 px-3 text-xs",
+        sm: "h-8 px-3 text-xs rounded-lg",
         default: "h-10 px-4",
         lg: "h-12 px-6 text-base",
         xl: "h-14 px-8 text-lg",
-        icon: "h-10 w-10",
-        "icon-sm": "h-8 w-8",
+        icon: "h-10 w-10 rounded-lg",
+        "icon-sm": "h-8 w-8 rounded-lg",
       },
     },
     defaultVariants: {
@@ -37,6 +42,7 @@ export interface ButtonProps
   isLoading?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
+  asChild?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -48,15 +54,36 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       isLoading,
       leftIcon,
       rightIcon,
+      asChild = false,
       children,
       disabled,
       ...props
     },
     ref
   ) => {
+    const classes = cn(buttonVariants({ variant, size, className }));
+
+    if (asChild && React.isValidElement(children)) {
+      const child = children as React.ReactElement<{ className?: string; children?: React.ReactNode }>;
+      return React.cloneElement(child, {
+        className: cn(classes, child.props.className),
+        children: (
+          <>
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : leftIcon ? (
+              leftIcon
+            ) : null}
+            {child.props.children}
+            {!isLoading && rightIcon}
+          </>
+        ),
+      });
+    }
+
     return (
       <button
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={classes}
         ref={ref}
         disabled={disabled || isLoading}
         {...props}
