@@ -14,7 +14,7 @@ import {
 const footerLinks = {
   services: [
     { label: "Browse service providers", href: "/search" },
-    { label: "All categories", href: "/search" },
+    { label: "All categories", href: "/search#categories" },
     { label: "How it works", href: "/#how-it-works" },
     { label: "For service providers", href: "/register?role=provider" },
   ],
@@ -156,7 +156,7 @@ function FooterColumn({
       </h3>
       <ul className="mt-4 space-y-3">
         {links.map((l) => (
-          <li key={l.href}>
+          <li key={l.label}>
             <Link
               href={l.href}
               className="text-sm font-semibold text-gray-600 transition-colors hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"

@@ -15,6 +15,7 @@ import {
   UpdateBookingData,
   BookingListParams,
 } from "./bookings.repository";
+import { MessagesService } from "../messages/messages.service";
 import { BookingStatus } from "@prisma/client";
 
 @Injectable()
@@ -26,6 +27,7 @@ export class BookingsService {
     private readonly metricsService: MetricsService,
     private readonly cacheService: CacheService,
     private readonly bookingsRepository: BookingsRepository,
+    private readonly messagesService: MessagesService,
   ) {}
 
   /**
@@ -33,7 +35,7 @@ export class BookingsService {
    * This ensures slot locking and booking creation happen together
    */
   async create(data: CreateBookingData) {
-    return this.prisma.executeInTransaction(async (tx) => {
+    const booking = await this.prisma.executeInTransaction(async (tx) => {
       // 1. Verify provider exists and is active
       const provider = await tx.provider.findUnique({
         where: { id: data.providerId },
@@ -154,6 +156,22 @@ export class BookingsService {
 
       return booking;
     });
+
+    // Auto-create a conversation linked to this booking so both the customer
+    // and the provider discover each other in their messages list immediately.
+    try {
+      await this.messagesService.getOrCreateConversation(
+        data.customerId,
+        data.providerId,
+        booking.id,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to create conversation for booking ${booking.bookingNumber}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+
+    return booking;
   }
 
   private generateBookingNumber(): string {

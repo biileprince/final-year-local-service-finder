@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Calendar,
@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
-import { bookingsService, reviewsService } from "@/lib/api";
+import { bookingsService, reviewsService, messagesService } from "@/lib/api";
 import type { Booking, BookingStatus } from "@/types";
 import { formatDate, formatTime, formatCurrency, cn } from "@/lib/utils";
 
@@ -50,10 +50,12 @@ const PAYMENT_METHODS = [
 
 export default function BookingDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const { user } = useAuth();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
 
   // Review form state
   const [showReviewForm, setShowReviewForm] = useState(false);
@@ -121,6 +123,20 @@ export default function BookingDetailPage() {
       // silently fail
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleOpenMessage = async () => {
+    if (!booking) return;
+    setOpeningChat(true);
+    try {
+      const conv = await messagesService.startConversation(
+        booking.providerId,
+        booking.id,
+      );
+      router.push(`/messages/${conv.id}`);
+    } catch {
+      setOpeningChat(false);
     }
   };
 
@@ -199,7 +215,11 @@ export default function BookingDetailPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline">
+            <Button
+              variant="outline"
+              onClick={handleOpenMessage}
+              isLoading={openingChat}
+            >
               <MessageSquare className="mr-2 h-4 w-4" />
               Message
             </Button>

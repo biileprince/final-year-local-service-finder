@@ -18,7 +18,7 @@ export class MessagesService {
   ) {}
 
   async getOrCreateConversation(
-    customerId: string,
+    callerUserId: string,
     providerId: string,
     bookingId?: string,
   ) {
@@ -30,6 +30,43 @@ export class MessagesService {
 
     if (!provider) {
       throw new NotFoundException("Provider not found");
+    }
+
+    // Determine the conversation's customerId.
+    // - If the caller is the provider's owner, derive it from the booking
+    //   (so a provider clicking "Message" on a booking opens the chat with
+    //   that booking's customer).
+    // - Otherwise the caller IS the customer.
+    let customerId = callerUserId;
+    const callerIsProvider = provider.userId === callerUserId;
+
+    if (callerIsProvider) {
+      if (!bookingId) {
+        throw new ForbiddenException(
+          "Providers can only start conversations from a booking",
+        );
+      }
+      const booking = await this.prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { customerId: true, providerId: true },
+      });
+      if (!booking || booking.providerId !== providerId) {
+        throw new NotFoundException("Booking not found for this provider");
+      }
+      customerId = booking.customerId;
+    } else if (bookingId) {
+      // Validate booking belongs to caller and provider
+      const booking = await this.prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { customerId: true, providerId: true },
+      });
+      if (
+        !booking ||
+        booking.providerId !== providerId ||
+        booking.customerId !== callerUserId
+      ) {
+        throw new ForbiddenException("Booking does not match conversation");
+      }
     }
 
     return this.messagesRepository.findOrCreateConversation({

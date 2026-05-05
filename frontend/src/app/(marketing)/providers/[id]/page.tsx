@@ -14,13 +14,22 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
+  Briefcase,
+  Award,
+  ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
-import { providersService, availabilityService } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import {
+  providersService,
+  availabilityService,
+  messagesService,
+} from "@/lib/api";
 import type { Provider, Review, Availability } from "@/types";
 import { formatCurrency, formatRelativeTime, formatTime, cn } from "@/lib/utils";
 import { useAuth } from "@/hooks";
@@ -247,10 +256,28 @@ function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
 
 export default function ProviderDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const { user } = useAuth();
+  const [messaging, setMessaging] = useState(false);
+
+  const handleMessage = async (providerId: string) => {
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    if (user.role !== "CUSTOMER") return;
+    setMessaging(true);
+    try {
+      const conv = await messagesService.startConversation(providerId);
+      router.push(`/messages/${conv.id}`);
+    } catch {
+      setMessaging(false);
+    }
+  };
   const [provider, setProvider] = useState<Provider | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [suggested, setSuggested] = useState<Provider[]>([]);
   const [activeTab, setActiveTab] = useState<
     "about" | "reviews" | "availability"
   >("about");
@@ -264,14 +291,38 @@ export default function ProviderDetailPage() {
   const loadProvider = async (id: string) => {
     setIsLoading(true);
     try {
-      const [providerData, reviewsData] = await Promise.all([
-        providersService.getById(id),
-        providersService.getReviews(id),
-      ]);
+      // Try ID first; if not found, fall back to slug. Some links may use
+      // either form; this avoids dead-ends caused by stale URLs.
+      let providerData: Provider | null = null;
+      try {
+        providerData = await providersService.getById(id);
+      } catch {
+        try {
+          providerData = await providersService.getBySlug(id);
+        } catch {
+          providerData = null;
+        }
+      }
+
+      if (!providerData) {
+        // Show useful alternatives instead of a dead-end page
+        try {
+          const top = await providersService.getTopRated(6);
+          setSuggested(top);
+        } catch {
+          /* ignore */
+        }
+        setProvider(null);
+        return;
+      }
+
       setProvider(providerData);
-      setReviews(reviewsData.data || []);
-    } catch (error) {
-      console.error("Failed to load provider:", error);
+      try {
+        const reviewsData = await providersService.getReviews(providerData.id);
+        setReviews(reviewsData.data || []);
+      } catch {
+        setReviews([]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -287,16 +338,45 @@ export default function ProviderDetailPage() {
 
   if (!provider) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center">
-        <h1 className="text-2xl font-bold text-secondary-900">
-          Provider not found
-        </h1>
-        <p className="mt-2 text-secondary-600">
-          The provider you are looking for does not exist.
-        </p>
-        <Button asChild className="mt-4">
-          <Link href="/search">Back to Search</Link>
-        </Button>
+      <div className="mx-auto max-w-4xl px-4 py-16">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-secondary-900">
+            Provider not found
+          </h1>
+          <p className="mt-2 text-secondary-600">
+            This provider may no longer be available. Try one of the top-rated
+            providers below.
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <Button asChild variant="outline">
+              <Link href="/search">Browse all providers</Link>
+            </Button>
+          </div>
+        </div>
+
+        {suggested.length > 0 && (
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {suggested.map((p) => (
+              <Link
+                key={p.id}
+                href={`/providers/${p.id}`}
+                className="group flex items-center gap-3 rounded-2xl border border-secondary-100 bg-white p-4 transition-shadow hover:shadow-md"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-lg font-bold text-primary-700">
+                  {p.user.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-secondary-900 group-hover:text-primary-700">
+                    {p.user.name}
+                  </p>
+                  <p className="text-xs text-secondary-500">
+                    {p.location} · ★ {Number(p.rating).toFixed(1)}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -373,10 +453,16 @@ export default function ProviderDetailPage() {
                     </Link>
                   </Button>
                 )}
-                <Button variant="outline">
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Message
-                </Button>
+                {(!user || user.role === "CUSTOMER") && (
+                  <Button
+                    variant="outline"
+                    onClick={() => handleMessage(provider.id)}
+                    isLoading={messaging}
+                  >
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Message
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -406,20 +492,162 @@ export default function ProviderDetailPage() {
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
         {activeTab === "about" && (
           <div className="space-y-6">
+            {/* Track record */}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Card>
+                <CardContent className="flex items-center gap-3 p-5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100">
+                    <Award className="h-5 w-5 text-primary-600" />
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-secondary-900">
+                      {provider.completedBookings}
+                    </p>
+                    <p className="text-xs text-secondary-500">Jobs completed</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="flex items-center gap-3 p-5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warning-50">
+                    <Star className="h-5 w-5 text-warning-600" />
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-secondary-900">
+                      {Number(provider.rating).toFixed(1)}
+                    </p>
+                    <p className="text-xs text-secondary-500">
+                      from {provider.reviewCount} reviews
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="flex items-center gap-3 p-5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary-100">
+                    <Briefcase className="h-5 w-5 text-secondary-700" />
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-secondary-900">
+                      {provider.yearsExperience}+
+                    </p>
+                    <p className="text-xs text-secondary-500">
+                      Years experience
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
             <Card>
               <CardHeader>
                 <CardTitle>About</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-secondary-700">
+                <p className="whitespace-pre-line text-secondary-700">
                   {provider.bio || "No description available."}
                 </p>
               </CardContent>
             </Card>
 
+            {/* Specialties */}
+            {provider.specialties && provider.specialties.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary-600" />
+                    Specialties
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {provider.specialties.map((s) => (
+                      <Badge
+                        key={s.id}
+                        variant="secondary"
+                        className="px-3 py-1.5 text-sm"
+                      >
+                        {s.specialty}
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Service categories with primary tag */}
+            {provider.categories.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-primary-600" />
+                    Services offered
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {provider.categories.map((pc) => (
+                      <span
+                        key={pc.id}
+                        className={`inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-sm font-semibold ${
+                          pc.isPrimary
+                            ? "border-primary-300 bg-primary-50 text-primary-700"
+                            : "border-secondary-200 bg-white text-secondary-700"
+                        }`}
+                      >
+                        {pc.category.name}
+                        {pc.isPrimary && (
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-primary-500">
+                            Primary
+                          </span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Gallery */}
+            {provider.gallery && provider.gallery.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ImageIcon className="h-5 w-5 text-primary-600" />
+                    Work gallery
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {provider.gallery.map((g) => (
+                      <a
+                        key={g.id}
+                        href={g.file.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group relative block overflow-hidden rounded-xl bg-secondary-100"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={g.file.thumbnailUrl || g.file.url}
+                          alt={g.title || "Gallery item"}
+                          className="aspect-square w-full object-cover transition-transform group-hover:scale-105"
+                        />
+                        {g.title && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-xs font-semibold text-white">
+                            {g.title}
+                          </div>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
-                <CardTitle>Contact Information</CardTitle>
+                <CardTitle>Contact information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {provider.user.email && (
@@ -442,6 +670,8 @@ export default function ProviderDetailPage() {
                   <MapPin className="h-5 w-5 text-secondary-400" />
                   <span className="text-secondary-700">
                     {provider.location}
+                    {provider.serviceRadiusKm &&
+                      ` · serves up to ${provider.serviceRadiusKm} km`}
                   </span>
                 </div>
               </CardContent>

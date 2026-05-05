@@ -85,18 +85,18 @@ export const bookingsService = {
   },
 
   async confirm(id: string): Promise<Booking> {
-    return apiClient.patch<Booking>(`/bookings/${id}/confirm`, {}, true);
+    return apiClient.put<Booking>(`/bookings/${id}/confirm`, {}, true);
   },
 
   async start(id: string): Promise<Booking> {
-    return apiClient.patch<Booking>(`/bookings/${id}/start`, {}, true);
+    return apiClient.put<Booking>(`/bookings/${id}/start`, {}, true);
   },
 
   async complete(
     id: string,
     data?: { finalAmount?: number; serviceNotes?: string },
   ): Promise<Booking> {
-    return apiClient.patch<Booking>(
+    return apiClient.put<Booking>(
       `/bookings/${id}/complete`,
       data || {},
       true,
@@ -104,14 +104,18 @@ export const bookingsService = {
   },
 
   async cancel(id: string, reason: string): Promise<Booking> {
-    return apiClient.patch<Booking>(`/bookings/${id}/cancel`, { reason }, true);
+    return apiClient.put<Booking>(`/bookings/${id}/cancel`, { reason }, true);
   },
 
   async reschedule(
     id: string,
     data: { scheduledDate: string; scheduledStartTime: string },
   ): Promise<Booking> {
-    return apiClient.patch<Booking>(`/bookings/${id}/reschedule`, data, true);
+    return apiClient.put<Booking>(`/bookings/${id}/reschedule`, data, true);
+  },
+
+  async getStats(providerId: string): Promise<Record<string, number>> {
+    return apiClient.get(`/bookings/stats/${providerId}`, true);
   },
 
   async recordPayment(

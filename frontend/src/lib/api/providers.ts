@@ -84,7 +84,7 @@ export const providersService = {
       serviceRadiusKm: number;
     }>,
   ): Promise<Provider> {
-    return apiClient.patch<Provider>("/providers/me", data, true);
+    return apiClient.put<Provider>("/providers/me", data, true);
   },
 
   async getReviews(
@@ -121,7 +121,25 @@ export const providersService = {
     return result.providers;
   },
 
-  async setCategories(categoryIds: string[]): Promise<void> {
-    return apiClient.patch("/providers/me/categories", { categoryIds }, true);
+  async setCategories(categoryIds: string[]): Promise<Provider> {
+    const me = await this.getMyProfile();
+    return apiClient.put<Provider>(
+      `/providers/${me.id}/categories`,
+      { categoryIds },
+      true,
+    );
+  },
+
+  async setSpecialties(specialties: string[]): Promise<Provider> {
+    const me = await this.getMyProfile();
+    return apiClient.put<Provider>(
+      `/providers/${me.id}/specialties`,
+      { specialties },
+      true,
+    );
+  },
+
+  async getStats(providerId: string): Promise<Record<string, number>> {
+    return apiClient.get(`/bookings/stats/${providerId}`, true);
   },
 };

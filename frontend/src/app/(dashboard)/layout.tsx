@@ -14,6 +14,8 @@ import {
   Menu,
   X,
   Briefcase,
+  BarChart3,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
@@ -34,9 +36,11 @@ const customerNavItems = [
 const providerNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/bookings", label: "Bookings", icon: Calendar },
+  { href: "/availability", label: "Availability", icon: Briefcase },
+  { href: "/services", label: "My Services", icon: Wrench },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/availability", label: "Availability", icon: Briefcase },
   { href: "/profile", label: "Profile", icon: User },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
