@@ -40,22 +40,24 @@ import { AdminModule } from "./modules/admin/admin.module";
     // Structured logging (Pino) — JSON in prod, pretty in dev
     LoggerModule.forRoot(loggerConfig),
 
-    // Rate limiting
+    // Rate limiting. Per-route @Throttle() overrides on auth-sensitive
+    // endpoints handle abuse cases; these defaults are intentionally loose
+    // because dashboards fan out 5+ parallel calls per page load.
     ThrottlerModule.forRoot([
       {
         name: "short",
         ttl: 1000,
-        limit: 3,
+        limit: 30,
       },
       {
         name: "medium",
         ttl: 10000,
-        limit: 20,
+        limit: 200,
       },
       {
         name: "long",
         ttl: 60000,
-        limit: 100,
+        limit: 1000,
       },
     ]),
 

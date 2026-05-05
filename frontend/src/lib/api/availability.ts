@@ -23,76 +23,49 @@ export interface RecurringAvailabilityDto {
 }
 
 export const availabilityService = {
-  // Get provider's availability
+  // Get current provider's availability (authenticated)
   getMyAvailability: async (
     params?: AvailabilityQueryParams,
   ): Promise<Availability[]> => {
     const query = params ? buildQueryString(params) : "";
-    return apiClient.get<Availability[]>(`/availability/me${query}`);
+    return apiClient.get<Availability[]>(`/availability/me${query}`, true);
   },
 
-  // Get availability for a specific provider (public)
+  // Get availability for a specific provider (public range endpoint)
   getProviderAvailability: async (
     providerId: string,
     params?: AvailabilityQueryParams,
   ): Promise<Availability[]> => {
-    const query = params ? buildQueryString(params) : "";
+    const query = params
+      ? buildQueryString({
+          startDate: params.startDate,
+          endDate: params.endDate,
+        })
+      : "";
     return apiClient.get<Availability[]>(
-      `/providers/${providerId}/availability${query}`,
+      `/availability/${providerId}/range${query}`,
     );
   },
 
-  // Set availability for specific dates
+  // Bulk-set the current provider's availability
   setAvailability: async (
     availabilities: SetAvailabilityDto[],
   ): Promise<Availability[]> => {
-    return apiClient.post<Availability[]>("/availability", { availabilities });
-  },
-
-  // Add single availability
-  addAvailability: async (data: SetAvailabilityDto): Promise<Availability> => {
-    return apiClient.post<Availability>("/availability/single", data);
-  },
-
-  // Delete availability for a specific date
-  deleteAvailability: async (date: string): Promise<void> => {
-    return apiClient.delete(`/availability/${date}`);
-  },
-
-  // Get recurring availability settings
-  getRecurringAvailability: async (): Promise<RecurringAvailabilityDto[]> => {
-    return apiClient.get<RecurringAvailabilityDto[]>("/availability/recurring");
-  },
-
-  // Set recurring availability
-  setRecurringAvailability: async (
-    settings: RecurringAvailabilityDto[],
-  ): Promise<RecurringAvailabilityDto[]> => {
-    return apiClient.put<RecurringAvailabilityDto[]>(
-      "/availability/recurring",
-      {
-        settings,
-      },
+    return apiClient.post<Availability[]>(
+      "/availability",
+      { availabilities },
+      true,
     );
   },
 
-  // Get available time slots for a specific date (for booking)
+  // Get available time slots for a specific date (for booking — public)
   getAvailableSlots: async (
     providerId: string,
     date: string,
   ): Promise<TimeSlot[]> => {
+    const query = buildQueryString({ date });
     return apiClient.get<TimeSlot[]>(
-      `/providers/${providerId}/availability/${date}/slots`,
+      `/availability/${providerId}/slots${query}`,
     );
-  },
-
-  // Block a time slot (e.g., for provider's personal time)
-  blockTimeSlot: async (date: string, slotId: string): Promise<void> => {
-    return apiClient.post(`/availability/${date}/slots/${slotId}/block`);
-  },
-
-  // Unblock a time slot
-  unblockTimeSlot: async (date: string, slotId: string): Promise<void> => {
-    return apiClient.post(`/availability/${date}/slots/${slotId}/unblock`);
   },
 };

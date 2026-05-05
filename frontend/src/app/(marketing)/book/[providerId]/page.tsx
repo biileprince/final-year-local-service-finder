@@ -42,6 +42,7 @@ export default function BookProviderPage() {
   const [step, setStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+  const [flexibleTime, setFlexibleTime] = useState(false);
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [serviceAddress, setServiceAddress] = useState("");
@@ -96,7 +97,7 @@ export default function BookProviderPage() {
     if (
       !provider ||
       !selectedDate ||
-      !selectedSlot ||
+      (!selectedSlot && !flexibleTime) ||
       !serviceAddress ||
       !problemDescription
     ) {
@@ -110,7 +111,8 @@ export default function BookProviderPage() {
       const booking = await bookingsService.create({
         providerId: provider.id,
         scheduledDate: selectedDate.toISOString().split("T")[0] ?? "",
-        scheduledStartTime: selectedSlot.startTime,
+        scheduledStartTime:
+          flexibleTime || !selectedSlot ? undefined : selectedSlot.startTime,
         serviceAddress,
         problemDescription,
       });
@@ -350,43 +352,80 @@ export default function BookProviderPage() {
                       <Spinner />
                     </div>
                   ) : availableSlots.length === 0 ? (
-                    <div className="py-8 text-center">
+                    <div className="rounded-lg border border-dashed border-secondary-200 p-6 text-center">
                       <Clock className="mx-auto h-12 w-12 text-secondary-300" />
-                      <p className="mt-4 text-secondary-600">
-                        No available time slots for this date.
+                      <p className="mt-4 font-medium text-secondary-900">
+                        No fixed time slots published for this date.
                       </p>
-                      <Button
-                        variant="outline"
-                        onClick={() => setStep(1)}
-                        className="mt-4"
-                      >
-                        Choose Another Date
-                      </Button>
+                      <p className="mt-1 text-sm text-secondary-600">
+                        You can request a flexible booking — the provider will
+                        confirm the exact time with you via messaging.
+                      </p>
+                      <div className="mt-4 flex flex-wrap justify-center gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setStep(1)}
+                        >
+                          Choose Another Date
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setFlexibleTime(true);
+                            setSelectedSlot(null);
+                            setStep(3);
+                          }}
+                        >
+                          Request Flexible Time
+                        </Button>
+                      </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {availableSlots.map((slot) => (
-                        <button
-                          key={slot.id}
-                          onClick={() => setSelectedSlot(slot)}
-                          className={cn(
-                            "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-                            selectedSlot?.id === slot.id
-                              ? "border-primary-600 bg-primary-50 text-primary-700"
-                              : "border-secondary-200 text-secondary-700 hover:border-primary-300 hover:bg-primary-50",
-                          )}
-                        >
-                          {slot.startTime}
-                        </button>
-                      ))}
-                    </div>
+                    <>
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                        {availableSlots.map((slot) => (
+                          <button
+                            key={slot.id}
+                            onClick={() => {
+                              setSelectedSlot(slot);
+                              setFlexibleTime(false);
+                            }}
+                            className={cn(
+                              "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                              selectedSlot?.id === slot.id
+                                ? "border-primary-600 bg-primary-50 text-primary-700"
+                                : "border-secondary-200 text-secondary-700 hover:border-primary-300 hover:bg-primary-50",
+                            )}
+                          >
+                            {slot.startTime}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFlexibleTime(true);
+                          setSelectedSlot(null);
+                        }}
+                        className={cn(
+                          "mt-3 w-full rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                          flexibleTime
+                            ? "border-primary-600 bg-primary-50 text-primary-700"
+                            : "border-dashed border-secondary-300 text-secondary-600 hover:border-primary-300 hover:bg-primary-50",
+                        )}
+                      >
+                        I'm flexible — let the provider confirm a time
+                      </button>
+                    </>
                   )}
 
                   <div className="mt-6 flex justify-between">
                     <Button variant="outline" onClick={() => setStep(1)}>
                       Back
                     </Button>
-                    <Button onClick={() => setStep(3)} disabled={!selectedSlot}>
+                    <Button
+                      onClick={() => setStep(3)}
+                      disabled={!selectedSlot && !flexibleTime}
+                    >
                       Continue
                     </Button>
                   </div>
@@ -496,12 +535,18 @@ export default function BookProviderPage() {
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between border-t pt-2">
-                  <span className="text-secondary-500">Hourly Rate</span>
-                  <span className="font-bold text-primary-600">
-                    {formatCurrency(Number(provider.hourlyRate))}
-                  </span>
-                </div>
+                {flexibleTime && !selectedSlot && (
+                  <div className="flex justify-between">
+                    <span className="text-secondary-500">Time</span>
+                    <span className="font-medium text-secondary-900">
+                      Flexible (provider confirms)
+                    </span>
+                  </div>
+                )}
+                <p className="border-t pt-2 text-xs text-secondary-500">
+                  Final amount is agreed with the provider after the job and
+                  paid offline.
+                </p>
               </CardContent>
             </Card>
           </div>

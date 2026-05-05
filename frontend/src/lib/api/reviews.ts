@@ -2,7 +2,8 @@ import { apiClient, buildQueryString } from "./client";
 import type { Review, PaginatedResponse } from "@/types";
 
 export interface CreateReviewDto {
-  bookingId: string;
+  providerId: string;
+  bookingId?: string;
   rating: number;
   title?: string;
   comment: string;

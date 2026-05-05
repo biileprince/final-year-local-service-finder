@@ -31,7 +31,7 @@ import {
   messagesService,
 } from "@/lib/api";
 import type { Provider, Review, Availability } from "@/types";
-import { formatCurrency, formatRelativeTime, formatTime, cn } from "@/lib/utils";
+import { formatRelativeTime, formatTime, cn } from "@/lib/utils";
 import { useAuth } from "@/hooks";
 
 // ─── Availability Tab ────────────────────────────────────────────────────────
@@ -439,12 +439,6 @@ export default function ProviderDetailPage() {
               </div>
 
               <div className="mt-4 flex items-center gap-4">
-                <div>
-                  <span className="text-2xl font-bold text-primary-600">
-                    {formatCurrency(Number(provider.hourlyRate))}
-                  </span>
-                  <span className="text-secondary-500">/hour</span>
-                </div>
                 {user?.role === "CUSTOMER" && (
                   <Button asChild>
                     <Link href={`/book/${provider.id}`}>

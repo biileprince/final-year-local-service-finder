@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Star,
   Banknote,
+  CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,6 +62,14 @@ export default function BookingDetailPage() {
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  // Reschedule state
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduleFlexible, setRescheduleFlexible] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
 
   // Payment recording state
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -110,17 +119,27 @@ export default function BookingDetailPage() {
 
   const handleSubmitReview = async () => {
     if (!booking) return;
+    const trimmed = reviewComment.trim();
+    if (trimmed.length < 10) {
+      setReviewError("Please write at least 10 characters about your experience.");
+      return;
+    }
+    setReviewError(null);
     setIsUpdating(true);
     try {
       await reviewsService.create({
+        providerId: booking.providerId,
         bookingId: booking.id,
         rating: reviewRating,
-        comment: reviewComment,
+        comment: trimmed,
       });
       setShowReviewForm(false);
+      setReviewComment("");
       loadBooking(booking.id);
-    } catch {
-      // silently fail
+    } catch (err) {
+      setReviewError(
+        err instanceof Error ? err.message : "Failed to submit review.",
+      );
     } finally {
       setIsUpdating(false);
     }
@@ -137,6 +156,39 @@ export default function BookingDetailPage() {
       router.push(`/messages/${conv.id}`);
     } catch {
       setOpeningChat(false);
+    }
+  };
+
+  const handleReschedule = async () => {
+    if (!booking) return;
+    if (!rescheduleDate) {
+      setRescheduleError("Please pick a new date.");
+      return;
+    }
+    if (!rescheduleFlexible && !rescheduleTime) {
+      setRescheduleError("Please pick a new time or choose flexible.");
+      return;
+    }
+    setRescheduleError(null);
+    setIsUpdating(true);
+    try {
+      const updated = await bookingsService.reschedule(booking.id, {
+        scheduledDate: rescheduleDate,
+        scheduledStartTime: rescheduleFlexible
+          ? undefined
+          : `${rescheduleTime}:00`,
+      });
+      setBooking(updated);
+      setShowReschedule(false);
+      setRescheduleDate("");
+      setRescheduleTime("");
+      setRescheduleFlexible(false);
+    } catch (err) {
+      setRescheduleError(
+        err instanceof Error ? err.message : "Failed to reschedule.",
+      );
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -428,6 +480,11 @@ export default function BookingDetailPage() {
                   </Button>
                 ) : (
                   <div className="space-y-4">
+                    {reviewError && (
+                      <p className="text-sm font-semibold text-red-600">
+                        {reviewError}
+                      </p>
+                    )}
                     <div>
                       <label className="mb-2 block text-sm font-medium text-secondary-700">
                         Rating
@@ -439,10 +496,11 @@ export default function BookingDetailPage() {
                             type="button"
                             onClick={() => setReviewRating(star)}
                             className="p-1"
+                            aria-label={`${star} star${star === 1 ? "" : "s"}`}
                           >
                             <Star
                               className={cn(
-                                "h-8 w-8",
+                                "h-8 w-8 transition-colors",
                                 star <= reviewRating
                                   ? "fill-warning-500 text-warning-500"
                                   : "fill-secondary-200 text-secondary-200",
@@ -450,11 +508,14 @@ export default function BookingDetailPage() {
                             />
                           </button>
                         ))}
+                        <span className="ml-2 self-center text-sm text-secondary-600">
+                          {reviewRating}/5
+                        </span>
                       </div>
                     </div>
                     <div>
                       <label className="mb-2 block text-sm font-medium text-secondary-700">
-                        Comment (optional)
+                        Comment <span className="text-secondary-400">(min 10 chars)</span>
                       </label>
                       <textarea
                         value={reviewComment}
@@ -468,7 +529,13 @@ export default function BookingDetailPage() {
                       <Button onClick={handleSubmitReview} isLoading={isUpdating}>
                         Submit Review
                       </Button>
-                      <Button variant="outline" onClick={() => setShowReviewForm(false)}>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowReviewForm(false);
+                          setReviewError(null);
+                        }}
+                      >
                         Cancel
                       </Button>
                     </div>
@@ -560,6 +627,98 @@ export default function BookingDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Reschedule (either party, while not yet started/completed) */}
+          {(booking.status === "PENDING" || booking.status === "CONFIRMED") && (
+            <Card>
+              <CardContent className="space-y-3 py-4">
+                {!showReschedule ? (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setShowReschedule(true);
+                      setRescheduleDate(
+                        new Date(booking.scheduledDate)
+                          .toISOString()
+                          .split("T")[0] ?? "",
+                      );
+                    }}
+                  >
+                    <CalendarClock className="mr-2 h-4 w-4" />
+                    Reschedule
+                  </Button>
+                ) : (
+                  <div className="space-y-3">
+                    {rescheduleError && (
+                      <p className="text-sm font-semibold text-red-600">
+                        {rescheduleError}
+                      </p>
+                    )}
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-secondary-700">
+                        New date
+                      </label>
+                      <input
+                        type="date"
+                        value={rescheduleDate}
+                        min={new Date().toISOString().split("T")[0]}
+                        onChange={(e) => setRescheduleDate(e.target.value)}
+                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-secondary-700">
+                        New time
+                      </label>
+                      <input
+                        type="time"
+                        value={rescheduleTime}
+                        disabled={rescheduleFlexible}
+                        onChange={(e) => setRescheduleTime(e.target.value)}
+                        className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm disabled:bg-secondary-50 disabled:text-secondary-400"
+                      />
+                      <label className="mt-2 flex items-center gap-2 text-xs text-secondary-600">
+                        <input
+                          type="checkbox"
+                          checked={rescheduleFlexible}
+                          onChange={(e) => {
+                            setRescheduleFlexible(e.target.checked);
+                            if (e.target.checked) setRescheduleTime("");
+                          }}
+                        />
+                        Flexible — let the provider pick a time
+                      </label>
+                    </div>
+                    {!isProvider && booking.status === "CONFIRMED" && (
+                      <p className="text-xs text-secondary-500">
+                        Rescheduling a confirmed booking will return it to
+                        pending so the provider can re-confirm.
+                      </p>
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleReschedule}
+                        isLoading={isUpdating}
+                        className="flex-1"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowReschedule(false);
+                          setRescheduleError(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Customer: cancel booking */}
           {!isProvider && (booking.status === "PENDING" || booking.status === "CONFIRMED") && (

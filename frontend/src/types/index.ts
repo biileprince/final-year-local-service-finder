@@ -141,6 +141,13 @@ export interface Conversation {
   customerUnreadCount: number;
   providerUnreadCount: number;
   createdAt: string;
+  booking?: {
+    id: string;
+    bookingNumber: string;
+    status: BookingStatus;
+    scheduledDate?: string;
+    scheduledStartTime?: string;
+  };
 }
 
 export interface Message {

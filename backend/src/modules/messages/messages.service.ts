@@ -95,6 +95,13 @@ export class MessagesService {
   }
 
   async getUserConversations(userId: string) {
+    // Backfill: ensure every booking the user is part of has a conversation.
+    // Older bookings created before the auto-create flow won't have one, and
+    // a transient failure during booking creation could also leave a gap.
+    // findOrCreateConversation is idempotent thanks to the unique
+    // (customerId, providerId) constraint, so this is safe to run on every load.
+    await this.backfillConversationsForUser(userId);
+
     // Get conversations where user is customer
     const customerConversations =
       await this.messagesRepository.getUserConversations(userId, "customer");
@@ -220,6 +227,39 @@ export class MessagesService {
     }
 
     return this.messagesRepository.editMessage(messageId, content);
+  }
+
+  private async backfillConversationsForUser(userId: string) {
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        OR: [{ customerId: userId }, { provider: { userId } }],
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        customerId: true,
+        providerId: true,
+      },
+    });
+
+    if (bookings.length === 0) return;
+
+    const seen = new Set<string>();
+    for (const b of bookings) {
+      const key = `${b.customerId}:${b.providerId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      try {
+        await this.messagesRepository.findOrCreateConversation({
+          customerId: b.customerId,
+          providerId: b.providerId,
+          bookingId: b.id,
+        });
+      } catch {
+        // ignore — race against unique constraint is fine, next call will find it
+      }
+    }
   }
 
   // For WebSocket notifications

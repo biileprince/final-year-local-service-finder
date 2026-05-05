@@ -20,6 +20,7 @@ import { CreateBookingDto } from "./dto/create-booking.dto";
 import { UpdateBookingDto } from "./dto/update-booking.dto";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
 import { RecordPaymentDto } from "./dto/record-payment.dto";
+import { RescheduleBookingDto } from "./dto/reschedule-booking.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import {
   CurrentUser,
@@ -154,6 +155,17 @@ export class BookingsController {
     @Body("finalAmount") finalAmount?: number,
   ) {
     return this.bookingsService.complete(id, user.id, finalAmount);
+  }
+
+  @Put(":id/reschedule")
+  @ApiOperation({ summary: "Reschedule a booking (customer or provider)" })
+  @ApiResponse({ status: 200, description: "Booking rescheduled" })
+  async reschedule(
+    @Param("id") id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: RescheduleBookingDto,
+  ) {
+    return this.bookingsService.reschedule(id, user.id, dto);
   }
 
   @Put(":id/cancel")

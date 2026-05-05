@@ -36,9 +36,18 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
  * Format time to readable string
  */
 export function formatTime(time: string): string {
-  const parts = time.split(":");
-  const hour = parseInt(parts[0] ?? "0", 10);
-  const minutes = parts[1] ?? "00";
+  // Handle ISO timestamps like "1970-01-01T09:00:00.000Z" by extracting HH:MM:SS.
+  const match = time.match(/(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return time;
+  const hour = parseInt(match[1] ?? "0", 10);
+  const minutes = match[2] ?? "00";
+  const seconds = match[3] ?? "00";
+
+  // Sentinel "00:00:00" represents a flexible-time booking.
+  if (hour === 0 && minutes === "00" && seconds === "00") {
+    return "Time TBD";
+  }
+
   const ampm = hour >= 12 ? "PM" : "AM";
   const hour12 = hour % 12 || 12;
   return `${hour12}:${minutes} ${ampm}`;

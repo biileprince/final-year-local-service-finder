@@ -20,6 +20,7 @@ import { AvailabilityService } from "./availability.service";
 import { SetAvailabilityDto } from "./dto/set-availability.dto";
 import { SetTimeSlotsDto } from "./dto/set-time-slots.dto";
 import { BulkAvailabilityDto } from "./dto/bulk-availability.dto";
+import { SetMyAvailabilityDto } from "./dto/set-my-availability.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { Public } from "../../common/decorators/public.decorator";
 import {
@@ -31,6 +32,43 @@ import {
 @ApiTags("availability")
 export class AvailabilityController {
   constructor(private readonly availabilityService: AvailabilityService) {}
+
+  // NOTE: `me` routes must come before `:providerId` so they don't get
+  // captured as `providerId === "me"`.
+
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get current provider's availability for a date range" })
+  @ApiQuery({ name: "startDate", required: false })
+  @ApiQuery({ name: "endDate", required: false })
+  async getMyAvailability(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+  ) {
+    const start = startDate ? new Date(startDate) : new Date();
+    const end = endDate
+      ? new Date(endDate)
+      : new Date(new Date().setDate(new Date().getDate() + 30));
+    return this.availabilityService.getMyAvailabilityRange(user.id, start, end);
+  }
+
+  @Post()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Bulk set the current provider's availability (per-day with custom slots)",
+  })
+  async setMyAvailability(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: SetMyAvailabilityDto,
+  ) {
+    return this.availabilityService.setMyAvailabilityBulk(
+      user.id,
+      dto.availabilities,
+    );
+  }
 
   @Get(":providerId")
   @Public()

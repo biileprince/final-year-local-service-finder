@@ -23,12 +23,17 @@ export class CreateBookingDto {
   @Transform(({ value }) => new Date(value))
   scheduledDate: Date;
 
-  @ApiProperty({ example: "09:00:00", description: "Time in HH:MM:SS format" })
+  @ApiPropertyOptional({
+    example: "09:00:00",
+    description:
+      "Time in HH:MM:SS format. Optional — when omitted the booking is treated as flexible-time and the provider confirms a slot via messaging.",
+  })
+  @IsOptional()
   @IsString()
   @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/, {
     message: "scheduledStartTime must be in HH:MM:SS format",
   })
-  scheduledStartTime: string;
+  scheduledStartTime?: string;
 
   @ApiPropertyOptional({ example: "10:00:00" })
   @IsOptional()

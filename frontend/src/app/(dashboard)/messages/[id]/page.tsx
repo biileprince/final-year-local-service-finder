@@ -10,6 +10,8 @@ import {
   MoreVertical,
   Phone,
   Video,
+  Calendar,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
@@ -18,7 +20,15 @@ import { useAuth } from "@/hooks";
 import { messagesService } from "@/lib/api";
 import { useMessagesSocket } from "@/lib/messages-socket";
 import type { Conversation, Message } from "@/types";
-import { formatRelativeTime, cn } from "@/lib/utils";
+import { formatRelativeTime, formatDate, formatTime, cn } from "@/lib/utils";
+
+const statusBadge: Record<string, string> = {
+  PENDING: "bg-warning-50 text-warning-700",
+  CONFIRMED: "bg-primary-50 text-primary-700",
+  IN_PROGRESS: "bg-primary-50 text-primary-700",
+  COMPLETED: "bg-success-50 text-success-700",
+  CANCELLED: "bg-error-50 text-error-700",
+};
 
 export default function ConversationPage() {
   const params = useParams();
@@ -179,6 +189,43 @@ export default function ConversationPage() {
           </Button>
         </div>
       </div>
+
+      {/* Pinned booking summary */}
+      {conversation.booking && (
+        <Link
+          href={`/bookings/${conversation.booking.id}`}
+          className="flex items-center justify-between gap-3 border-b bg-secondary-50 px-4 py-2.5 text-sm transition-colors hover:bg-secondary-100"
+        >
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-100 text-primary-700">
+              <Calendar className="h-4 w-4" />
+            </div>
+            <div className="overflow-hidden">
+              <p className="truncate font-medium text-secondary-900">
+                Booking #{conversation.booking.bookingNumber}
+              </p>
+              <p className="truncate text-xs text-secondary-500">
+                {conversation.booking.scheduledDate &&
+                  formatDate(conversation.booking.scheduledDate)}
+                {conversation.booking.scheduledStartTime &&
+                  ` · ${formatTime(conversation.booking.scheduledStartTime)}`}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                statusBadge[conversation.booking.status] ??
+                  "bg-secondary-100 text-secondary-700",
+              )}
+            >
+              {conversation.booking.status}
+            </span>
+            <ArrowRight className="h-4 w-4 text-secondary-400" />
+          </div>
+        </Link>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4">

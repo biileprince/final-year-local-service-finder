@@ -40,7 +40,8 @@ function normalizeBookingList(
 export interface CreateBookingDto {
   providerId: string;
   scheduledDate: string;
-  scheduledStartTime: string;
+  // Optional. Omit when the customer wants the provider to confirm the time.
+  scheduledStartTime?: string;
   serviceAddress: string;
   problemDescription: string;
   estimatedAmount?: number;
@@ -109,7 +110,7 @@ export const bookingsService = {
 
   async reschedule(
     id: string,
-    data: { scheduledDate: string; scheduledStartTime: string },
+    data: { scheduledDate: string; scheduledStartTime?: string },
   ): Promise<Booking> {
     return apiClient.put<Booking>(`/bookings/${id}/reschedule`, data, true);
   },

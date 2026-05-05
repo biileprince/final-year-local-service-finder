@@ -35,6 +35,12 @@ export class BookingsService {
    * This ensures slot locking and booking creation happen together
    */
   async create(data: CreateBookingData) {
+    // Sentinel "00:00:00" represents a flexible-time booking — the customer
+    // didn't pick a slot and the provider will confirm the time via messaging.
+    const FLEXIBLE_TIME = "00:00:00";
+    const isFlexibleTime = !data.scheduledStartTime;
+    const scheduledStartTime = data.scheduledStartTime ?? FLEXIBLE_TIME;
+
     const booking = await this.prisma.executeInTransaction(async (tx) => {
       // 1. Verify provider exists and is active
       const provider = await tx.provider.findUnique({
@@ -55,21 +61,24 @@ export class BookingsService {
         throw new BadRequestException("Provider is not currently accepting bookings");
       }
 
-      // 2. Check for conflicting bookings
-      const existingBooking = await tx.booking.findFirst({
-        where: {
-          providerId: data.providerId,
-          scheduledDate: data.scheduledDate,
-          scheduledStartTime: new Date(`1970-01-01T${data.scheduledStartTime}`),
-          status: {
-            notIn: ["CANCELLED"],
+      // 2. Conflict detection only applies to fixed-time bookings.
+      //    Flexible bookings won't collide on the sentinel time.
+      if (!isFlexibleTime) {
+        const existingBooking = await tx.booking.findFirst({
+          where: {
+            providerId: data.providerId,
+            scheduledDate: data.scheduledDate,
+            scheduledStartTime: new Date(`1970-01-01T${scheduledStartTime}`),
+            status: {
+              notIn: ["CANCELLED"],
+            },
+            deletedAt: null,
           },
-          deletedAt: null,
-        },
-      });
+        });
 
-      if (existingBooking) {
-        throw new ConflictException("This time slot is already booked");
+        if (existingBooking) {
+          throw new ConflictException("This time slot is already booked");
+        }
       }
 
       // 3. Check availability if it exists
@@ -89,11 +98,11 @@ export class BookingsService {
         throw new BadRequestException("Provider is not available on this date");
       }
 
-      // 4. Lock the time slot if it exists
-      if (availability) {
+      // 4. Lock the time slot if it exists (skip for flexible bookings).
+      if (availability && !isFlexibleTime) {
         const timeSlot = availability.timeSlots.find(
           (slot) =>
-            slot.startTime.toISOString().slice(11, 19) === data.scheduledStartTime &&
+            slot.startTime.toISOString().slice(11, 19) === scheduledStartTime &&
             slot.isAvailable,
         );
 
@@ -113,7 +122,7 @@ export class BookingsService {
           customerId: data.customerId,
           providerId: data.providerId,
           scheduledDate: data.scheduledDate,
-          scheduledStartTime: new Date(`1970-01-01T${data.scheduledStartTime}`),
+          scheduledStartTime: new Date(`1970-01-01T${scheduledStartTime}`),
           scheduledEndTime: data.scheduledEndTime
             ? new Date(`1970-01-01T${data.scheduledEndTime}`)
             : null,
@@ -349,6 +358,62 @@ export class BookingsService {
 
       return updated;
     });
+  }
+
+  async reschedule(
+    id: string,
+    userId: string,
+    data: { scheduledDate: string; scheduledStartTime?: string },
+  ) {
+    const booking = await this.findById(id);
+
+    const isCustomer = booking.customerId === userId;
+    const isProvider = booking.provider.userId === userId;
+
+    if (!isCustomer && !isProvider) {
+      throw new ForbiddenException("Not authorized to reschedule this booking");
+    }
+
+    if (!["PENDING", "CONFIRMED"].includes(booking.status)) {
+      throw new BadRequestException(
+        "Only pending or confirmed bookings can be rescheduled",
+      );
+    }
+
+    // A reschedule by the customer pushes the booking back to PENDING so the
+    // provider re-confirms; provider reschedules stay confirmed if already so.
+    const updated = await this.bookingsRepository.update(
+      id,
+      {
+        scheduledDate: new Date(data.scheduledDate),
+        scheduledStartTime: data.scheduledStartTime,
+      },
+      booking.version,
+    );
+
+    if (isCustomer && booking.status === "CONFIRMED") {
+      await this.bookingsRepository.updateStatus(
+        id,
+        "PENDING",
+        userId,
+        booking.version + 1,
+      );
+    }
+
+    await this.cacheService.invalidateAvailability(
+      booking.providerId,
+      booking.scheduledDate.toISOString().split("T")[0],
+    );
+    await this.cacheService.invalidateAvailability(
+      booking.providerId,
+      data.scheduledDate,
+    );
+
+    this.logger.log(
+      `Booking ${booking.bookingNumber} rescheduled by ${isCustomer ? "customer" : "provider"}`,
+    );
+
+    return updated;
   }
 
   async cancel(id: string, userId: string, reason: string) {

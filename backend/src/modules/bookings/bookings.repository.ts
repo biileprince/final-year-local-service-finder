@@ -6,7 +6,7 @@ export interface CreateBookingData {
   customerId: string;
   providerId: string;
   scheduledDate: Date;
-  scheduledStartTime: string;
+  scheduledStartTime?: string;
   scheduledEndTime?: string;
   serviceAddress: string;
   serviceLatitude?: number;

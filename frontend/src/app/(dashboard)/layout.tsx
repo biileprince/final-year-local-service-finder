@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/spinner";
 import { useRequireAuth } from "@/hooks";
 import { notificationsService, messagesService } from "@/lib/api";
+import { useMessagesSocket } from "@/lib/messages-socket";
 
 const customerNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -84,9 +85,23 @@ export default function DashboardLayout({
 
   useEffect(() => {
     loadCounts();
-    // Refresh counts every 60 s while the tab is open
-    const interval = setInterval(loadCounts, 60_000);
-    return () => clearInterval(interval);
+    // Refresh counts every 30 s while the tab is open
+    const interval = setInterval(loadCounts, 30_000);
+
+    // Also refresh when the user returns to the tab — the polling interval
+    // alone leaves the badge stale for up to 30 s after focus.
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") loadCounts();
+    };
+    const onFocus = () => loadCounts();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [loadCounts]);
 
   // Clear message badge when visiting messages
@@ -94,6 +109,17 @@ export default function DashboardLayout({
     if (pathname.startsWith("/messages")) setUnreadMessages(0);
     if (pathname === "/notifications") setUnreadNotifications(0);
   }, [pathname]);
+
+  // Live-update message badge when a socket message arrives in another thread
+  const { onNewMessage } = useMessagesSocket();
+  useEffect(() => {
+    const unsubscribe = onNewMessage((msg) => {
+      if (msg.senderId === user?.id) return;
+      if (pathname.startsWith("/messages")) return;
+      setUnreadMessages((n) => n + 1);
+    });
+    return unsubscribe;
+  }, [onNewMessage, pathname, user?.id]);
 
   if (isLoading) {
     return <Loading fullScreen text="Loading your dashboard..." />;
