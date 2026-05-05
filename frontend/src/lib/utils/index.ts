@@ -36,8 +36,9 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
  * Format time to readable string
  */
 export function formatTime(time: string): string {
-  const [hours, minutes] = time.split(":");
-  const hour = parseInt(hours, 10);
+  const parts = time.split(":");
+  const hour = parseInt(parts[0] ?? "0", 10);
+  const minutes = parts[1] ?? "00";
   const ampm = hour >= 12 ? "PM" : "AM";
   const hour12 = hour % 12 || 12;
   return `${hour12}:${minutes} ${ampm}`;

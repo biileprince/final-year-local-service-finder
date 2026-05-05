@@ -32,21 +32,12 @@ export interface ProviderSearchResult {
 export const providersService = {
   async search(params?: SearchProvidersParams): Promise<ProviderSearchResult> {
     const queryString = buildQueryString(params || {});
-    const result = await apiClient.get<
-      | ProviderSearchResult
-      | {
-          items?: Provider[];
-          total?: number;
-          page?: number;
-          limit?: number;
-          totalPages?: number;
-        }
-      | Provider[]
-    >(`/providers${queryString}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: any = await apiClient.get(`/providers${queryString}`);
 
     if (Array.isArray(result)) {
       return {
-        providers: result,
+        providers: result as Provider[],
         total: result.length,
         page: 1,
         totalPages: 1,
@@ -54,21 +45,17 @@ export const providersService = {
     }
 
     if (Array.isArray(result?.providers)) {
-      return result;
+      return result as ProviderSearchResult;
     }
 
     if (Array.isArray(result?.items)) {
-      const total = result.total ?? result.items.length;
-      const page = result.page ?? 1;
-      const limit = result.limit ?? (result.items.length || 1);
-      const totalPages =
+      const items: Provider[] = result.items;
+      const total: number = result.total ?? items.length;
+      const page: number = result.page ?? 1;
+      const limit: number = result.limit ?? (items.length || 1);
+      const totalPages: number =
         result.totalPages ?? Math.max(1, Math.ceil(total / limit));
-      return {
-        providers: result.items,
-        total,
-        page,
-        totalPages,
-      };
+      return { providers: items, total, page, totalPages };
     }
 
     return { providers: [], total: 0, page: 1, totalPages: 1 };
@@ -132,5 +119,9 @@ export const providersService = {
       limit,
     });
     return result.providers;
+  },
+
+  async setCategories(categoryIds: string[]): Promise<void> {
+    return apiClient.patch("/providers/me/categories", { categoryIds }, true);
   },
 };

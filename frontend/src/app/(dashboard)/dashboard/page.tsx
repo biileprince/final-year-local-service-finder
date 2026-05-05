@@ -9,6 +9,7 @@ import {
   TrendingUp,
   ArrowRight,
   Clock,
+  MailWarning,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,12 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
-import { bookingsService, messagesService } from "@/lib/api";
+import {
+  bookingsService,
+  messagesService,
+  authService,
+  providersService,
+} from "@/lib/api";
 import type { Booking, Conversation } from "@/types";
 import { formatDate, formatTime, formatCurrency } from "@/lib/utils";
 
@@ -25,7 +31,7 @@ const statusColors: Record<
   "default" | "success" | "warning" | "error"
 > = {
   PENDING: "warning",
-  CONFIRMED: "info",
+  CONFIRMED: "default",
   IN_PROGRESS: "default",
   COMPLETED: "success",
   CANCELLED: "error",
@@ -42,19 +48,28 @@ export default function DashboardPage() {
     completedBookings: 0,
     unreadMessages: 0,
   });
+  const [verificationSent, setVerificationSent] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
   }, [user]);
 
   const loadDashboardData = async () => {
-    if (!user) return;
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const [bookingsData, conversationsData, unreadCount] = await Promise.all([
+      const providerId =
         user.role === "PROVIDER"
-          ? bookingsService.getProviderBookings({ limit: 5 })
+          ? (await providersService.getMyProfile()).id
+          : null;
+
+      const [bookingsData, conversationsData, unreadCount] = await Promise.all([
+        user.role === "PROVIDER" && providerId
+          ? bookingsService.getProviderBookings(providerId, { limit: 5 })
           : bookingsService.getCustomerBookings({ limit: 5 }),
         messagesService.getConversations(),
         messagesService.getUnreadCount(),
@@ -98,6 +113,45 @@ export default function DashboardPage() {
           {user?.role === "PROVIDER" ? "business" : "bookings"} today.
         </p>
       </div>
+
+      {/* Email verification banner */}
+      {user && !user.emailVerifiedAt && (
+        <div className="flex flex-col gap-3 rounded-2xl border-2 border-amber-200 bg-amber-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <MailWarning className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-semibold text-amber-900">
+                Verify your email address
+              </p>
+              <p className="text-sm text-amber-700">
+                Check your inbox for a verification link. Verified accounts can
+                book services and receive messages.
+              </p>
+            </div>
+          </div>
+          {verificationSent ? (
+            <span className="shrink-0 text-sm font-semibold text-amber-700">
+              Email sent ✓
+            </span>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100"
+              onClick={async () => {
+                try {
+                  await authService.sendVerification();
+                  setVerificationSent(true);
+                } catch {
+                  // ignore — the user can retry
+                }
+              }}
+            >
+              Resend email
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -284,26 +338,52 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      {user?.role === "CUSTOMER" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-3">
-              <Button asChild>
-                <Link href="/search">Find a service provider</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/bookings">View All Bookings</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/messages">Check Messages</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-3">
+            {user?.role === "CUSTOMER" ? (
+              <>
+                <Button asChild>
+                  <Link href="/search">Find a service provider</Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/bookings">View All Bookings</Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/messages">Check Messages</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button asChild>
+                  <Link href="/bookings">
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Manage Bookings
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/availability">
+                    <TrendingUp className="mr-2 h-4 w-4" />
+                    Set Availability
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/profile">Edit Profile</Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/messages">
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Messages
+                  </Link>
+                </Button>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

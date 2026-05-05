@@ -16,13 +16,16 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
-import { bookingsService } from "@/lib/api";
+import { bookingsService, providersService } from "@/lib/api";
 import type { Booking, BookingStatus } from "@/types";
 import { formatDate, formatTime, formatCurrency, cn } from "@/lib/utils";
 
 const statusConfig: Record<
   BookingStatus,
-  { label: string; variant: "default" | "success" | "warning" | "error" | "info" }
+  {
+    label: string;
+    variant: "default" | "success" | "warning" | "error" | "info";
+  }
 > = {
   PENDING: { label: "Pending", variant: "warning" },
   CONFIRMED: { label: "Confirmed", variant: "info" },
@@ -47,6 +50,7 @@ export default function BookingsPage() {
   const [activeTab, setActiveTab] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [providerId, setProviderId] = useState<string | null>(null);
 
   useEffect(() => {
     loadBookings();
@@ -57,15 +61,22 @@ export default function BookingsPage() {
 
     setIsLoading(true);
     try {
+      const getProviderId = async () => {
+        if (providerId) return providerId;
+        const provider = await providersService.getMyProfile();
+        setProviderId(provider.id);
+        return provider.id;
+      };
+
       const result =
         user.role === "PROVIDER"
-          ? await bookingsService.getProviderBookings({
-              status: activeTab as BookingStatus || undefined,
+          ? await bookingsService.getProviderBookings(await getProviderId(), {
+              status: (activeTab as BookingStatus) || undefined,
               page,
               limit: 10,
             })
           : await bookingsService.getCustomerBookings({
-              status: activeTab as BookingStatus || undefined,
+              status: (activeTab as BookingStatus) || undefined,
               page,
               limit: 10,
             });
@@ -113,7 +124,7 @@ export default function BookingsPage() {
               "whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors",
               activeTab === tab.value
                 ? "bg-primary-600 text-white"
-                : "bg-secondary-100 text-secondary-600 hover:bg-secondary-200"
+                : "bg-secondary-100 text-secondary-600 hover:bg-secondary-200",
             )}
           >
             {tab.label}
@@ -223,7 +234,7 @@ function BookingCard({
               {booking.finalAmount || booking.estimatedAmount ? (
                 <span className="text-lg font-bold text-primary-600">
                   {formatCurrency(
-                    Number(booking.finalAmount || booking.estimatedAmount)
+                    Number(booking.finalAmount || booking.estimatedAmount),
                   )}
                 </span>
               ) : null}

@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-  useRef,
-  Suspense,
-} from "react";
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -34,7 +27,7 @@ import { Card } from "@/components/ui/card";
 import { ProviderCard } from "@/components/providers/provider-card";
 import { providersService, categoriesService } from "@/lib/api";
 import type { Provider, Category } from "@/types";
-import { cn, getInitials, formatCurrency } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 
 const categoryIcons: Record<
   string,
@@ -48,7 +41,7 @@ const categoryIcons: Record<
   painting: Paintbrush,
 };
 
-type SortBy = "rating" | "price" | "reviews" | "distance";
+type SortBy = "rating" | "reviews" | "distance";
 
 export default function SearchPage() {
   return (
@@ -70,8 +63,6 @@ function SearchContent() {
   );
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [hideHeader, setHideHeader] = useState(false);
-  const lastScrollY = useRef(0);
 
   const [selectedCategory, setSelectedCategory] = useState<string>(
     categoryParam ?? "all",
@@ -114,26 +105,6 @@ function SearchContent() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    const onScroll = () => {
-      const currentY = window.scrollY;
-      const delta = currentY - lastScrollY.current;
-
-      if (currentY < 80) {
-        setHideHeader(false);
-      } else if (delta > 6) {
-        setHideHeader(true);
-      } else if (delta < -6) {
-        setHideHeader(false);
-      }
-
-      lastScrollY.current = currentY;
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const loadProviders = useCallback(async () => {
@@ -191,111 +162,109 @@ function SearchContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ============ Sticky search header ============ */}
-      <div
-        className={cn(
-          "sticky top-16 z-30 border-b border-gray-200 bg-white transition-transform duration-200 lg:top-20",
-          hideHeader
-            ? "-translate-y-full opacity-0 pointer-events-none"
-            : "translate-y-0 opacity-100",
-        )}
-      >
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <form
-            onSubmit={onSubmitSearch}
-            className="flex flex-col gap-4 lg:flex-row"
-          >
-            <div className="flex flex-1 flex-col gap-3 sm:flex-row">
-              <div className="flex flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20">
-                <Search className="h-5 w-5 shrink-0 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search services or service providers..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-gray-500"
-                  aria-label="Search"
-                />
-                {searchQuery && (
+      <div className="sticky top-0 z-30 border-b border-gray-200 bg-white">
+        {/* Search form */}
+        <div className="">
+          <div className="mx-auto max-w-7xl px-4 pt-4 pb-2 sm:px-6 lg:px-8">
+            <form
+              onSubmit={onSubmitSearch}
+              className="flex flex-col gap-4 lg:flex-row"
+            >
+              <div className="flex flex-1 flex-col gap-3 sm:flex-row">
+                <div className="flex flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20">
+                  <Search className="h-5 w-5 shrink-0 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search services or service providers..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-gray-500"
+                    aria-label="Search"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      aria-label="Clear search"
+                    >
+                      <X className="h-4 w-4 text-gray-400 transition-colors hover:text-gray-700" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20 sm:max-w-[220px]">
+                  <MapPin className="h-5 w-5 shrink-0 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Location"
+                    value={locationQuery}
+                    onChange={(e) => setLocationQuery(e.target.value)}
+                    className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-gray-500"
+                    aria-label="Location"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="hidden items-center rounded-xl bg-gray-100 p-1 sm:flex">
                   <button
                     type="button"
-                    onClick={() => setSearchQuery("")}
-                    aria-label="Clear search"
+                    onClick={() => setViewMode("grid")}
+                    aria-label="Grid view"
+                    aria-pressed={viewMode === "grid"}
+                    className={cn(
+                      "rounded-lg p-2 transition-all",
+                      viewMode === "grid"
+                        ? "bg-white text-primary-600 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700",
+                    )}
                   >
-                    <X className="h-4 w-4 text-gray-400 transition-colors hover:text-gray-700" />
+                    <Grid3X3 className="h-4 w-4" />
                   </button>
-                )}
-              </div>
-              <div className="flex flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20 sm:max-w-[220px]">
-                <MapPin className="h-5 w-5 shrink-0 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Location"
-                  value={locationQuery}
-                  onChange={(e) => setLocationQuery(e.target.value)}
-                  className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-gray-500"
-                  aria-label="Location"
-                />
-              </div>
-            </div>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("list")}
+                    aria-label="List view"
+                    aria-pressed={viewMode === "list"}
+                    className={cn(
+                      "rounded-lg p-2 transition-all",
+                      viewMode === "list"
+                        ? "bg-white text-primary-600 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700",
+                    )}
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
+                </div>
 
-            <div className="flex items-center gap-3">
-              <div className="hidden items-center rounded-xl bg-gray-100 p-1 sm:flex">
-                <button
+                <Button type="submit" className="hidden sm:inline-flex">
+                  Search
+                </Button>
+
+                <Button
                   type="button"
-                  onClick={() => setViewMode("grid")}
-                  aria-label="Grid view"
-                  aria-pressed={viewMode === "grid"}
-                  className={cn(
-                    "rounded-lg p-2 transition-all",
-                    viewMode === "grid"
-                      ? "bg-white text-primary-600 shadow-sm"
-                      : "text-gray-500 hover:text-gray-700",
-                  )}
+                  variant="outline"
+                  onClick={() => setShowMobileFilters(true)}
+                  className="lg:hidden"
                 >
-                  <Grid3X3 className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("list")}
-                  aria-label="List view"
-                  aria-pressed={viewMode === "list"}
-                  className={cn(
-                    "rounded-lg p-2 transition-all",
-                    viewMode === "list"
-                      ? "bg-white text-primary-600 shadow-sm"
-                      : "text-gray-500 hover:text-gray-700",
+                  <Filter className="h-4 w-4" />
+                  Filters
+                  {activeFiltersCount > 0 && (
+                    <Badge className="ml-1">{activeFiltersCount}</Badge>
                   )}
-                >
-                  <List className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
+            </form>
+          </div>
+        </div>
 
-              <Button type="submit" className="hidden sm:inline-flex">
-                Search
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowMobileFilters(true)}
-                className="lg:hidden"
-              >
-                <Filter className="h-4 w-4" />
-                Filters
-                {activeFiltersCount > 0 && (
-                  <Badge className="ml-1">{activeFiltersCount}</Badge>
-                )}
-              </Button>
-            </div>
-          </form>
-
-          {/* Category pills */}
-          <div className="no-scrollbar -mx-4 mt-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+        {/* Category pills */}
+        <div className="mx-auto max-w-7xl px-4 py-2 pb-3 sm:px-6 lg:px-8">
+          <div className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
             <CategoryPill
               active={selectedCategory === "all"}
               onClick={() => handleCategoryChange("all")}
             >
-              All services
+              All Services
             </CategoryPill>
             {categories.map((c) => {
               const Icon = categoryIcons[c.slug] ?? Wrench;
@@ -322,7 +291,7 @@ function SearchContent() {
         <div className="flex gap-6">
           {/* Desktop sidebar filters */}
           <aside className="hidden w-72 shrink-0 lg:block">
-            <Card className="sticky top-44 p-6">
+            <Card className="sticky top-36 max-h-[calc(100vh-9rem)] overflow-y-auto p-6">
               <div className="mb-6 flex items-center justify-between">
                 <h3 className="font-display text-lg font-bold text-gray-900">
                   Filters
@@ -339,33 +308,35 @@ function SearchContent() {
 
               {/* Service Category Filter */}
               <FilterGroup label="Service category">
-                <RadioRow
-                  active={selectedCategory === "all"}
-                  onClick={() => handleCategoryChange("all")}
-                  name="category"
-                >
-                  All services
-                </RadioRow>
-                {categories.map((c) => {
-                  const Icon = categoryIcons[c.slug] ?? Wrench;
-                  const slug = c.slug || c.id;
-                  return (
-                    <RadioRow
-                      key={c.id}
-                      active={
-                        selectedCategory === slug || selectedCategory === c.id
-                      }
-                      onClick={() => handleCategoryChange(slug)}
-                      name="category"
-                    >
-                      <Icon
-                        className="h-4 w-4 text-primary-500"
-                        strokeWidth={2}
-                      />
-                      {c.name}
-                    </RadioRow>
-                  );
-                })}
+                <div className="max-h-52 overflow-y-auto space-y-2 pr-1">
+                  <RadioRow
+                    active={selectedCategory === "all"}
+                    onClick={() => handleCategoryChange("all")}
+                    name="category"
+                  >
+                    All Services
+                  </RadioRow>
+                  {categories.map((c) => {
+                    const Icon = categoryIcons[c.slug] ?? Wrench;
+                    const slug = c.slug || c.id;
+                    return (
+                      <RadioRow
+                        key={c.id}
+                        active={
+                          selectedCategory === slug || selectedCategory === c.id
+                        }
+                        onClick={() => handleCategoryChange(slug)}
+                        name="category"
+                      >
+                        <Icon
+                          className="h-4 w-4 text-primary-500"
+                          strokeWidth={2}
+                        />
+                        {c.name}
+                      </RadioRow>
+                    );
+                  })}
+                </div>
               </FilterGroup>
 
               {/* Sort */}
@@ -377,7 +348,6 @@ function SearchContent() {
                 >
                   <option value="rating">Highest rated</option>
                   <option value="reviews">Most reviewed</option>
-                  <option value="price">Price: low to high</option>
                   <option value="distance">Nearest</option>
                 </select>
               </FilterGroup>
@@ -622,6 +592,45 @@ function SearchContent() {
                 </button>
               </div>
 
+              {/* Service category — mobile */}
+              <FilterGroup label="Service category">
+                <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                  <RadioRow
+                    active={selectedCategory === "all"}
+                    onClick={() => {
+                      handleCategoryChange("all");
+                      setShowMobileFilters(false);
+                    }}
+                    name="m-category"
+                  >
+                    All Services
+                  </RadioRow>
+                  {categories.map((c) => {
+                    const Icon = categoryIcons[c.slug] ?? Wrench;
+                    const s = c.slug || c.id;
+                    return (
+                      <RadioRow
+                        key={c.id}
+                        active={
+                          selectedCategory === s || selectedCategory === c.id
+                        }
+                        onClick={() => {
+                          handleCategoryChange(s);
+                          setShowMobileFilters(false);
+                        }}
+                        name="m-category"
+                      >
+                        <Icon
+                          className="h-4 w-4 text-primary-500"
+                          strokeWidth={2}
+                        />
+                        {c.name}
+                      </RadioRow>
+                    );
+                  })}
+                </div>
+              </FilterGroup>
+
               <FilterGroup label="Sort by">
                 <select
                   value={sortBy}
@@ -630,7 +639,6 @@ function SearchContent() {
                 >
                   <option value="rating">Highest rated</option>
                   <option value="reviews">Most reviewed</option>
-                  <option value="price">Price: low to high</option>
                   <option value="distance">Nearest</option>
                 </select>
               </FilterGroup>
@@ -766,13 +774,7 @@ function ProviderGridCard({ provider }: { provider: Provider }) {
           </Badge>
         )}
 
-        <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-          <p className="text-sm font-bold text-gray-900">
-            {formatCurrency(Number(provider.hourlyRate))}
-            <span className="ml-0.5 text-xs font-normal text-gray-500">
-              /hr
-            </span>
-          </p>
+        <div className="flex items-center justify-end border-t border-gray-100 pt-3">
           <Button size="sm">View &amp; Book</Button>
         </div>
       </Card>

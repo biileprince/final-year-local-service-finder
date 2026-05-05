@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { User } from "@/types";
-import { authService, type LoginDto, type RegisterDto } from "@/lib/api";
+import { authService, apiClient, type LoginDto, type RegisterDto } from "@/lib/api";
 
 interface AuthState {
   user: User | null;
@@ -90,7 +90,9 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
-        } catch (error) {
+        } catch {
+          // Token is invalid/expired — clear it so the redirect guard unblocks
+          apiClient.clearTokens();
           set({
             user: null,
             isAuthenticated: false,

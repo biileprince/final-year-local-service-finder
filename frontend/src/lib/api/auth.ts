@@ -24,7 +24,10 @@ export const authService = {
   },
 
   async register(data: RegisterDto): Promise<RegisterResponse> {
-    const response = await apiClient.post<RegisterResponse>("/auth/register", data);
+    const response = await apiClient.post<RegisterResponse>(
+      "/auth/register",
+      data,
+    );
     if (response.accessToken) {
       apiClient.setTokens(response.accessToken, response.refreshToken);
     }
@@ -40,10 +43,13 @@ export const authService = {
   },
 
   async getCurrentUser(): Promise<User> {
-    return apiClient.get<User>("/auth/me", true);
+    return apiClient.get<User>("/users/me", true);
   },
 
-  async changePassword(data: { currentPassword: string; newPassword: string }): Promise<void> {
+  async changePassword(data: {
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<void> {
     return apiClient.post("/auth/change-password", data, true);
   },
 
@@ -56,11 +62,28 @@ export const authService = {
   },
 
   async verifyEmail(token: string): Promise<void> {
-    return apiClient.get(`/auth/verify-email?token=${encodeURIComponent(token)}`);
+    return apiClient.get(
+      `/auth/verify-email?token=${encodeURIComponent(token)}`,
+    );
   },
 
   async sendVerification(): Promise<void> {
     return apiClient.post("/auth/send-verification", {}, true);
+  },
+
+  async sendOtp(phone: string): Promise<void> {
+    return apiClient.post("/auth/send-otp", { phone }, true);
+  },
+
+  async verifyOtp(phone: string, code: string): Promise<void> {
+    return apiClient.post("/auth/verify-otp", { phone, code }, true);
+  },
+
+  async updateUser(data: {
+    name?: string;
+    phone?: string;
+  }): Promise<import("@/types").User> {
+    return apiClient.patch<import("@/types").User>("/users/me", data, true);
   },
 
   isAuthenticated(): boolean {

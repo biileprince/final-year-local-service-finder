@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { MessageSquare, Search, Send, ArrowLeft, MoreVertical } from "lucide-react";
+import { MessageSquare, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
 import { messagesService } from "@/lib/api";
-import type { Conversation, Message } from "@/types";
+import { useMessagesSocket } from "@/lib/messages-socket";
+import type { Conversation } from "@/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
 export default function MessagesPage() {
@@ -18,23 +18,56 @@ export default function MessagesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    loadConversations();
-  }, []);
+  const { onNewMessage } = useMessagesSocket();
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await messagesService.getConversations();
       setConversations(data);
-    } catch (error) {
-      console.error("Failed to load conversations:", error);
+    } catch {
+      // ignore
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  // When a new message arrives, bump that conversation to the top and update its preview
+  useEffect(() => {
+    const unsubscribe = onNewMessage((msg) => {
+      setConversations((prev) => {
+        const idx = prev.findIndex((c) => c.id === msg.conversationId);
+        const base = idx >= 0 ? prev[idx] : undefined;
+        if (!base) {
+          loadConversations();
+          return prev;
+        }
+        const isProvider = user?.role === "PROVIDER";
+        const notSelf = msg.senderId !== user?.id;
+        const updated: Conversation = {
+          ...base,
+          lastMessageAt: msg.createdAt,
+          lastMessagePreview: msg.content,
+          providerUnreadCount: notSelf && isProvider
+            ? base.providerUnreadCount + 1
+            : base.providerUnreadCount,
+          customerUnreadCount: notSelf && !isProvider
+            ? base.customerUnreadCount + 1
+            : base.customerUnreadCount,
+        };
+        const rest = prev.filter((_, i) => i !== idx);
+        return [updated, ...rest];
+      });
+    });
+    return unsubscribe;
+  }, [onNewMessage, user, loadConversations]);
 
   const filteredConversations = conversations.filter((conv) => {
+    if (!searchQuery) return true;
     const otherUser =
       user?.role === "PROVIDER" ? conv.customer : conv.provider?.user;
     return otherUser?.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -50,11 +83,11 @@ export default function MessagesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-secondary-900">Messages</h1>
         <p className="mt-1 text-secondary-600">
-          Communicate with your {user?.role === "PROVIDER" ? "customers" : "service providers"}
+          Communicate with your{" "}
+          {user?.role === "PROVIDER" ? "customers" : "service providers"}
         </p>
       </div>
 
@@ -70,7 +103,6 @@ export default function MessagesPage() {
         />
       </div>
 
-      {/* Conversations List */}
       {filteredConversations.length === 0 ? (
         <div className="rounded-xl bg-white p-16 text-center shadow-soft">
           <MessageSquare className="mx-auto h-16 w-16 text-secondary-300" />
@@ -126,7 +158,11 @@ function ConversationItem({
       className="flex items-center gap-4 p-4 transition-colors hover:bg-secondary-50"
     >
       <div className="relative">
-        <Avatar size="lg" src={otherUser?.profileImage} name={otherUser?.name} />
+        <Avatar
+          size="lg"
+          src={otherUser?.profileImage}
+          name={otherUser?.name}
+        />
         {unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-xs font-medium text-white">
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -139,7 +175,7 @@ function ConversationItem({
           <h3
             className={cn(
               "font-medium",
-              unreadCount > 0 ? "text-secondary-900" : "text-secondary-700"
+              unreadCount > 0 ? "text-secondary-900" : "text-secondary-700",
             )}
           >
             {otherUser?.name}
@@ -153,7 +189,9 @@ function ConversationItem({
         <p
           className={cn(
             "mt-1 truncate text-sm",
-            unreadCount > 0 ? "font-medium text-secondary-900" : "text-secondary-500"
+            unreadCount > 0
+              ? "font-medium text-secondary-900"
+              : "text-secondary-500",
           )}
         >
           {conversation.lastMessagePreview || "No messages yet"}

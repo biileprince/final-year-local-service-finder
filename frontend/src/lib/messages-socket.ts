@@ -20,7 +20,7 @@ interface UseMessagesSocketReturn {
 }
 
 export function useMessagesSocket(): UseMessagesSocketReturn {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const messageCallbacksRef = useRef<Set<(message: Message) => void>>(
@@ -31,6 +31,10 @@ export function useMessagesSocket(): UseMessagesSocketReturn {
   >(new Set());
 
   useEffect(() => {
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("accessToken")
+        : null;
     if (!user || !token) {
       return;
     }
@@ -77,7 +81,7 @@ export function useMessagesSocket(): UseMessagesSocketReturn {
       setSocket(null);
       setIsConnected(false);
     };
-  }, [user, token]);
+  }, [user]);
 
   const joinConversation = useCallback(
     (conversationId: string) => {

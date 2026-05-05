@@ -35,7 +35,7 @@ export default function NotificationsPage() {
     setIsLoading(true);
     try {
       const data = await notificationsService.getAll();
-      setNotifications(data.data || []);
+      setNotifications(data);
     } catch (error) {
       console.error("Failed to load notifications:", error);
     } finally {

@@ -44,7 +44,7 @@ const TIME_SLOTS = [
 ];
 
 export default function AvailabilityPage() {
-  useRequireRole("PROVIDER");
+  useRequireRole(["PROVIDER"]);
   const { user } = useAuth();
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -136,7 +136,7 @@ export default function AvailabilityPage() {
           date,
           timeSlots: times.map((time) => ({
             startTime: time,
-            endTime: `${parseInt(time.split(":")[0]) + 1}:00`,
+            endTime: `${parseInt(time.split(":")[0] ?? "0") + 1}:00`,
           })),
         }),
       );
@@ -229,8 +229,8 @@ export default function AvailabilityPage() {
               </Button>
               <div className="text-center">
                 <p className="font-semibold text-secondary-900">
-                  {formatDate(weekDates[0].toISOString())} -{" "}
-                  {formatDate(weekDates[6].toISOString())}
+                  {formatDate(weekDates[0]!.toISOString())} -{" "}
+                  {formatDate(weekDates[6]!.toISOString())}
                 </p>
               </div>
               <Button
@@ -247,7 +247,7 @@ export default function AvailabilityPage() {
           {/* Weekly Calendar */}
           <div className="grid gap-4 lg:grid-cols-7">
             {weekDates.map((date) => {
-              const dateKey = date.toISOString().split("T")[0];
+              const dateKey = date.toISOString().split("T")[0] ?? "";
               const isToday = new Date().toDateString() === date.toDateString();
               const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
               const daySlots = selectedSlots[dateKey] || [];

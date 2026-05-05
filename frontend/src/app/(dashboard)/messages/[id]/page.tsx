@@ -77,7 +77,7 @@ export default function ConversationPage() {
         messagesService.getMessages(id),
       ]);
       setConversation(conversationData);
-      setMessages(messagesData.data || []);
+      setMessages(messagesData);
     } catch (error) {
       console.error("Failed to load conversation:", error);
     } finally {
@@ -101,7 +101,7 @@ export default function ConversationPage() {
       } else {
         const newMessage = await messagesService.sendMessage(
           conversation.id,
-          messageText.trim(),
+          { content: messageText.trim() },
         );
         setMessages((prev) => [...prev, newMessage]);
       }
@@ -195,7 +195,7 @@ export default function ConversationPage() {
               const showAvatar =
                 !isOwn &&
                 (index === 0 ||
-                  messages[index - 1].senderId !== message.senderId);
+                  messages[index - 1]?.senderId !== message.senderId);
 
               return (
                 <div

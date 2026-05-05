@@ -36,12 +36,6 @@ interface ServiceItem {
   description: string;
 }
 
-interface NavItem {
-  name: string;
-  href: string;
-  description: string;
-}
-
 const servicesPrimary: ServiceItem[] = [
   {
     name: "Plumbing",
@@ -84,34 +78,11 @@ const servicesSecondary: ServiceItem[] = [
   },
 ];
 
-const navLinks = [{ name: "Browse", href: "/search" }];
-
-const navMenuItems: NavItem[] = [
-  {
-    name: "Home",
-    href: "/",
-    description: "Go back to the main page.",
-  },
-  {
-    name: "Search services",
-    href: "/search",
-    description: "Find service providers by service or location.",
-  },
-  {
-    name: "How it works",
-    href: "/#how-it-works",
-    description: "Steps for customers and service providers.",
-  },
-  {
-    name: "Popular services",
-    href: "/#popular-services",
-    description: "Browse services people book often.",
-  },
-  {
-    name: "For service providers",
-    href: "/register?role=provider",
-    description: "Create a profile and list your services.",
-  },
+const directLinks = [
+  { name: "Home", href: "/" },
+  { name: "Browse Services", href: "/search" },
+  { name: "How it works", href: "/#how-it-works" },
+  { name: "For providers", href: "/register?role=provider" },
 ];
 
 export function Header() {
@@ -120,16 +91,13 @@ export function Header() {
   const { user, isAuthenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
-  const [navMenuOpen, setNavMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [scrolled, setScrolled] = useState(false);
 
   const servicesRef = useRef<HTMLDivElement>(null);
-  const navMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const navCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -138,12 +106,6 @@ export function Header() {
         !servicesRef.current.contains(e.target as Node)
       ) {
         setServicesOpen(false);
-      }
-      if (
-        navMenuRef.current &&
-        !navMenuRef.current.contains(e.target as Node)
-      ) {
-        setNavMenuOpen(false);
       }
       if (
         userMenuRef.current &&
@@ -197,16 +159,6 @@ export function Header() {
   const queueCloseServices = () => {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     closeTimerRef.current = setTimeout(() => setServicesOpen(false), 120);
-  };
-
-  const openNavMenu = () => {
-    if (navCloseTimerRef.current) clearTimeout(navCloseTimerRef.current);
-    setNavMenuOpen(true);
-  };
-
-  const queueCloseNavMenu = () => {
-    if (navCloseTimerRef.current) clearTimeout(navCloseTimerRef.current);
-    navCloseTimerRef.current = setTimeout(() => setNavMenuOpen(false), 120);
   };
 
   return (
@@ -360,58 +312,8 @@ export function Header() {
             </div>
           </div>
 
-          {/* Navigation dropdown */}
-          <div
-            className="relative"
-            ref={navMenuRef}
-            onMouseEnter={openNavMenu}
-            onMouseLeave={queueCloseNavMenu}
-          >
-            <button
-              type="button"
-              onClick={() => setNavMenuOpen((v) => !v)}
-              aria-haspopup="menu"
-              aria-expanded={navMenuOpen}
-              className={cn(
-                "flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
-                navMenuOpen
-                  ? "text-primary-600"
-                  : "text-gray-700 hover:text-gray-900",
-              )}
-            >
-              Navigation
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 transition-transform duration-200",
-                  navMenuOpen && "rotate-180 text-primary-500",
-                )}
-              />
-            </button>
-
-            <div
-              role="menu"
-              onMouseEnter={openNavMenu}
-              onMouseLeave={queueCloseNavMenu}
-              className={cn(
-                "absolute left-1/2 top-full z-50 mt-3 w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-gray-200/80 bg-white/95 p-2 shadow-2xl backdrop-blur-xl transition-all duration-200",
-                navMenuOpen
-                  ? "translate-y-0 opacity-100"
-                  : "pointer-events-none translate-y-1 opacity-0",
-              )}
-            >
-              <div
-                aria-hidden
-                className="absolute -top-2 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-tl-sm border-l border-t border-gray-200/80 bg-white"
-              />
-              <div className="space-y-0.5">
-                {navMenuItems.map((item) => (
-                  <NavMenuItem key={item.name} item={item} />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {navLinks.map((link) => (
+          {/* Direct nav links */}
+          {directLinks.map((link) => (
             <Link
               key={link.name}
               href={link.href}
@@ -583,7 +485,7 @@ export function Header() {
             </form>
 
             <nav className="space-y-1">
-              {navLinks.map((link) => (
+              {directLinks.map((link) => (
                 <Link
                   key={link.name}
                   href={link.href}
@@ -598,23 +500,6 @@ export function Header() {
                 </Link>
               ))}
             </nav>
-
-            <div className="border-t border-gray-100 pt-5">
-              <p className="mb-3 px-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">
-                Navigation
-              </p>
-              <div className="space-y-1">
-                {navMenuItems.map((item) => (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className="block rounded-xl px-4 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50"
-                  >
-                    {item.name}
-                  </Link>
-                ))}
-              </div>
-            </div>
 
             <div className="border-t border-gray-100 pt-5">
               <p className="mb-3 px-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">
@@ -706,25 +591,6 @@ function MegaItem({ item }: { item: ServiceItem }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-bold text-gray-900 transition-colors group-hover:text-primary-600">
-          {item.name}
-        </span>
-        <span className="mt-0.5 line-clamp-2 block text-xs text-gray-500">
-          {item.description}
-        </span>
-      </span>
-    </Link>
-  );
-}
-
-function NavMenuItem({ item }: { item: NavItem }) {
-  return (
-    <Link
-      href={item.href}
-      role="menuitem"
-      className="group flex items-start gap-3 rounded-xl px-3 py-3 transition-all hover:bg-gray-50"
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-gray-900 transition-colors group-hover:text-primary-600">
           {item.name}
         </span>
         <span className="mt-0.5 line-clamp-2 block text-xs text-gray-500">

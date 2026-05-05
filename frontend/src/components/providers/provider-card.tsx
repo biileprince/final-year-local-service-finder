@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { Provider } from "@/types";
-import { cn, formatCurrency, getInitials } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 
 interface ProviderCardProps {
   provider: Provider;
@@ -82,7 +82,7 @@ export function ProviderCard({
 
             {provider.specialties && provider.specialties.length > 0 && (
               <p className="mt-2 line-clamp-1 text-sm text-gray-600">
-                {provider.specialties.slice(0, 3).join(" • ")}
+                {provider.specialties.slice(0, 3).map((s) => s.specialty).join(" • ")}
               </p>
             )}
 
@@ -99,21 +99,13 @@ export function ProviderCard({
               <span>{provider.reviewCount} reviews</span>
             </div>
 
-            <div className="mt-4 flex items-end justify-between gap-3">
-              <p className="text-xl font-bold text-gray-900">
-                {formatCurrency(Number(provider.hourlyRate))}
-                <span className="ml-1 text-sm font-normal text-gray-500">
-                  /hr
-                </span>
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="icon" aria-label="Call">
-                  <Phone className="h-4 w-4" />
-                </Button>
-                <Button asChild>
-                  <Link href={`/providers/${provider.id}`}>View &amp; Book</Link>
-                </Button>
-              </div>
+            <div className="mt-4 flex items-end justify-end gap-2">
+              <Button variant="outline" size="icon" aria-label="Call">
+                <Phone className="h-4 w-4" />
+              </Button>
+              <Button asChild>
+                <Link href={`/providers/${provider.id}`}>View &amp; Book</Link>
+              </Button>
             </div>
           </div>
         </div>
@@ -185,20 +177,14 @@ export function ProviderCard({
 
         <p className="mb-4 line-clamp-2 text-sm text-gray-600">
           {provider.bio ||
-            provider.specialties?.slice(0, 3).join(" • ") ||
+            provider.specialties?.slice(0, 3).map((s) => s.specialty).join(" • ") ||
             "Professional service provider."}
         </p>
 
         <div className="mt-auto flex items-end justify-between gap-2">
-          <div>
-            <p className="text-lg font-bold text-gray-900">
-              {formatCurrency(Number(provider.hourlyRate))}
-              <span className="text-xs font-normal text-gray-500">/hr</span>
-            </p>
-            <div className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
-              <MapPin className="h-3 w-3" />
-              {provider.location}
-            </div>
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <MapPin className="h-3 w-3" />
+            {provider.location}
           </div>
           <Button size="sm" asChild>
             <Link href={`/providers/${provider.id}`}>View</Link>

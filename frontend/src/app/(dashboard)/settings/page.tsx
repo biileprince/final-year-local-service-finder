@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell,
   Moon,
@@ -9,15 +9,24 @@ import {
   Shield,
   Smartphone,
   Mail,
-  MessageSquare,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks";
+import { notificationsService } from "@/lib/api";
+
+interface NotificationPrefs {
+  email: boolean;
+  sms: boolean;
+  push: boolean;
+  bookingUpdates: boolean;
+  messages: boolean;
+  promotions: boolean;
+}
 
 export default function SettingsPage() {
-  const { user } = useAuth();
-  const [notifications, setNotifications] = useState({
+  const [notifications, setNotifications] = useState<NotificationPrefs>({
     email: true,
     sms: false,
     push: true,
@@ -27,14 +36,43 @@ export default function SettingsPage() {
   });
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const [language, setLanguage] = useState("en");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
-  const toggleNotification = (key: keyof typeof notifications) => {
+  useEffect(() => {
+    notificationsService
+      .getPreferences()
+      .then((prefs) => {
+        if (prefs && typeof prefs === "object") {
+          setNotifications((prev) => ({ ...prev, ...prefs }));
+        }
+      })
+      .catch(() => {
+        // Preferences endpoint may not exist yet — use defaults
+      });
+  }, []);
+
+  const toggleNotification = (key: keyof NotificationPrefs) => {
+    setSaveStatus("idle");
     setNotifications((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveStatus("idle");
+    try {
+      await notificationsService.updatePreferences(notifications);
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch {
+      setSaveStatus("error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-secondary-900">Settings</h1>
         <p className="mt-1 text-secondary-600">
@@ -113,31 +151,29 @@ export default function SettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div>
-              <h3 className="mb-3 text-sm font-medium text-secondary-900">
-                Theme
-              </h3>
-              <div className="flex gap-3">
-                <ThemeButton
-                  icon={<Sun className="h-5 w-5" />}
-                  label="Light"
-                  active={theme === "light"}
-                  onClick={() => setTheme("light")}
-                />
-                <ThemeButton
-                  icon={<Moon className="h-5 w-5" />}
-                  label="Dark"
-                  active={theme === "dark"}
-                  onClick={() => setTheme("dark")}
-                />
-                <ThemeButton
-                  icon={<Smartphone className="h-5 w-5" />}
-                  label="System"
-                  active={theme === "system"}
-                  onClick={() => setTheme("system")}
-                />
-              </div>
+          <div>
+            <h3 className="mb-3 text-sm font-medium text-secondary-900">
+              Theme
+            </h3>
+            <div className="flex gap-3">
+              <ThemeButton
+                icon={<Sun className="h-5 w-5" />}
+                label="Light"
+                active={theme === "light"}
+                onClick={() => setTheme("light")}
+              />
+              <ThemeButton
+                icon={<Moon className="h-5 w-5" />}
+                label="Dark"
+                active={theme === "dark"}
+                onClick={() => setTheme("dark")}
+              />
+              <ThemeButton
+                icon={<Smartphone className="h-5 w-5" />}
+                label="System"
+                active={theme === "system"}
+                onClick={() => setTheme("system")}
+              />
             </div>
           </div>
         </CardContent>
@@ -188,22 +224,28 @@ export default function SettingsPage() {
                 Add an extra layer of security to your account
               </p>
             </div>
-            <Button variant="outline" size="sm">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                alert(
+                  "2FA setup is coming soon. You will be able to use an authenticator app.",
+                )
+              }
+            >
               Enable
             </Button>
           </div>
 
           <div className="flex items-center justify-between rounded-lg border border-secondary-200 p-4">
             <div>
-              <h3 className="font-medium text-secondary-900">
-                Active Sessions
-              </h3>
+              <h3 className="font-medium text-secondary-900">Active Sessions</h3>
               <p className="text-sm text-secondary-500">
-                Manage your active login sessions
+                You are currently signed in on this device
               </p>
             </div>
-            <Button variant="outline" size="sm">
-              View
+            <Button variant="outline" size="sm" disabled>
+              1 active
             </Button>
           </div>
 
@@ -213,19 +255,41 @@ export default function SettingsPage() {
                 Download Your Data
               </h3>
               <p className="text-sm text-secondary-500">
-                Get a copy of all your data
+                Get a copy of all your data — contact support to request
               </p>
             </div>
-            <Button variant="outline" size="sm">
-              Download
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                alert(
+                  "To request your data export, email support@localservicefinder.com",
+                )
+              }
+            >
+              Request
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button>Save Changes</Button>
+      {/* Save */}
+      <div className="flex items-center justify-end gap-4">
+        {saveStatus === "success" && (
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-green-600">
+            <CheckCircle className="h-4 w-4" />
+            Settings saved
+          </span>
+        )}
+        {saveStatus === "error" && (
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-red-600">
+            <AlertCircle className="h-4 w-4" />
+            Failed to save
+          </span>
+        )}
+        <Button onClick={handleSave} isLoading={isSaving}>
+          Save Changes
+        </Button>
       </div>
     </div>
   );
@@ -255,6 +319,8 @@ function NotificationToggle({
       </div>
       <button
         onClick={onToggle}
+        role="switch"
+        aria-checked={enabled}
         className={`relative h-6 w-11 rounded-full transition-colors ${
           enabled ? "bg-primary-600" : "bg-secondary-300"
         }`}

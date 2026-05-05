@@ -15,6 +15,11 @@ export interface User {
 // Provider types
 export type VerificationStatus = "PENDING" | "VERIFIED" | "REJECTED";
 
+export interface ProviderSpecialty {
+  id: string;
+  specialty: string;
+}
+
 export interface Provider {
   id: string;
   userId: string;
@@ -34,7 +39,7 @@ export interface Provider {
   totalBookings: number;
   completedBookings: number;
   categories: ProviderCategory[];
-  specialties: string[];
+  specialties: ProviderSpecialty[];
   gallery?: ProviderGalleryItem[];
 }
 

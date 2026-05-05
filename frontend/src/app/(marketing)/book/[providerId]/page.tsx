@@ -78,7 +78,7 @@ export default function BookProviderPage() {
 
     setLoadingSlots(true);
     try {
-      const dateStr = selectedDate.toISOString().split("T")[0];
+      const dateStr = selectedDate.toISOString().split("T")[0] ?? "";
       const slots = await availabilityService.getAvailableSlots(
         provider.id,
         dateStr,
@@ -109,9 +109,8 @@ export default function BookProviderPage() {
     try {
       const booking = await bookingsService.create({
         providerId: provider.id,
-        scheduledDate: selectedDate.toISOString().split("T")[0],
+        scheduledDate: selectedDate.toISOString().split("T")[0] ?? "",
         scheduledStartTime: selectedSlot.startTime,
-        scheduledEndTime: selectedSlot.endTime,
         serviceAddress,
         problemDescription,
       });

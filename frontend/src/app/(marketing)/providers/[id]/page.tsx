@@ -13,16 +13,237 @@ import {
   Mail,
   CheckCircle,
   ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
-import { providersService, reviewsService } from "@/lib/api";
-import type { Provider, Review } from "@/types";
-import { formatCurrency, formatRelativeTime } from "@/lib/utils";
+import { providersService, availabilityService } from "@/lib/api";
+import type { Provider, Review, Availability } from "@/types";
+import { formatCurrency, formatRelativeTime, formatTime, cn } from "@/lib/utils";
 import { useAuth } from "@/hooks";
+
+// ─── Availability Tab ────────────────────────────────────────────────────────
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [availabilities, setAvailabilities] = useState<Availability[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  // Build a map of dateKey → availability for O(1) lookups
+  const availMap = new Map(availabilities.map((a) => [a.date, a]));
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  useEffect(() => {
+    const start = new Date(year, month, 1).toISOString().split("T")[0] ?? "";
+    const end = new Date(year, month + 1, 0).toISOString().split("T")[0] ?? "";
+    setLoading(true);
+    availabilityService
+      .getProviderAvailability(provider.id, { startDate: start, endDate: end })
+      .then(setAvailabilities)
+      .catch(() => setAvailabilities([]))
+      .finally(() => setLoading(false));
+  }, [provider.id, year, month]);
+
+  const prevMonth = () =>
+    setViewDate(new Date(year, month - 1, 1));
+  const nextMonth = () =>
+    setViewDate(new Date(year, month + 1, 1));
+
+  const selectedAvail = selectedDate ? availMap.get(selectedDate) : undefined;
+  const availableSlots = selectedAvail?.timeSlots.filter((t) => t.isAvailable) ?? [];
+
+  // Build calendar grid (prefix blank cells + day cells)
+  const calendarCells: Array<{ day: number | null; dateKey: string | null }> = [
+    ...Array.from({ length: firstDayOfMonth }, () => ({ day: null, dateKey: null })),
+    ...Array.from({ length: daysInMonth }, (_, i) => {
+      const d = i + 1;
+      const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      return { day: d, dateKey };
+    }),
+  ];
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle>
+              {MONTH_NAMES[month]} {year}
+            </CardTitle>
+            <div className="flex gap-1">
+              <button
+                onClick={prevMonth}
+                disabled={viewDate <= new Date(today.getFullYear(), today.getMonth(), 1)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 disabled:opacity-30"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                onClick={nextMonth}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <Spinner />
+            </div>
+          ) : (
+            <>
+              {/* Day headers */}
+              <div className="mb-2 grid grid-cols-7 text-center">
+                {WEEKDAYS.map((d) => (
+                  <span key={d} className="py-1 text-xs font-semibold text-gray-400">
+                    {d}
+                  </span>
+                ))}
+              </div>
+
+              {/* Day cells */}
+              <div className="grid grid-cols-7 gap-1">
+                {calendarCells.map((cell, idx) => {
+                  if (!cell.day || !cell.dateKey) {
+                    return <div key={idx} />;
+                  }
+                  const cellDate = new Date(year, month, cell.day);
+                  const isPast = cellDate < today;
+                  const avail = availMap.get(cell.dateKey);
+                  const hasSlots =
+                    avail?.isAvailable &&
+                    avail.timeSlots.some((t) => t.isAvailable);
+                  const isSelected = selectedDate === cell.dateKey;
+                  const isToday =
+                    cellDate.toDateString() === today.toDateString();
+
+                  return (
+                    <button
+                      key={cell.dateKey}
+                      disabled={isPast || !hasSlots}
+                      onClick={() =>
+                        setSelectedDate(isSelected ? null : cell.dateKey)
+                      }
+                      className={cn(
+                        "relative flex flex-col items-center rounded-lg py-2 text-sm transition-all",
+                        isSelected
+                          ? "bg-primary-600 text-white"
+                          : hasSlots && !isPast
+                            ? "cursor-pointer hover:bg-primary-50 hover:text-primary-700"
+                            : "cursor-default text-gray-300",
+                        isToday && !isSelected && "font-bold text-primary-600",
+                      )}
+                    >
+                      <span>{cell.day}</span>
+                      {hasSlots && !isPast && (
+                        <span
+                          className={cn(
+                            "mt-0.5 h-1.5 w-1.5 rounded-full",
+                            isSelected ? "bg-white" : "bg-primary-500",
+                          )}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div className="mt-4 flex items-center gap-4 text-xs text-gray-500">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-primary-500" />
+                  Available
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-gray-200" />
+                  Unavailable
+                </span>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Time slots for selected date */}
+      {selectedDate && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Available times on{" "}
+              {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-GH", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {availableSlots.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No available time slots for this day.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {availableSlots.map((slot) => (
+                  <Link
+                    key={slot.id}
+                    href={`/book/${provider.id}?date=${selectedDate}&slot=${slot.startTime}`}
+                  >
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border-2 border-primary-200 bg-primary-50 px-3 py-1.5 text-sm font-semibold text-primary-700 transition-all hover:border-primary-500 hover:bg-primary-100">
+                      <Clock className="h-3.5 w-3.5" />
+                      {formatTime(slot.startTime)}
+                      {slot.endTime && ` – ${formatTime(slot.endTime)}`}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+            <div className="mt-4">
+              <Button asChild>
+                <Link href={`/book/${provider.id}`}>
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Book this provider
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {availabilities.length === 0 && !loading && (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+          This provider hasn&apos;t set their availability for this month yet.
+          <div className="mt-3">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/book/${provider.id}`}>Book anyway</Link>
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function ProviderDetailPage() {
   const params = useParams();
@@ -45,7 +266,7 @@ export default function ProviderDetailPage() {
     try {
       const [providerData, reviewsData] = await Promise.all([
         providersService.getById(id),
-        reviewsService.getByProvider(id),
+        providersService.getReviews(id),
       ]);
       setProvider(providerData);
       setReviews(reviewsData.data || []);
@@ -282,19 +503,7 @@ export default function ProviderDetailPage() {
         )}
 
         {activeTab === "availability" && (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Calendar className="mx-auto h-12 w-12 text-secondary-300" />
-              <p className="mt-4 text-secondary-600">
-                View availability when booking a service
-              </p>
-              {user?.role === "CUSTOMER" && (
-                <Button asChild className="mt-4">
-                  <Link href={`/book/${provider.id}`}>Check Availability</Link>
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+          <ProviderAvailabilityTab provider={provider} />
         )}
       </div>
     </div>

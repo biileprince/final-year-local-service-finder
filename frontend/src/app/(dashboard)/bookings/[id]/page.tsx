@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   Calendar,
@@ -14,6 +14,7 @@ import {
   XCircle,
   AlertCircle,
   Star,
+  Banknote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,32 +34,40 @@ const statusConfig: Record<
     icon: React.ElementType;
   }
 > = {
-  PENDING: {
-    label: "Pending Confirmation",
-    variant: "warning",
-    icon: AlertCircle,
-  },
-  CONFIRMED: { label: "Confirmed", variant: "info", icon: CheckCircle },
+  PENDING: { label: "Pending Confirmation", variant: "warning", icon: AlertCircle },
+  CONFIRMED: { label: "Confirmed", variant: "default", icon: CheckCircle },
   IN_PROGRESS: { label: "In Progress", variant: "default", icon: Clock },
   COMPLETED: { label: "Completed", variant: "success", icon: CheckCircle },
   CANCELLED: { label: "Cancelled", variant: "error", icon: XCircle },
 };
 
+const PAYMENT_METHODS = [
+  { value: "cash", label: "Cash" },
+  { value: "mobile-money", label: "Mobile Money (MoMo)" },
+  { value: "bank-transfer", label: "Bank Transfer" },
+  { value: "cheque", label: "Cheque" },
+];
+
 export default function BookingDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const { user } = useAuth();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Review form state
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
 
+  // Payment recording state
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
   useEffect(() => {
-    if (params.id) {
-      loadBooking(params.id as string);
-    }
+    if (params.id) loadBooking(params.id as string);
   }, [params.id]);
 
   const loadBooking = async (id: string) => {
@@ -66,8 +75,8 @@ export default function BookingDetailPage() {
     try {
       const data = await bookingsService.getById(id);
       setBooking(data);
-    } catch (error) {
-      console.error("Failed to load booking:", error);
+    } catch {
+      // handled below via null check
     } finally {
       setIsLoading(false);
     }
@@ -77,10 +86,21 @@ export default function BookingDetailPage() {
     if (!booking) return;
     setIsUpdating(true);
     try {
-      const updated = await bookingsService.updateStatus(booking.id, newStatus);
+      let updated: Booking;
+      if (newStatus === "CONFIRMED") {
+        updated = await bookingsService.confirm(booking.id);
+      } else if (newStatus === "IN_PROGRESS") {
+        updated = await bookingsService.start(booking.id);
+      } else if (newStatus === "COMPLETED") {
+        updated = await bookingsService.complete(booking.id);
+      } else if (newStatus === "CANCELLED") {
+        updated = await bookingsService.cancel(booking.id, "Cancelled by provider");
+      } else {
+        return;
+      }
       setBooking(updated);
-    } catch (error) {
-      console.error("Failed to update booking status:", error);
+    } catch {
+      // silently fail; ideally show a toast
     } finally {
       setIsUpdating(false);
     }
@@ -97,8 +117,33 @@ export default function BookingDetailPage() {
       });
       setShowReviewForm(false);
       loadBooking(booking.id);
-    } catch (error) {
-      console.error("Failed to submit review:", error);
+    } catch {
+      // silently fail
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRecordPayment = async () => {
+    if (!booking) return;
+    if (!paymentReference.trim()) {
+      setPaymentError("Please enter a payment reference.");
+      return;
+    }
+    setPaymentError(null);
+    setIsUpdating(true);
+    try {
+      const updated = await bookingsService.recordPayment(booking.id, {
+        paymentMethod,
+        paymentReference: paymentReference.trim(),
+      });
+      setBooking(updated);
+      setShowPaymentForm(false);
+      setPaymentReference("");
+    } catch (err) {
+      setPaymentError(
+        err instanceof Error ? err.message : "Failed to record payment.",
+      );
     } finally {
       setIsUpdating(false);
     }
@@ -115,12 +160,8 @@ export default function BookingDetailPage() {
   if (!booking) {
     return (
       <div className="space-y-4 text-center">
-        <h1 className="text-2xl font-bold text-secondary-900">
-          Booking not found
-        </h1>
-        <p className="text-secondary-600">
-          The booking you are looking for does not exist.
-        </p>
+        <h1 className="text-2xl font-bold text-secondary-900">Booking not found</h1>
+        <p className="text-secondary-600">The booking you are looking for does not exist.</p>
         <Button asChild>
           <Link href="/bookings">Back to Bookings</Link>
         </Button>
@@ -132,6 +173,7 @@ export default function BookingDetailPage() {
   const StatusIcon = status.icon;
   const isProvider = user?.role === "PROVIDER";
   const otherUser = isProvider ? booking.customer : booking.provider?.user;
+  const paymentRecorded = booking.paymentStatus === "PAID";
 
   return (
     <div className="space-y-6">
@@ -177,28 +219,16 @@ export default function BookingDetailPage() {
           {/* Contact Info */}
           <Card>
             <CardHeader>
-              <CardTitle>
-                {isProvider ? "Customer" : "Service Provider"}
-              </CardTitle>
+              <CardTitle>{isProvider ? "Customer" : "Service Provider"}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
-                <Avatar
-                  size="lg"
-                  src={otherUser?.profileImage}
-                  name={otherUser?.name}
-                />
+                <Avatar size="lg" src={otherUser?.profileImage} name={otherUser?.name} />
                 <div>
-                  <h3 className="font-semibold text-secondary-900">
-                    {otherUser?.name}
-                  </h3>
-                  <p className="text-sm text-secondary-500">
-                    {otherUser?.email}
-                  </p>
+                  <h3 className="font-semibold text-secondary-900">{otherUser?.name}</h3>
+                  <p className="text-sm text-secondary-500">{otherUser?.email}</p>
                   {otherUser?.phone && (
-                    <p className="text-sm text-secondary-500">
-                      {otherUser?.phone}
-                    </p>
+                    <p className="text-sm text-secondary-500">{otherUser.phone}</p>
                   )}
                 </div>
               </div>
@@ -215,9 +245,7 @@ export default function BookingDetailPage() {
                 <Calendar className="mt-0.5 h-5 w-5 text-secondary-400" />
                 <div>
                   <p className="font-medium text-secondary-900">Date</p>
-                  <p className="text-secondary-600">
-                    {formatDate(booking.scheduledDate)}
-                  </p>
+                  <p className="text-secondary-600">{formatDate(booking.scheduledDate)}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -226,8 +254,7 @@ export default function BookingDetailPage() {
                   <p className="font-medium text-secondary-900">Time</p>
                   <p className="text-secondary-600">
                     {formatTime(booking.scheduledStartTime)}
-                    {booking.scheduledEndTime &&
-                      ` - ${formatTime(booking.scheduledEndTime)}`}
+                    {booking.scheduledEndTime && ` — ${formatTime(booking.scheduledEndTime)}`}
                   </p>
                 </div>
               </div>
@@ -241,15 +268,13 @@ export default function BookingDetailPage() {
               {booking.problemDescription && (
                 <div>
                   <p className="font-medium text-secondary-900">Description</p>
-                  <p className="mt-1 text-secondary-600">
-                    {booking.problemDescription}
-                  </p>
+                  <p className="mt-1 text-secondary-600">{booking.problemDescription}</p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Provider Actions */}
+          {/* ── Provider workflow actions ── */}
           {isProvider && booking.status === "PENDING" && (
             <Card>
               <CardHeader>
@@ -260,10 +285,7 @@ export default function BookingDetailPage() {
                   Please confirm or decline this booking request.
                 </p>
                 <div className="flex gap-3">
-                  <Button
-                    onClick={() => handleStatusUpdate("CONFIRMED")}
-                    isLoading={isUpdating}
-                  >
+                  <Button onClick={() => handleStatusUpdate("CONFIRMED")} isLoading={isUpdating}>
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Confirm Booking
                   </Button>
@@ -283,10 +305,7 @@ export default function BookingDetailPage() {
           {isProvider && booking.status === "CONFIRMED" && (
             <Card>
               <CardContent className="py-4">
-                <Button
-                  onClick={() => handleStatusUpdate("IN_PROGRESS")}
-                  isLoading={isUpdating}
-                >
+                <Button onClick={() => handleStatusUpdate("IN_PROGRESS")} isLoading={isUpdating}>
                   Start Service
                 </Button>
               </CardContent>
@@ -296,10 +315,7 @@ export default function BookingDetailPage() {
           {isProvider && booking.status === "IN_PROGRESS" && (
             <Card>
               <CardContent className="py-4">
-                <Button
-                  onClick={() => handleStatusUpdate("COMPLETED")}
-                  isLoading={isUpdating}
-                >
+                <Button onClick={() => handleStatusUpdate("COMPLETED")} isLoading={isUpdating}>
                   <CheckCircle className="mr-2 h-4 w-4" />
                   Mark as Completed
                 </Button>
@@ -307,7 +323,78 @@ export default function BookingDetailPage() {
             </Card>
           )}
 
-          {/* Customer Review */}
+          {/* ── Offline payment recording (provider, completed, unpaid) ── */}
+          {isProvider && booking.status === "COMPLETED" && !paymentRecorded && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Record Payment</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!showPaymentForm ? (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-secondary-600">
+                      Payment has not been recorded for this booking.
+                    </p>
+                    <Button variant="outline" onClick={() => setShowPaymentForm(true)}>
+                      <Banknote className="mr-2 h-4 w-4" />
+                      Record payment
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {paymentError && (
+                      <p className="text-sm font-semibold text-red-600">{paymentError}</p>
+                    )}
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-secondary-700">
+                        Payment method
+                      </label>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                      >
+                        {PAYMENT_METHODS.map((m) => (
+                          <option key={m.value} value={m.value}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-secondary-700">
+                        Reference / receipt number
+                      </label>
+                      <input
+                        type="text"
+                        value={paymentReference}
+                        onChange={(e) => setPaymentReference(e.target.value)}
+                        placeholder="e.g. RECEIPT-12345 or transaction ID"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                      />
+                    </div>
+                    <div className="flex gap-3">
+                      <Button onClick={handleRecordPayment} isLoading={isUpdating}>
+                        <Banknote className="mr-2 h-4 w-4" />
+                        Confirm payment
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowPaymentForm(false);
+                          setPaymentError(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Customer: leave a review ── */}
           {!isProvider && booking.status === "COMPLETED" && !booking.review && (
             <Card>
               <CardHeader>
@@ -329,6 +416,7 @@ export default function BookingDetailPage() {
                         {[1, 2, 3, 4, 5].map((star) => (
                           <button
                             key={star}
+                            type="button"
                             onClick={() => setReviewRating(star)}
                             className="p-1"
                           >
@@ -352,21 +440,15 @@ export default function BookingDetailPage() {
                         value={reviewComment}
                         onChange={(e) => setReviewComment(e.target.value)}
                         rows={4}
-                        className="w-full rounded-lg border border-secondary-300 px-3 py-2 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                        placeholder="Share your experience..."
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                        placeholder="Share your experience…"
                       />
                     </div>
                     <div className="flex gap-3">
-                      <Button
-                        onClick={handleSubmitReview}
-                        isLoading={isUpdating}
-                      >
+                      <Button onClick={handleSubmitReview} isLoading={isUpdating}>
                         Submit Review
                       </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowReviewForm(false)}
-                      >
+                      <Button variant="outline" onClick={() => setShowReviewForm(false)}>
                         Cancel
                       </Button>
                     </div>
@@ -382,7 +464,7 @@ export default function BookingDetailPage() {
                 <CardTitle>Your Review</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-1 mb-2">
+                <div className="mb-2 flex items-center gap-1">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <Star
                       key={star}
@@ -403,7 +485,7 @@ export default function BookingDetailPage() {
           )}
         </div>
 
-        {/* Sidebar - Payment Info */}
+        {/* Sidebar */}
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -412,7 +494,7 @@ export default function BookingDetailPage() {
             <CardContent className="space-y-3">
               {booking.estimatedAmount && (
                 <div className="flex justify-between">
-                  <span className="text-secondary-600">Estimated Amount</span>
+                  <span className="text-secondary-600">Estimated</span>
                   <span className="font-medium text-secondary-900">
                     {formatCurrency(Number(booking.estimatedAmount))}
                   </span>
@@ -426,9 +508,17 @@ export default function BookingDetailPage() {
                   </span>
                 </div>
               )}
+              {booking.paymentMethod && (
+                <div className="flex justify-between">
+                  <span className="text-secondary-600">Method</span>
+                  <span className="font-medium capitalize text-secondary-900">
+                    {booking.paymentMethod}
+                  </span>
+                </div>
+              )}
               {booking.paymentStatus && (
                 <div className="flex justify-between">
-                  <span className="text-secondary-600">Payment Status</span>
+                  <span className="text-secondary-600">Status</span>
                   <Badge
                     variant={
                       booking.paymentStatus === "PAID"
@@ -442,26 +532,31 @@ export default function BookingDetailPage() {
                   </Badge>
                 </div>
               )}
+              {paymentRecorded && (
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-green-700">
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Payment recorded
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          {!isProvider &&
-            (booking.status === "PENDING" ||
-              booking.status === "CONFIRMED") && (
-              <Card className="border-error-200">
-                <CardContent className="py-4">
-                  <Button
-                    variant="outline"
-                    className="w-full text-error-600 hover:bg-error-50"
-                    onClick={() => handleStatusUpdate("CANCELLED")}
-                    isLoading={isUpdating}
-                  >
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Cancel Booking
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
+          {/* Customer: cancel booking */}
+          {!isProvider && (booking.status === "PENDING" || booking.status === "CONFIRMED") && (
+            <Card className="border-error-200">
+              <CardContent className="py-4">
+                <Button
+                  variant="outline"
+                  className="w-full text-error-600 hover:bg-error-50"
+                  onClick={() => handleStatusUpdate("CANCELLED")}
+                  isLoading={isUpdating}
+                >
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Cancel Booking
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

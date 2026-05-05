@@ -1,5 +1,5 @@
 import { apiClient, buildQueryString } from "./client";
-import type { Review } from "@/types";
+import type { Review, PaginatedResponse } from "@/types";
 
 export interface CreateReviewDto {
   bookingId: string;
@@ -27,5 +27,13 @@ export const reviewsService = {
 
   async markHelpful(id: string): Promise<void> {
     return apiClient.post(`/reviews/${id}/helpful`, {}, true);
+  },
+
+  async getByProvider(
+    providerId: string,
+    params?: { page?: number; limit?: number },
+  ): Promise<PaginatedResponse<Review>> {
+    const qs = buildQueryString(params || {});
+    return apiClient.get(`/providers/${providerId}/reviews${qs}`);
   },
 };
