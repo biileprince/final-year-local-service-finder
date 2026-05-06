@@ -21,6 +21,7 @@ import { UpdateBookingDto } from "./dto/update-booking.dto";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
 import { RecordPaymentDto } from "./dto/record-payment.dto";
 import { RescheduleBookingDto } from "./dto/reschedule-booking.dto";
+import { ConfirmBookingDto } from "./dto/confirm-booking.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import {
   CurrentUser,
@@ -45,6 +46,7 @@ export class BookingsController {
   ) {
     return this.bookingsService.create({
       ...createBookingDto,
+      scheduledDate: new Date(createBookingDto.scheduledDate),
       customerId: user.id,
     });
   }
@@ -132,8 +134,9 @@ export class BookingsController {
   async confirm(
     @Param("id") id: string,
     @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: ConfirmBookingDto,
   ) {
-    return this.bookingsService.confirm(id, user.id);
+    return this.bookingsService.confirm(id, user.id, dto?.scheduledStartTime);
   }
 
   @Put(":id/start")

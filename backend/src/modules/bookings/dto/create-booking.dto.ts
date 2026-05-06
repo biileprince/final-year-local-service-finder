@@ -11,7 +11,7 @@ import {
   Min,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type, Transform } from "class-transformer";
+import { Type } from "class-transformer";
 
 export class CreateBookingDto {
   @ApiProperty({ example: "provider-uuid" })
@@ -20,8 +20,7 @@ export class CreateBookingDto {
 
   @ApiProperty({ example: "2026-04-15" })
   @IsDateString()
-  @Transform(({ value }) => new Date(value))
-  scheduledDate: Date;
+  scheduledDate: string;
 
   @ApiPropertyOptional({
     example: "09:00:00",

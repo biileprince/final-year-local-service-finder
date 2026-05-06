@@ -17,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
-import { messagesService } from "@/lib/api";
+import { messagesService, filesService } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 import { useMessagesSocket } from "@/lib/messages-socket";
 import type { Conversation, Message } from "@/types";
 import { formatRelativeTime, formatDate, formatTime, cn } from "@/lib/utils";
@@ -39,6 +40,33 @@ export default function ConversationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const handleFileAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !conversation) return;
+    setUploadingFile(true);
+    try {
+      const uploaded = await filesService.upload(file, "MESSAGE");
+      const newMessage = await messagesService.sendMessage(conversation.id, {
+        content: file.name,
+        messageType: "FILE",
+        fileId: uploaded.id,
+      });
+      setMessages((prev) => [...prev, newMessage]);
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Couldn't attach file",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const { socket, isConnected, joinConversation, sendMessage } =
     useMessagesSocket();
@@ -266,7 +294,39 @@ export default function ConversationPage() {
                         : "rounded-tl-sm bg-secondary-100 text-secondary-900",
                     )}
                   >
-                    <p className="text-sm">{message.content}</p>
+                    {message.file ? (
+                      message.file.thumbnailUrl ||
+                      /\.(png|jpe?g|gif|webp)$/i.test(message.file.fileName) ? (
+                        <a
+                          href={message.file.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={message.file.thumbnailUrl || message.file.url}
+                            alt={message.file.fileName}
+                            className="max-h-48 rounded-lg"
+                          />
+                        </a>
+                      ) : (
+                        <a
+                          href={message.file.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={cn(
+                            "inline-flex items-center gap-2 underline",
+                            isOwn ? "text-white" : "text-primary-700",
+                          )}
+                        >
+                          <Paperclip className="h-4 w-4" />
+                          {message.file.fileName}
+                        </a>
+                      )
+                    ) : (
+                      <p className="text-sm">{message.content}</p>
+                    )}
                     <p
                       className={cn(
                         "mt-1 text-xs",
@@ -289,7 +349,20 @@ export default function ConversationPage() {
         onSubmit={handleSendMessage}
         className="flex items-center gap-3 border-t px-4 py-3"
       >
-        <Button type="button" variant="ghost" size="icon">
+        <input
+          ref={fileInputRef}
+          type="file"
+          onChange={handleFileAttach}
+          className="hidden"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadingFile}
+          aria-label="Attach file"
+        >
           <Paperclip className="h-5 w-5" />
         </Button>
         <input

@@ -121,11 +121,12 @@ export class PrismaService
   async executeInTransaction<T>(
     operation: (tx: ExtendedClient) => Promise<T>,
   ): Promise<T> {
-    return this.$transaction(
-      async (rawTx) => {
-        const tx = buildExtendedClient(rawTx as unknown as PrismaClient);
-        return operation(tx);
-      },
+    // Prisma's tx client (the value passed into the $transaction callback) does
+    // not expose `$extends` — only the top-level client does. To get an
+    // extension-aware tx, call `$transaction` on the already-extended client;
+    // its tx clients inherit the extensions automatically.
+    return (this.extended as unknown as PrismaClient).$transaction(
+      async (tx) => operation(tx as unknown as ExtendedClient),
       {
         maxWait: 5000,
         timeout: 10000,

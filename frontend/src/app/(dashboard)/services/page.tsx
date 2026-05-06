@@ -8,13 +8,16 @@ import {
   Save,
   CheckCircle2,
   AlertCircle,
+  ImagePlus,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { useRequireRole } from "@/hooks";
-import { providersService, categoriesService } from "@/lib/api";
+import { providersService, categoriesService, filesService } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 import type { Provider, Category } from "@/types";
 
 export default function ProviderServicesPage() {
@@ -32,6 +35,8 @@ export default function ProviderServicesPage() {
   const [location, setLocation] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+  const { toast } = useToast();
   const [message, setMessage] = useState<{
     kind: "success" | "error";
     text: string;
@@ -86,6 +91,47 @@ export default function ProviderServicesPage() {
 
   const removeSpecialty = (s: string) =>
     setSpecialties((prev) => prev.filter((x) => x !== s));
+
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length || !provider) return;
+
+    setUploadingGallery(true);
+    try {
+      const uploaded = await Promise.all(
+        Array.from(files).map((f) => filesService.upload(f, "GALLERY")),
+      );
+      const fileIds = uploaded.map((u) => u.id);
+      await providersService.addGalleryItems(provider.id, fileIds);
+      const updated = await providersService.getMyProfile();
+      setProvider(updated);
+      toast({ variant: "success", title: "Gallery updated" });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Upload failed",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setUploadingGallery(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleGalleryRemove = async (itemId: string) => {
+    if (!provider) return;
+    try {
+      await providersService.removeGalleryItem(provider.id, itemId);
+      const updated = await providersService.getMyProfile();
+      setProvider(updated);
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Couldn't remove image",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    }
+  };
 
   const handleSave = async () => {
     if (!provider) return;
@@ -315,6 +361,59 @@ export default function ProviderServicesPage() {
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Gallery */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Portfolio gallery</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-secondary-600">
+            Show off past work — these images appear on your public profile.
+          </p>
+
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed border-gray-300 px-4 py-3 text-sm font-semibold text-secondary-700 hover:border-primary-400 hover:bg-primary-50">
+            <ImagePlus className="h-4 w-4" />
+            {uploadingGallery ? "Uploading…" : "Upload images"}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleGalleryUpload}
+              disabled={uploadingGallery}
+              className="hidden"
+            />
+          </label>
+
+          {(provider.gallery?.length ?? 0) === 0 ? (
+            <p className="text-sm text-secondary-500">No images yet.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              {provider.gallery?.map((item) => (
+                <div
+                  key={item.id}
+                  className="group relative aspect-square overflow-hidden rounded-xl border border-gray-200"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.file.thumbnailUrl || item.file.url}
+                    alt={item.title || "Gallery image"}
+                    className="h-full w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleGalleryRemove(item.id)}
+                    className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-error-600 opacity-0 shadow transition-opacity group-hover:opacity-100 hover:bg-white"
+                    aria-label="Remove image"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               ))}
             </div>
           )}

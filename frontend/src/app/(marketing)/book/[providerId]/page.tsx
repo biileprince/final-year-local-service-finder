@@ -25,9 +25,17 @@ import {
   bookingsService,
 } from "@/lib/api";
 import type { Provider, TimeSlot } from "@/types";
-import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import { formatCurrency, formatDate, formatTime, cn } from "@/lib/utils";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Slot startTime can arrive as a full ISO string ("1970-01-01T09:00:00.000Z")
+// from Prisma. The backend DTO expects HH:MM:SS — extract it.
+function extractHHMMSS(time: string): string {
+  const match = time.match(/(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return time;
+  return `${match[1]}:${match[2]}:${match[3] ?? "00"}`;
+}
 
 export default function BookProviderPage() {
   const params = useParams();
@@ -112,7 +120,9 @@ export default function BookProviderPage() {
         providerId: provider.id,
         scheduledDate: selectedDate.toISOString().split("T")[0] ?? "",
         scheduledStartTime:
-          flexibleTime || !selectedSlot ? undefined : selectedSlot.startTime,
+          flexibleTime || !selectedSlot
+            ? undefined
+            : extractHHMMSS(selectedSlot.startTime),
         serviceAddress,
         problemDescription,
       });
@@ -396,7 +406,7 @@ export default function BookProviderPage() {
                                 : "border-secondary-200 text-secondary-700 hover:border-primary-300 hover:bg-primary-50",
                             )}
                           >
-                            {slot.startTime}
+                            {formatTime(slot.startTime)}
                           </button>
                         ))}
                       </div>
@@ -531,7 +541,7 @@ export default function BookProviderPage() {
                   <div className="flex justify-between">
                     <span className="text-secondary-500">Time</span>
                     <span className="font-medium text-secondary-900">
-                      {selectedSlot.startTime} - {selectedSlot.endTime}
+                      {formatTime(selectedSlot.startTime)} - {formatTime(selectedSlot.endTime)}
                     </span>
                   </div>
                 )}

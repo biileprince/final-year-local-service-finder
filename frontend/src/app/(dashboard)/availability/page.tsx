@@ -9,7 +9,9 @@ import {
   Save,
   ChevronLeft,
   ChevronRight,
+  Wand2,
 } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +63,8 @@ export default function AvailabilityPage() {
     {},
   );
   const [viewMode, setViewMode] = useState<"week" | "recurring">("week");
+  const [applyingPreset, setApplyingPreset] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadAvailability();
@@ -125,6 +129,58 @@ export default function AvailabilityPage() {
       ...prev,
       [dateKey]: [],
     }));
+  };
+
+  const applyPreset = async (
+    preset: "weekdays-9-5" | "weekends" | "clear",
+    weeksAhead = 4,
+  ) => {
+    setApplyingPreset(true);
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const data: { date: string; timeSlots: { startTime: string; endTime: string }[] }[] = [];
+
+      const weekdaySlots = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"];
+      const weekendSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00"];
+
+      for (let i = 0; i < weeksAhead * 7; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const day = d.getDay();
+        const dateKey = d.toISOString().split("T")[0]!;
+        let times: string[] = [];
+        if (preset === "weekdays-9-5" && day >= 1 && day <= 5) {
+          times = weekdaySlots;
+        } else if (preset === "weekends" && (day === 0 || day === 6)) {
+          times = weekendSlots;
+        }
+        // For clear preset, all days get []
+        data.push({
+          date: dateKey,
+          timeSlots: times.map((t) => ({
+            startTime: t,
+            endTime: `${(parseInt(t.split(":")[0]!, 10) + 1).toString().padStart(2, "0")}:00`,
+          })),
+        });
+      }
+
+      await availabilityService.setAvailability(data);
+      await loadAvailability();
+      toast({
+        variant: "success",
+        title: "Schedule applied",
+        description: `Applied to the next ${weeksAhead} weeks.`,
+      });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Failed to apply preset",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setApplyingPreset(false);
+    }
   };
 
   const handleSave = async () => {
@@ -318,38 +374,54 @@ export default function AvailabilityPage() {
           </div>
         </>
       ) : (
-        /* Recurring Schedule */
+        /* Recurring Schedule — quick presets that expand into the next 4 weeks */
         <Card>
           <CardHeader>
-            <CardTitle>Recurring Weekly Schedule</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5" />
+              Quick presets
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="mb-4 text-sm text-secondary-600">
-              Set your default weekly availability. This will be applied to
-              future weeks.
+          <CardContent className="space-y-4">
+            <p className="text-sm text-secondary-600">
+              Apply a recurring schedule to the next 4 weeks. You can still
+              tweak individual days from the Weekly View afterwards.
             </p>
-            <div className="space-y-4">
-              {DAYS_OF_WEEK.map((day, index) => (
-                <div
-                  key={day}
-                  className="flex items-center gap-4 rounded-lg border border-secondary-200 p-4"
-                >
-                  <div className="w-24 font-medium text-secondary-900">
-                    {day}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {TIME_SLOTS.map((time) => (
-                      <button
-                        key={time}
-                        className="rounded bg-secondary-100 px-2 py-1 text-xs font-medium text-secondary-600 hover:bg-primary-100 hover:text-primary-700"
-                      >
-                        {time}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <button
+                onClick={() => applyPreset("weekdays-9-5")}
+                disabled={applyingPreset}
+                className="rounded-xl border-2 border-gray-200 bg-white p-4 text-left transition-all hover:border-primary-400 hover:bg-primary-50 disabled:opacity-50"
+              >
+                <p className="font-bold text-secondary-900">9–5 weekdays</p>
+                <p className="mt-1 text-xs text-secondary-500">
+                  Mon–Fri, 09:00–17:00 hourly slots.
+                </p>
+              </button>
+              <button
+                onClick={() => applyPreset("weekends")}
+                disabled={applyingPreset}
+                className="rounded-xl border-2 border-gray-200 bg-white p-4 text-left transition-all hover:border-primary-400 hover:bg-primary-50 disabled:opacity-50"
+              >
+                <p className="font-bold text-secondary-900">Weekends only</p>
+                <p className="mt-1 text-xs text-secondary-500">
+                  Sat–Sun, 10:00–16:00 hourly slots.
+                </p>
+              </button>
+              <button
+                onClick={() => applyPreset("clear")}
+                disabled={applyingPreset}
+                className="rounded-xl border-2 border-gray-200 bg-white p-4 text-left transition-all hover:border-error-300 hover:bg-error-50 disabled:opacity-50"
+              >
+                <p className="font-bold text-secondary-900">Clear schedule</p>
+                <p className="mt-1 text-xs text-secondary-500">
+                  Wipe availability for the next 4 weeks.
+                </p>
+              </button>
             </div>
+            {applyingPreset && (
+              <p className="text-sm text-secondary-500">Applying preset…</p>
+            )}
           </CardContent>
         </Card>
       )}

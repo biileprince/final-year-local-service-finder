@@ -19,7 +19,9 @@ import {
   Wind,
   Paintbrush,
   Filter,
+  Map as MapIcon,
 } from "lucide-react";
+import { ProvidersMap } from "@/components/providers/providers-map";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,7 +64,7 @@ function SearchContent() {
     searchParams.get("location") ?? "",
   );
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "list" | "map">("grid");
 
   const [selectedCategory, setSelectedCategory] = useState<string>(
     categoryParam ?? "all",
@@ -233,6 +235,20 @@ function SearchContent() {
                     )}
                   >
                     <List className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("map")}
+                    aria-label="Map view"
+                    aria-pressed={viewMode === "map"}
+                    className={cn(
+                      "rounded-lg p-2 transition-all",
+                      viewMode === "map"
+                        ? "bg-white text-primary-600 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700",
+                    )}
+                  >
+                    <MapIcon className="h-4 w-4" />
                   </button>
                 </div>
 
@@ -535,12 +551,14 @@ function SearchContent() {
                       <ProviderGridCard key={p.id} provider={p} />
                     ))}
                   </div>
-                ) : (
+                ) : viewMode === "list" ? (
                   <div className="space-y-4">
                     {providers.map((p) => (
                       <ProviderCard key={p.id} provider={p} variant="row" />
                     ))}
                   </div>
+                ) : (
+                  <ProvidersMap providers={providers} />
                 )}
               </>
             )}

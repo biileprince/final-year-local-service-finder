@@ -12,6 +12,7 @@ import {
 } from "./providers.repository";
 import { CacheService } from "../../cache/cache.service";
 import { MetricsService } from "../../monitoring/metrics.service";
+import { PrismaService } from "../../database/prisma.service";
 
 @Injectable()
 export class ProvidersService {
@@ -19,6 +20,7 @@ export class ProvidersService {
     private readonly providersRepository: ProvidersRepository,
     private readonly cacheService: CacheService,
     private readonly metricsService: MetricsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async create(data: CreateProviderData) {
@@ -183,6 +185,61 @@ export class ProvidersService {
 
   async incrementBookingCount(providerId: string, completed: boolean = false) {
     return this.providersRepository.incrementBookingCount(providerId, completed);
+  }
+
+  async addGalleryItems(
+    id: string,
+    userId: string,
+    fileIds: string[],
+  ) {
+    const provider = await this.providersRepository.findById(id);
+    if (!provider) throw new NotFoundException("Provider not found");
+    if (provider.userId !== userId) {
+      throw new ForbiddenException("Not authorized to update this provider");
+    }
+    if (fileIds.length === 0) return [];
+
+    const existing = await this.prisma.providerGallery.findMany({
+      where: { providerId: id, deletedAt: null },
+      select: { displayOrder: true },
+      orderBy: { displayOrder: "desc" },
+      take: 1,
+    });
+    let nextOrder = (existing[0]?.displayOrder ?? -1) + 1;
+
+    const created = await this.prisma.$transaction(
+      fileIds.map((fileId) =>
+        this.prisma.providerGallery.upsert({
+          where: { providerId_fileId: { providerId: id, fileId } },
+          create: {
+            providerId: id,
+            fileId,
+            displayOrder: nextOrder++,
+          },
+          update: { deletedAt: null },
+          include: { file: true },
+        }),
+      ),
+    );
+
+    await this.cacheService.invalidateProviderProfile(id);
+    return created;
+  }
+
+  async removeGalleryItem(id: string, userId: string, galleryItemId: string) {
+    const provider = await this.providersRepository.findById(id);
+    if (!provider) throw new NotFoundException("Provider not found");
+    if (provider.userId !== userId) {
+      throw new ForbiddenException("Not authorized to update this provider");
+    }
+
+    await this.prisma.providerGallery.update({
+      where: { id: galleryItemId },
+      data: { deletedAt: new Date() },
+    });
+
+    await this.cacheService.invalidateProviderProfile(id);
+    return { success: true };
   }
 
   async delete(id: string, userId: string) {

@@ -150,6 +150,30 @@ export class ProvidersController {
     return this.providersService.updateSpecialties(id, user.id, specialties);
   }
 
+  @Post(":id/gallery")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Add files to provider gallery" })
+  async addGallery(
+    @Param("id") id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Body("fileIds") fileIds: string[],
+  ) {
+    return this.providersService.addGalleryItems(id, user.id, fileIds || []);
+  }
+
+  @Delete(":id/gallery/:itemId")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Remove a gallery item" })
+  async removeGalleryItem(
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.providersService.removeGalleryItem(id, user.id, itemId);
+  }
+
   @Delete(":id")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

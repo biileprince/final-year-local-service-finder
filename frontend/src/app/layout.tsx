@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Atkinson_Hyperlegible, Fraunces } from "next/font/google";
 import "@/styles/globals.css";
+import { ToastProvider } from "@/components/ui/toast";
 
 const bodyFont = Atkinson_Hyperlegible({
   subsets: ["latin"],
@@ -70,7 +71,7 @@ export default function RootLayout({
         className="min-h-screen bg-white font-sans antialiased text-gray-900"
         suppressHydrationWarning
       >
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

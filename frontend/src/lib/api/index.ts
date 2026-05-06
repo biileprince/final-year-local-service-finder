@@ -10,6 +10,8 @@ export { messagesService } from "./messages";
 export { notificationsService } from "./notifications";
 export { reviewsService } from "./reviews";
 export { availabilityService } from "./availability";
+export { filesService, type FileContext, type UploadedFile } from "./files";
+export { adminService } from "./admin";
 
 // Re-export types from services
 export type { LoginDto, RegisterDto } from "./auth";

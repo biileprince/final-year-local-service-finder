@@ -142,4 +142,19 @@ export const providersService = {
   async getStats(providerId: string): Promise<Record<string, number>> {
     return apiClient.get(`/bookings/stats/${providerId}`, true);
   },
+
+  async addGalleryItems(providerId: string, fileIds: string[]) {
+    return apiClient.post(
+      `/providers/${providerId}/gallery`,
+      { fileIds },
+      true,
+    );
+  },
+
+  async removeGalleryItem(providerId: string, itemId: string) {
+    return apiClient.delete(
+      `/providers/${providerId}/gallery/${itemId}`,
+      true,
+    );
+  },
 };

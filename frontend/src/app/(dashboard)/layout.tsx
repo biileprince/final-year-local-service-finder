@@ -16,6 +16,8 @@ import {
   Briefcase,
   BarChart3,
   Wrench,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
@@ -31,6 +33,16 @@ const customerNavItems = [
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/profile", label: "Profile", icon: User },
+  { href: "/settings", label: "Settings", icon: Settings },
+];
+
+const adminNavItems = [
+  { href: "/admin", label: "Admin Home", icon: LayoutDashboard },
+  { href: "/admin/providers", label: "Verification Queue", icon: ShieldCheck },
+  { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/bookings", label: "Bookings", icon: Calendar },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -67,7 +79,11 @@ export default function DashboardLayout({
   const [unreadMessages, setUnreadMessages] = useState(0);
 
   const navItems =
-    user?.role === "PROVIDER" ? providerNavItems : customerNavItems;
+    user?.role === "ADMIN"
+      ? adminNavItems
+      : user?.role === "PROVIDER"
+        ? providerNavItems
+        : customerNavItems;
 
   const loadCounts = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -267,8 +283,45 @@ export default function DashboardLayout({
         </header>
 
         {/* Page Content */}
-        <main className="p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="p-4 pb-24 sm:p-6 lg:p-8 lg:pb-8">{children}</main>
       </div>
+
+      {/* Mobile bottom navigation */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.04)] lg:hidden">
+        <ul className="grid grid-cols-5">
+          {navItems.slice(0, 5).map((item) => {
+            const isActive =
+              pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const badgeCount =
+              item.href === "/messages"
+                ? unreadMessages
+                : item.href === "/notifications"
+                  ? unreadNotifications
+                  : 0;
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold transition-colors",
+                    isActive
+                      ? "text-primary-600"
+                      : "text-secondary-500 hover:text-secondary-900",
+                  )}
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span className="leading-none">{item.label}</span>
+                  {badgeCount > 0 && (
+                    <span className="absolute right-3 top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary-600 px-0.5 text-[10px] font-bold text-white">
+                      {badgeCount > 99 ? "99+" : badgeCount}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Calendar,
   MessageSquare,
@@ -44,6 +45,12 @@ const statusColors: Record<
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const router = useRouter();
+
+  // Admins don't have a customer-style dashboard — send them to /admin.
+  useEffect(() => {
+    if (user?.role === "ADMIN") router.replace("/admin");
+  }, [user, router]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);

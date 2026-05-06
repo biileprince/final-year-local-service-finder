@@ -243,7 +243,7 @@ export class BookingsService {
     }
   }
 
-  async confirm(id: string, userId: string) {
+  async confirm(id: string, userId: string, scheduledStartTime?: string) {
     const booking = await this.findById(id);
 
     // Only provider can confirm
@@ -253,6 +253,21 @@ export class BookingsService {
 
     if (booking.status !== "PENDING") {
       throw new BadRequestException("Can only confirm pending bookings");
+    }
+
+    // If the booking was created flexible (sentinel 00:00:00) and the provider
+    // confirmed a concrete time via messaging, lock it in here.
+    const isFlexibleSentinel =
+      booking.scheduledStartTime?.toISOString().slice(11, 19) === "00:00:00";
+    if (scheduledStartTime && isFlexibleSentinel) {
+      await this.prisma.booking.update({
+        where: { id, version: booking.version },
+        data: {
+          scheduledStartTime: new Date(`1970-01-01T${scheduledStartTime}`),
+          version: { increment: 1 },
+        },
+      });
+      booking.version += 1;
     }
 
     const updated = await this.bookingsRepository.updateStatus(

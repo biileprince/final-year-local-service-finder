@@ -22,6 +22,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/hooks";
 import { bookingsService, reviewsService, messagesService } from "@/lib/api";
 import type { Booking, BookingStatus } from "@/types";
@@ -71,6 +81,16 @@ export default function BookingDetailPage() {
   const [rescheduleFlexible, setRescheduleFlexible] = useState(false);
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
 
+  // Confirm dialogs (destructive actions)
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDecline, setConfirmDecline] = useState(false);
+
+  // Provider confirm flow with optional time (flexible bookings)
+  const [showConfirmTime, setShowConfirmTime] = useState(false);
+  const [confirmTime, setConfirmTime] = useState("");
+
+  const { toast } = useToast();
+
   // Payment recording state
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("cash");
@@ -86,34 +106,58 @@ export default function BookingDetailPage() {
     try {
       const data = await bookingsService.getById(id);
       setBooking(data);
-    } catch {
-      // handled below via null check
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Failed to load booking",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleStatusUpdate = async (newStatus: BookingStatus) => {
+  const handleStatusUpdate = async (
+    newStatus: BookingStatus,
+    options?: { scheduledStartTime?: string; cancelReason?: string },
+  ) => {
     if (!booking) return;
     setIsUpdating(true);
     try {
       let updated: Booking;
       if (newStatus === "CONFIRMED") {
-        updated = await bookingsService.confirm(booking.id);
+        updated = await bookingsService.confirm(
+          booking.id,
+          options?.scheduledStartTime,
+        );
       } else if (newStatus === "IN_PROGRESS") {
         updated = await bookingsService.start(booking.id);
       } else if (newStatus === "COMPLETED") {
         updated = await bookingsService.complete(booking.id);
       } else if (newStatus === "CANCELLED") {
-        updated = await bookingsService.cancel(booking.id, "Cancelled by provider");
+        updated = await bookingsService.cancel(
+          booking.id,
+          options?.cancelReason ?? "Cancelled by user",
+        );
       } else {
         return;
       }
       setBooking(updated);
-    } catch {
-      // silently fail; ideally show a toast
+      toast({
+        variant: "success",
+        title: `Booking ${newStatus.toLowerCase().replace("_", " ")}`,
+      });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Action failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
     } finally {
       setIsUpdating(false);
+      setConfirmCancel(false);
+      setConfirmDecline(false);
+      setShowConfirmTime(false);
     }
   };
 
@@ -154,8 +198,13 @@ export default function BookingDetailPage() {
         booking.id,
       );
       router.push(`/messages/${conv.id}`);
-    } catch {
+    } catch (err) {
       setOpeningChat(false);
+      toast({
+        variant: "error",
+        title: "Couldn't open chat",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
     }
   };
 
@@ -356,14 +405,28 @@ export default function BookingDetailPage() {
                 <p className="mb-4 text-secondary-600">
                   Please confirm or decline this booking request.
                 </p>
-                <div className="flex gap-3">
-                  <Button onClick={() => handleStatusUpdate("CONFIRMED")} isLoading={isUpdating}>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={() => {
+                      const isFlexible =
+                        !booking.scheduledStartTime ||
+                        new Date(booking.scheduledStartTime)
+                          .toISOString()
+                          .slice(11, 19) === "00:00:00";
+                      if (isFlexible) {
+                        setShowConfirmTime(true);
+                      } else {
+                        handleStatusUpdate("CONFIRMED");
+                      }
+                    }}
+                    isLoading={isUpdating}
+                  >
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Confirm Booking
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => handleStatusUpdate("CANCELLED")}
+                    onClick={() => setConfirmDecline(true)}
                     isLoading={isUpdating}
                   >
                     <XCircle className="mr-2 h-4 w-4" />
@@ -727,7 +790,7 @@ export default function BookingDetailPage() {
                 <Button
                   variant="outline"
                   className="w-full text-error-600 hover:bg-error-50"
-                  onClick={() => handleStatusUpdate("CANCELLED")}
+                  onClick={() => setConfirmCancel(true)}
                   isLoading={isUpdating}
                 >
                   <XCircle className="mr-2 h-4 w-4" />
@@ -738,6 +801,81 @@ export default function BookingDetailPage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title="Cancel this booking?"
+        description="The provider will be notified. This can't be undone."
+        confirmLabel="Yes, cancel"
+        cancelLabel="Keep booking"
+        destructive
+        isLoading={isUpdating}
+        onConfirm={() =>
+          handleStatusUpdate("CANCELLED", {
+            cancelReason: isProvider ? "Cancelled by provider" : "Cancelled by customer",
+          })
+        }
+      />
+
+      <ConfirmDialog
+        open={confirmDecline}
+        onOpenChange={setConfirmDecline}
+        title="Decline this booking?"
+        description="The customer will be notified that you can't take this job."
+        confirmLabel="Decline"
+        cancelLabel="Keep pending"
+        destructive
+        isLoading={isUpdating}
+        onConfirm={() =>
+          handleStatusUpdate("CANCELLED", { cancelReason: "Declined by provider" })
+        }
+      />
+
+      {showConfirmTime && booking && (
+        <Dialog open={showConfirmTime} onOpenChange={setShowConfirmTime}>
+          <DialogContent onClose={() => setShowConfirmTime(false)}>
+            <DialogHeader>
+              <DialogTitle>Confirm flexible-time booking</DialogTitle>
+              <DialogDescription>
+                Pick a start time agreed with the customer, or skip to confirm
+                without locking a time yet.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <input
+                type="time"
+                value={confirmTime}
+                onChange={(e) => setConfirmTime(e.target.value)}
+                className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  handleStatusUpdate("CONFIRMED", { scheduledStartTime: undefined })
+                }
+                disabled={isUpdating}
+              >
+                Skip — confirm flexible
+              </Button>
+              <Button
+                onClick={() =>
+                  handleStatusUpdate("CONFIRMED", {
+                    scheduledStartTime: confirmTime
+                      ? `${confirmTime}:00`
+                      : undefined,
+                  })
+                }
+                isLoading={isUpdating}
+              >
+                Confirm
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

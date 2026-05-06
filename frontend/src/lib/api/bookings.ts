@@ -85,8 +85,12 @@ export const bookingsService = {
     return apiClient.post<Booking>("/bookings", data, true);
   },
 
-  async confirm(id: string): Promise<Booking> {
-    return apiClient.put<Booking>(`/bookings/${id}/confirm`, {}, true);
+  async confirm(id: string, scheduledStartTime?: string): Promise<Booking> {
+    return apiClient.put<Booking>(
+      `/bookings/${id}/confirm`,
+      scheduledStartTime ? { scheduledStartTime } : {},
+      true,
+    );
   },
 
   async start(id: string): Promise<Booking> {
