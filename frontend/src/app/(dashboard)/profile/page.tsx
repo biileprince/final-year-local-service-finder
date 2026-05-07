@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,13 +14,14 @@ import {
   Eye,
   EyeOff,
   Shield,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks";
-import { authService } from "@/lib/api";
+import { authService, filesService } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
@@ -211,10 +212,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            <form
-              onSubmit={handleSubmit(onSubmit)}
-              className="mt-4 space-y-3"
-            >
+            <form onSubmit={handleSubmit(onSubmit)} className="mt-4 space-y-3">
               <Input
                 label="Current password"
                 type={showCurrent ? "text" : "password"}
@@ -264,7 +262,11 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" className="flex-1" isLoading={isSubmitting}>
+                <Button
+                  type="submit"
+                  className="flex-1"
+                  isLoading={isSubmitting}
+                >
                   Update
                 </Button>
               </div>
@@ -292,6 +294,24 @@ export default function ProfilePage() {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const uploaded = await filesService.upload(file, "AVATAR");
+      const updated = await authService.updateUser({ profileImage: uploaded.url });
+      setUser(updated);
+    } catch {
+      // silently fail – avatar is non-critical
+    } finally {
+      setUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+  };
 
   const {
     register,
@@ -389,7 +409,24 @@ export default function ProfilePage() {
             <div className="flex flex-col items-center gap-6 sm:flex-row">
               <div className="relative">
                 <Avatar size="2xl" src={user?.profileImage} name={user?.name} />
-                <button className="absolute bottom-0 right-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary-600 text-white shadow-lg transition-colors hover:bg-primary-700">
+                {uploadingAvatar && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
+                    <Loader2 className="h-6 w-6 animate-spin text-white" />
+                  </div>
+                )}
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
+                />
+                <button
+                  type="button"
+                  disabled={uploadingAvatar}
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary-600 text-white shadow-lg transition-colors hover:bg-primary-700 disabled:opacity-50"
+                >
                   <Camera className="h-5 w-5" />
                 </button>
               </div>

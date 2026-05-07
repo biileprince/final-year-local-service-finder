@@ -170,7 +170,7 @@ export function Header() {
           : "border-b border-transparent bg-white",
       )}
     >
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-4 sm:px-6 lg:h-20 lg:px-8">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-8 px-4 sm:px-6 lg:h-20 lg:px-8">
         {/* Logo */}
         <Link
           href="/"
@@ -185,7 +185,7 @@ export function Header() {
             />
           </span>
           <span className="hidden flex-col leading-tight sm:flex">
-            <span className="font-display text-base font-bold tracking-tight text-gray-900">
+            <span className="font-sans text-base font-bold tracking-tight text-gray-900">
               Local Service
             </span>
             <span className="text-[10px] font-bold tracking-[0.2em] text-primary-500">
@@ -209,7 +209,7 @@ export function Header() {
               aria-haspopup="menu"
               aria-expanded={servicesOpen}
               className={cn(
-                "flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
+                "flex items-center gap-1 rounded-lg px-4 py-3 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
                 servicesOpen
                   ? "text-primary-600"
                   : "text-gray-700 hover:text-gray-900",
@@ -284,7 +284,7 @@ export function Header() {
                       <span className="h-1 w-1 animate-pulse rounded-full bg-primary-400" />
                       Browse all
                     </div>
-                    <p className="font-display text-lg font-bold leading-tight">
+                    <p className="font-sans text-lg font-bold leading-tight">
                       Find the right service provider for{" "}
                       <span className="italic text-primary-300">any job.</span>
                     </p>
@@ -318,7 +318,7 @@ export function Header() {
               key={link.name}
               href={link.href}
               className={cn(
-                "rounded-lg px-3 py-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
+                "rounded-lg px-4 py-3 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
                 isActiveLink(link.href)
                   ? "text-primary-600"
                   : "text-gray-700 hover:text-gray-900",
@@ -490,7 +490,7 @@ export function Header() {
                   key={link.name}
                   href={link.href}
                   className={cn(
-                    "block rounded-xl px-4 py-3 text-base font-semibold transition-all",
+                    "block rounded-xl px-4 py-4 text-base font-semibold transition-all min-h-[48px] flex items-center font-sans",
                     isActiveLink(link.href)
                       ? "bg-primary-50 text-primary-600"
                       : "text-gray-700 hover:bg-gray-50",
@@ -510,7 +510,7 @@ export function Header() {
                   <Link
                     key={s.name}
                     href={s.href}
-                    className="flex items-center gap-2 rounded-xl border-2 border-transparent bg-gray-50 px-3 py-3 transition-all hover:border-primary-200 hover:bg-primary-50"
+                    className="flex items-center gap-2 rounded-xl border-2 border-transparent bg-gray-50 px-4 py-4 transition-all hover:border-primary-200 hover:bg-primary-50 min-h-[48px]"
                   >
                     <s.icon
                       className="h-5 w-5 text-primary-500"

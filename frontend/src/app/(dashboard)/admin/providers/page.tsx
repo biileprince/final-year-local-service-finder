@@ -33,7 +33,7 @@ export default function AdminVerificationQueuePage() {
     try {
       const res = await adminService.getPendingVerifications({ limit: 50 });
       const items =
-        "items" in res ? res.items : (res as { data: Provider[] }).data;
+        "items" in res ? res.items : "providers" in res ? res.providers : [];
       setProviders(items || []);
     } catch (err) {
       toast({

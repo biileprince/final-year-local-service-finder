@@ -43,10 +43,13 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
 
-  // --- Email (SendGrid; required in production) ---
+  // --- Email (Resend; required in production) ---
+  RESEND_API_KEY: z.string().optional(),
+  // Legacy — read for backwards compatibility, no longer used.
   SENDGRID_API_KEY: z.string().optional(),
   EMAIL_FROM: z.email().optional(),
   EMAIL_FROM_NAME: z.string().optional(),
+  EMAIL_REPLY_TO: z.email().optional(),
 
   // --- SMS provider switch + credentials ---
   SMS_PROVIDER: z.enum(["twilio", "africas_talking"]).default("africas_talking"),
@@ -67,7 +70,7 @@ const PROD_REQUIRED: (keyof Env)[] = [
   "CLOUDINARY_CLOUD_NAME",
   "CLOUDINARY_API_KEY",
   "CLOUDINARY_API_SECRET",
-  "SENDGRID_API_KEY",
+  "RESEND_API_KEY",
   "EMAIL_FROM",
   "COOKIE_SECRET",
 ];

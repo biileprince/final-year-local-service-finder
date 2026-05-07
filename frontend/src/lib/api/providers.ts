@@ -143,6 +143,17 @@ export const providersService = {
     return apiClient.get(`/bookings/stats/${providerId}`, true);
   },
 
+  async setVerificationDocuments(
+    providerId: string,
+    docs: { idDocumentId?: string | null; businessLicenseId?: string | null },
+  ): Promise<Provider> {
+    return apiClient.put<Provider>(
+      `/providers/${providerId}/verification-documents`,
+      docs,
+      true,
+    );
+  },
+
   async addGalleryItems(providerId: string, fileIds: string[]) {
     return apiClient.post(
       `/providers/${providerId}/gallery`,

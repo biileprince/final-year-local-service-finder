@@ -33,6 +33,7 @@ import {
 import type { Provider, Review, Availability } from "@/types";
 import { formatRelativeTime, formatTime, cn } from "@/lib/utils";
 import { useAuth } from "@/hooks";
+import { ReviewCard } from "@/components/reviews/review-card";
 
 // ─── Availability Tab ────────────────────────────────────────────────────────
 
@@ -684,43 +685,14 @@ export default function ProviderDetailPage() {
               </Card>
             ) : (
               reviews.map((review) => (
-                <Card key={review.id}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <Avatar
-                        src={review.customer?.profileImage}
-                        name={review.customer?.name}
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium text-secondary-900">
-                            {review.customer?.name}
-                          </h4>
-                          <span className="text-sm text-secondary-500">
-                            {formatRelativeTime(review.createdAt)}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex items-center gap-1">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`h-4 w-4 ${
-                                i < review.rating
-                                  ? "fill-warning-500 text-warning-500"
-                                  : "fill-secondary-200 text-secondary-200"
-                              }`}
-                            />
-                          ))}
-                        </div>
-                        {review.comment && (
-                          <p className="mt-3 text-secondary-700">
-                            {review.comment}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <ReviewCard
+                  key={review.id}
+                  review={review}
+                  canReply={
+                    user?.role === "PROVIDER" &&
+                    user?.id === provider?.user?.id
+                  }
+                />
               ))
             )}
           </div>

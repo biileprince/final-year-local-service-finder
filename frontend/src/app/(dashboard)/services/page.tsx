@@ -10,6 +10,8 @@ import {
   AlertCircle,
   ImagePlus,
   Trash2,
+  FileText,
+  ShieldCheck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +38,9 @@ export default function ProviderServicesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState<"id" | "license" | null>(
+    null,
+  );
   const { toast } = useToast();
   const [message, setMessage] = useState<{
     kind: "success" | "error";
@@ -115,6 +120,62 @@ export default function ProviderServicesPage() {
     } finally {
       setUploadingGallery(false);
       e.target.value = "";
+    }
+  };
+
+  const handleVerificationDocUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    kind: "id" | "license",
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file || !provider) return;
+    setUploadingDoc(kind);
+    try {
+      const uploaded = await filesService.upload(file, "VERIFICATION");
+      const docs =
+        kind === "id"
+          ? { idDocumentId: uploaded.id }
+          : { businessLicenseId: uploaded.id };
+      await providersService.setVerificationDocuments(provider.id, docs);
+      const updated = await providersService.getMyProfile();
+      setProvider(updated);
+      toast({
+        variant: "success",
+        title: kind === "id" ? "ID uploaded" : "License uploaded",
+        description: "Admins can now review your verification.",
+      });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Upload failed",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setUploadingDoc(null);
+      e.target.value = "";
+    }
+  };
+
+  const handleVerificationDocRemove = async (kind: "id" | "license") => {
+    if (!provider) return;
+    setUploadingDoc(kind);
+    try {
+      const docs =
+        kind === "id"
+          ? { idDocumentId: null }
+          : { businessLicenseId: null };
+      await providersService.setVerificationDocuments(provider.id, docs);
+      const updated = await providersService.getMyProfile();
+      setProvider(updated);
+      toast({ variant: "success", title: "Document removed" });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Remove failed",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setUploadingDoc(null);
     }
   };
 
@@ -364,6 +425,84 @@ export default function ProviderServicesPage() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Verification documents */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-primary-600" />
+            Verification documents
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-secondary-600">
+            Upload a government-issued ID and (optionally) a business license.
+            Admins use these to verify your account before it shows up in search.
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(["id", "license"] as const).map((kind) => {
+              const file =
+                kind === "id" ? provider.idDocument : provider.businessLicense;
+              const label = kind === "id" ? "ID document" : "Business license";
+              const isImg =
+                file?.url && /\.(png|jpe?g|gif|webp)$/i.test(file.url);
+              return (
+                <div
+                  key={kind}
+                  className="rounded-xl border border-secondary-200 bg-white p-4"
+                >
+                  <p className="text-sm font-semibold text-secondary-900">
+                    {label}
+                  </p>
+                  {file ? (
+                    <div className="mt-2 space-y-2">
+                      {isImg ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={file.url}
+                          alt={label}
+                          className="max-h-40 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <a
+                          href={file.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-2 text-sm text-primary-700 underline"
+                        >
+                          <FileText className="h-4 w-4" />
+                          {file.fileName || "Open file"}
+                        </a>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleVerificationDocRemove(kind)}
+                        disabled={uploadingDoc === kind}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-3 py-2 text-sm font-semibold text-secondary-700 hover:border-primary-400 hover:bg-primary-50">
+                      <ImagePlus className="h-4 w-4" />
+                      {uploadingDoc === kind ? "Uploading…" : "Upload"}
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={(e) => handleVerificationDocUpload(e, kind)}
+                        disabled={uploadingDoc === kind}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
 
