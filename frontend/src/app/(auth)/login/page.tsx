@@ -78,7 +78,7 @@ function LoginForm() {
           label="Email address"
           type="email"
           autoComplete="email"
-          placeholder="you@example.com"
+          placeholder="Enter your email address"
           leftIcon={<Mail className="h-5 w-5" />}
           error={errors.email?.message}
           {...register("email")}

@@ -140,7 +140,7 @@ function RegisterForm() {
 
         <Input
           label="Full name"
-          placeholder="Ama Mensah"
+          placeholder="Enter your full name"
           autoComplete="name"
           leftIcon={<User className="h-5 w-5" />}
           error={errors.name?.message}
@@ -151,7 +151,7 @@ function RegisterForm() {
           label="Email address"
           type="email"
           autoComplete="email"
-          placeholder="you@example.com"
+          placeholder="Enter your email address"
           leftIcon={<Mail className="h-5 w-5" />}
           error={errors.email?.message}
           {...register("email")}
@@ -171,7 +171,7 @@ function RegisterForm() {
           label="Password"
           type={showPassword ? "text" : "password"}
           autoComplete="new-password"
-          placeholder="At least 8 characters"
+          placeholder="Enter your password"
           hint="Use uppercase, lowercase and a number."
           error={errors.password?.message}
           rightIcon={
@@ -195,7 +195,7 @@ function RegisterForm() {
           label="Confirm password"
           type={showConfirmPassword ? "text" : "password"}
           autoComplete="new-password"
-          placeholder="Re-enter password"
+          placeholder="Enter your password again"
           error={errors.confirmPassword?.message}
           rightIcon={
             <button
