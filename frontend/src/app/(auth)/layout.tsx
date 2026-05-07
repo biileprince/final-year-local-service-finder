@@ -27,7 +27,7 @@ export default function AuthLayout({
               <Search className="h-5 w-5 text-white" strokeWidth={2.5} />
             </span>
             <span className="flex flex-col leading-tight">
-              <span className="font-display text-base font-bold tracking-tight text-gray-900">
+              <span className="font-sans text-base font-bold tracking-tight text-gray-900">
                 Local Service
               </span>
               <span className="text-[10px] font-bold tracking-[0.2em] text-primary-500">
@@ -70,7 +70,7 @@ export default function AuthLayout({
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
             Simple and clear
           </p>
-          <h2 className="mt-3 font-display text-4xl font-bold leading-[1.1] tracking-tight">
+          <h2 className="mt-3 font-sans text-3xl font-bold leading-[1.15] tracking-tight">
             The right service provider,
             <br />
             <span className="text-primary-600">when you need help.</span>

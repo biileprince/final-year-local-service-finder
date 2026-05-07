@@ -76,7 +76,7 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <div className="mx-auto w-full max-w-md text-center">
-        <h1 className="font-display text-4xl font-bold tracking-tight text-gray-900">
+        <h1 className="font-sans text-2xl font-bold tracking-tight text-gray-900">
           Invalid reset link
         </h1>
         <p className="mt-3 text-gray-600">
@@ -95,7 +95,7 @@ function ResetPasswordForm() {
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50">
           <CheckCircle2 className="h-8 w-8 text-green-600" />
         </div>
-        <h1 className="mt-6 font-display text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+        <h1 className="mt-6 font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
           Password <span className="italic text-primary-600">updated.</span>
         </h1>
         <p className="mt-3 text-gray-600">
@@ -113,7 +113,7 @@ function ResetPasswordForm() {
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
         Reset password
       </p>
-      <h1 className="mt-2 font-display text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+      <h1 className="mt-2 font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
         Choose a new <span className="italic text-primary-600">password.</span>
       </h1>
       <p className="mt-3 text-gray-600">

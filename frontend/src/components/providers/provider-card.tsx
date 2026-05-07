@@ -65,12 +65,30 @@ export function ProviderCard({
           <div className="flex flex-1 flex-col">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <h3 className="truncate text-xl font-bold text-gray-900">
+                <h3 className="text-xl font-bold text-gray-900">
                   {provider.user.name}
                 </h3>
-                <p className="text-base font-medium capitalize text-gray-600">
+                <p className="text-base font-medium capitalize text-primary-600">
                   {primaryCategory?.name ?? "Service Professional"}
                 </p>
+                {/* All categories */}
+                {provider.categories.length > 1 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {provider.categories.map((pc) => (
+                      <span
+                        key={pc.id}
+                        className={cn(
+                          "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
+                          pc.isPrimary
+                            ? "bg-primary-100 text-primary-700"
+                            : "bg-gray-100 text-gray-600",
+                        )}
+                      >
+                        {pc.category.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2 rounded-full bg-green-50 px-4 py-2">
                 <Star className="h-5 w-5 fill-green-600 text-green-600" />
@@ -80,9 +98,12 @@ export function ProviderCard({
               </div>
             </div>
 
-            {provider.specialties && provider.specialties.length > 0 && (
-              <p className="mt-2 line-clamp-1 text-base text-gray-600">
-                {provider.specialties.slice(0, 3).map((s) => s.specialty).join(" • ")}
+            {/* Bio / About description */}
+            {(provider.bio || provider.specialties?.length) && (
+              <p className="mt-3 text-base leading-relaxed text-gray-600">
+                {provider.bio ||
+                  provider.specialties?.map((s) => s.specialty).join(" · ") ||
+                  ""}
               </p>
             )}
 
@@ -100,10 +121,10 @@ export function ProviderCard({
             </div>
 
             <div className="mt-6 flex items-end justify-end gap-4">
-              <Button variant="outline" size="icon" aria-label="Call">
+              <Button variant="outline" size="icon" aria-label="Call" title="Call">
                 <Phone className="h-5 w-5" />
               </Button>
-              <Button size="lg" asChild>
+              <Button size="lg" variant="outline" className="border-primary-200 text-primary-700 hover:bg-primary-50 hover:text-primary-800" asChild>
                 <Link href={`/providers/${provider.id}`}>View &amp; Book</Link>
               </Button>
             </div>

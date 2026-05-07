@@ -79,8 +79,6 @@ const servicesSecondary: ServiceItem[] = [
 ];
 
 const directLinks = [
-  { name: "Home", href: "/" },
-  { name: "Browse Services", href: "/search" },
   { name: "How it works", href: "/#how-it-works" },
   { name: "For providers", href: "/register?role=provider" },
 ];
@@ -184,11 +182,11 @@ export function Header() {
               className="absolute -inset-px rounded-xl ring-1 ring-inset ring-white/30"
             />
           </span>
-          <span className="hidden flex-col leading-tight sm:flex">
-            <span className="font-sans text-base font-bold tracking-tight text-gray-900">
+          <span className="flex flex-col leading-tight">
+            <span className="font-sans text-sm font-bold tracking-tight text-gray-900 sm:text-base">
               Local Service
             </span>
-            <span className="text-[10px] font-bold tracking-[0.2em] text-primary-500">
+            <span className="text-[9px] font-bold tracking-[0.2em] text-primary-500 sm:text-[10px]">
               FINDER
             </span>
           </span>
@@ -196,6 +194,18 @@ export function Header() {
 
         {/* Desktop Nav */}
         <nav className="hidden items-center gap-1 lg:flex">
+          <Link
+            href="/"
+            className={cn(
+              "rounded-lg px-4 py-3 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
+              isActiveLink("/")
+                ? "text-primary-600"
+                : "text-gray-700 hover:text-gray-900",
+            )}
+          >
+            Home
+          </Link>
+
           {/* Services mega menu */}
           <div
             className="relative"
@@ -485,6 +495,28 @@ export function Header() {
             </form>
 
             <nav className="space-y-1">
+              <Link
+                href="/"
+                className={cn(
+                  "block rounded-xl px-4 py-4 text-base font-semibold transition-all min-h-[48px] flex items-center font-sans",
+                  isActiveLink("/")
+                    ? "bg-primary-50 text-primary-600"
+                    : "text-gray-700 hover:bg-gray-50",
+                )}
+              >
+                Home
+              </Link>
+              <Link
+                href="/search"
+                className={cn(
+                  "block rounded-xl px-4 py-4 text-base font-semibold transition-all min-h-[48px] flex items-center font-sans",
+                  isActiveLink("/search")
+                    ? "bg-primary-50 text-primary-600"
+                    : "text-gray-700 hover:bg-gray-50",
+                )}
+              >
+                Browse Services
+              </Link>
               {directLinks.map((link) => (
                 <Link
                   key={link.name}

@@ -97,7 +97,7 @@ function RegisterForm() {
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
         Register
       </p>
-      <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+      <h1 className="mt-1 font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
         Register for an{" "}
         <span className="italic text-primary-600">account.</span>
       </h1>
