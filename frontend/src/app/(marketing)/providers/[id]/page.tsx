@@ -35,7 +35,7 @@ import { formatRelativeTime, formatTime, cn } from "@/lib/utils";
 import { useAuth } from "@/hooks";
 import { ReviewCard } from "@/components/reviews/review-card";
 
-// ─── Availability Tab ────────────────────────────────────────────────────────
+// ─── Availability Section ────────────────────────────────────────────────────
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
@@ -43,7 +43,7 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
+function ProviderAvailabilitySection({ provider }: { provider: Provider }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -92,22 +92,23 @@ function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
-            <CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary-600" />
               {MONTH_NAMES[month]} {year}
             </CardTitle>
-            <div className="flex gap-1">
+            <div className="flex gap-2">
               <button
                 onClick={prevMonth}
                 disabled={viewDate <= new Date(today.getFullYear(), today.getMonth(), 1)}
-                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 disabled:opacity-30"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 disabled:opacity-30"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
               <button
                 onClick={nextMonth}
-                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
@@ -116,7 +117,7 @@ function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex justify-center py-10">
+            <div className="flex justify-center py-12">
               <Spinner />
             </div>
           ) : (
@@ -124,7 +125,7 @@ function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
               {/* Day headers */}
               <div className="mb-2 grid grid-cols-7 text-center">
                 {WEEKDAYS.map((d) => (
-                  <span key={d} className="py-1 text-xs font-semibold text-gray-400">
+                  <span key={d} className="py-2 text-sm font-semibold text-gray-400">
                     {d}
                   </span>
                 ))}
@@ -154,7 +155,7 @@ function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
                         setSelectedDate(isSelected ? null : cell.dateKey)
                       }
                       className={cn(
-                        "relative flex flex-col items-center rounded-lg py-2 text-sm transition-all",
+                        "relative flex min-h-[48px] flex-col items-center justify-center rounded-lg py-2 text-base transition-all",
                         isSelected
                           ? "bg-primary-600 text-white"
                           : hasSlots && !isPast
@@ -178,13 +179,13 @@ function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
               </div>
 
               {/* Legend */}
-              <div className="mt-4 flex items-center gap-4 text-xs text-gray-500">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-primary-500" />
+              <div className="mt-6 flex items-center gap-6 text-sm text-gray-500">
+                <span className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-primary-500" />
                   Available
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-gray-200" />
+                <span className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-gray-200" />
                   Unavailable
                 </span>
               </div>
@@ -197,7 +198,8 @@ function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
       {selectedDate && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Clock className="h-5 w-5 text-primary-600" />
               Available times on{" "}
               {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-GH", {
                 weekday: "long",
@@ -208,18 +210,18 @@ function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
           </CardHeader>
           <CardContent>
             {availableSlots.length === 0 ? (
-              <p className="text-sm text-gray-500">
+              <p className="text-base text-gray-500">
                 No available time slots for this day.
               </p>
             ) : (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-4">
                 {availableSlots.map((slot) => (
                   <Link
                     key={slot.id}
                     href={`/book/${provider.id}?date=${selectedDate}&slot=${slot.startTime}`}
                   >
-                    <span className="inline-flex items-center gap-1.5 rounded-lg border-2 border-primary-200 bg-primary-50 px-3 py-1.5 text-sm font-semibold text-primary-700 transition-all hover:border-primary-500 hover:bg-primary-100">
-                      <Clock className="h-3.5 w-3.5" />
+                    <span className="inline-flex min-h-[48px] items-center gap-2 rounded-xl border-2 border-primary-200 bg-primary-50 px-4 py-3 text-base font-semibold text-primary-700 transition-all hover:border-primary-500 hover:bg-primary-100">
+                      <Clock className="h-4 w-4" />
                       {formatTime(slot.startTime)}
                       {slot.endTime && ` – ${formatTime(slot.endTime)}`}
                     </span>
@@ -227,10 +229,10 @@ function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
                 ))}
               </div>
             )}
-            <div className="mt-4">
-              <Button asChild>
+            <div className="mt-6">
+              <Button size="lg" asChild>
                 <Link href={`/book/${provider.id}`}>
-                  <Calendar className="mr-2 h-4 w-4" />
+                  <Calendar className="mr-2 h-5 w-5" />
                   Book this provider
                 </Link>
               </Button>
@@ -240,10 +242,10 @@ function ProviderAvailabilityTab({ provider }: { provider: Provider }) {
       )}
 
       {availabilities.length === 0 && !loading && (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-8 text-center text-base text-gray-500">
           This provider hasn&apos;t set their availability for this month yet.
-          <div className="mt-3">
-            <Button asChild variant="outline" size="sm">
+          <div className="mt-4">
+            <Button asChild variant="outline" size="lg">
               <Link href={`/book/${provider.id}`}>Book anyway</Link>
             </Button>
           </div>
@@ -279,9 +281,6 @@ export default function ProviderDetailPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [suggested, setSuggested] = useState<Provider[]>([]);
-  const [activeTab, setActiveTab] = useState<
-    "about" | "reviews" | "availability"
-  >("about");
 
   useEffect(() => {
     if (params.id) {
@@ -339,39 +338,41 @@ export default function ProviderDetailPage() {
 
   if (!provider) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-16">
+      <div className="mx-auto max-w-4xl px-4 py-16 sm:px-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-secondary-900">
+          <h1 className="text-3xl font-bold text-secondary-900">
             Provider not found
           </h1>
-          <p className="mt-2 text-secondary-600">
+          <p className="mt-4 text-lg text-secondary-600">
             This provider may no longer be available. Try one of the top-rated
             providers below.
           </p>
-          <div className="mt-4 flex justify-center gap-2">
-            <Button asChild variant="outline">
+          <div className="mt-6 flex justify-center gap-4">
+            <Button asChild variant="outline" size="lg">
               <Link href="/search">Browse all providers</Link>
             </Button>
           </div>
         </div>
 
         {suggested.length > 0 && (
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {suggested.map((p) => (
               <Link
                 key={p.id}
                 href={`/providers/${p.id}`}
-                className="group flex items-center gap-3 rounded-2xl border border-secondary-100 bg-white p-4 transition-shadow hover:shadow-md"
+                className="group flex items-center gap-4 rounded-2xl border border-secondary-100 bg-white p-6 transition-shadow hover:shadow-md"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-lg font-bold text-primary-700">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-100 text-xl font-bold text-primary-700">
                   {p.user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1">
-                  <p className="font-semibold text-secondary-900 group-hover:text-primary-700">
+                  <p className="text-lg font-bold text-secondary-900 group-hover:text-primary-700">
                     {p.user.name}
                   </p>
-                  <p className="text-xs text-secondary-500">
-                    {p.location} · ★ {Number(p.rating).toFixed(1)}
+                  <p className="text-sm text-secondary-500">
+                    <MapPin className="mr-1 inline h-4 w-4" />
+                    {p.location} · <Star className="mr-1 inline h-4 w-4 fill-amber-400 text-amber-400" />
+                    {Number(p.rating).toFixed(1)}
                   </p>
                 </div>
               </Link>
@@ -384,66 +385,69 @@ export default function ProviderDetailPage() {
 
   return (
     <div className="min-h-screen bg-secondary-50">
+      {/* ====== Provider Header ====== */}
       <div className="bg-white shadow-sm">
-        <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-8 lg:px-8">
           <Link
             href="/search"
-            className="mb-4 inline-flex items-center text-sm text-secondary-600 hover:text-secondary-900"
+            className="mb-6 inline-flex items-center gap-2 text-base font-medium text-secondary-600 hover:text-secondary-900"
           >
-            <ChevronLeft className="mr-1 h-4 w-4" />
+            <ChevronLeft className="h-5 w-5" />
             Back to search
           </Link>
 
-          <div className="flex flex-col gap-6 sm:flex-row">
+          <div className="flex flex-col gap-8 sm:flex-row">
             <Avatar
               size="2xl"
               src={provider.user.profileImage}
               name={provider.user.name}
+              className="h-24 w-24 shrink-0 rounded-2xl"
             />
             <div className="flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold text-secondary-900">
+              <div className="flex flex-wrap items-center gap-4">
+                <h1 className="text-3xl font-bold text-secondary-900">
                   {provider.user.name}
                 </h1>
                 {provider.verificationStatus === "VERIFIED" && (
-                  <Badge variant="success">
-                    <CheckCircle className="mr-1 h-3 w-3" />
+                  <Badge variant="success" className="gap-1 px-3 py-1.5 text-sm">
+                    <CheckCircle className="h-4 w-4" />
                     Verified
                   </Badge>
                 )}
               </div>
 
-              <div className="mt-2 flex flex-wrap gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
                 {provider.categories.map((pc) => (
-                  <Badge key={pc.id} variant="secondary">
+                  <Badge key={pc.id} variant="secondary" className="px-3 py-1.5 text-sm">
                     {pc.category.name}
                   </Badge>
                 ))}
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-secondary-600">
-                <div className="flex items-center gap-1">
-                  <Star className="h-4 w-4 fill-warning-500 text-warning-500" />
-                  <span className="font-semibold text-secondary-900">
+              {/* Key info with icons — flattened for non-literate users */}
+              <div className="mt-6 flex flex-wrap items-center gap-6 text-base text-secondary-600">
+                <div className="flex items-center gap-2">
+                  <Star className="h-5 w-5 fill-warning-500 text-warning-500" />
+                  <span className="font-bold text-secondary-900">
                     {Number(provider.rating).toFixed(1)}
                   </span>
                   <span>({provider.reviewCount} reviews)</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-primary-600" />
                   <span>{provider.location}</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
+                <div className="flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-primary-600" />
                   <span>{provider.yearsExperience} years experience</span>
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center gap-4">
+              <div className="mt-6 flex flex-wrap items-center gap-4">
                 {user?.role === "CUSTOMER" && (
-                  <Button asChild>
+                  <Button size="lg" asChild>
                     <Link href={`/book/${provider.id}`}>
-                      <Calendar className="mr-2 h-4 w-4" />
+                      <Calendar className="mr-2 h-5 w-5" />
                       Book Now
                     </Link>
                   </Button>
@@ -451,10 +455,11 @@ export default function ProviderDetailPage() {
                 {(!user || user.role === "CUSTOMER") && (
                   <Button
                     variant="outline"
+                    size="lg"
                     onClick={() => handleMessage(provider.id)}
                     isLoading={messaging}
                   >
-                    <MessageSquare className="mr-2 h-4 w-4" />
+                    <MessageSquare className="mr-2 h-5 w-5" />
                     Message
                   </Button>
                 )}
@@ -464,69 +469,51 @@ export default function ProviderDetailPage() {
         </div>
       </div>
 
-      <div className="border-b bg-white">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-          <nav className="flex gap-8">
-            {(["about", "reviews", "availability"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`border-b-2 py-4 text-sm font-medium transition-colors ${
-                  activeTab === tab
-                    ? "border-primary-600 text-primary-600"
-                    : "border-transparent text-secondary-600 hover:text-secondary-900"
-                }`}
-              >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-        {activeTab === "about" && (
-          <div className="space-y-6">
-            {/* Track record */}
-            <div className="grid gap-3 sm:grid-cols-3">
+      {/* ====== Main Content — Flat layout, no tabs ====== */}
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-8 lg:px-8">
+        <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
+          {/* Left Column: Info */}
+          <div className="space-y-8">
+            {/* Track record stats */}
+            <div className="grid gap-4 sm:grid-cols-3">
               <Card>
-                <CardContent className="flex items-center gap-3 p-5">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100">
-                    <Award className="h-5 w-5 text-primary-600" />
+                <CardContent className="flex items-center gap-4 p-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-100">
+                    <Award className="h-6 w-6 text-primary-600" />
                   </div>
                   <div>
-                    <p className="text-xl font-bold text-secondary-900">
+                    <p className="text-2xl font-bold text-secondary-900">
                       {provider.completedBookings}
                     </p>
-                    <p className="text-xs text-secondary-500">Jobs completed</p>
+                    <p className="text-sm text-secondary-500">Jobs completed</p>
                   </div>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="flex items-center gap-3 p-5">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warning-50">
-                    <Star className="h-5 w-5 text-warning-600" />
+                <CardContent className="flex items-center gap-4 p-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning-50">
+                    <Star className="h-6 w-6 text-warning-600" />
                   </div>
                   <div>
-                    <p className="text-xl font-bold text-secondary-900">
+                    <p className="text-2xl font-bold text-secondary-900">
                       {Number(provider.rating).toFixed(1)}
                     </p>
-                    <p className="text-xs text-secondary-500">
+                    <p className="text-sm text-secondary-500">
                       from {provider.reviewCount} reviews
                     </p>
                   </div>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="flex items-center gap-3 p-5">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary-100">
-                    <Briefcase className="h-5 w-5 text-secondary-700" />
+                <CardContent className="flex items-center gap-4 p-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary-100">
+                    <Briefcase className="h-6 w-6 text-secondary-700" />
                   </div>
                   <div>
-                    <p className="text-xl font-bold text-secondary-900">
+                    <p className="text-2xl font-bold text-secondary-900">
                       {provider.yearsExperience}+
                     </p>
-                    <p className="text-xs text-secondary-500">
+                    <p className="text-sm text-secondary-500">
                       Years experience
                     </p>
                   </div>
@@ -534,12 +521,13 @@ export default function ProviderDetailPage() {
               </Card>
             </div>
 
+            {/* About */}
             <Card>
               <CardHeader>
-                <CardTitle>About</CardTitle>
+                <CardTitle className="text-xl">About</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="whitespace-pre-line text-secondary-700">
+                <p className="whitespace-pre-line text-base leading-relaxed text-secondary-700">
                   {provider.bio || "No description available."}
                 </p>
               </CardContent>
@@ -549,18 +537,18 @@ export default function ProviderDetailPage() {
             {provider.specialties && provider.specialties.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-xl">
                     <Sparkles className="h-5 w-5 text-primary-600" />
                     Specialties
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-3">
                     {provider.specialties.map((s) => (
                       <Badge
                         key={s.id}
                         variant="secondary"
-                        className="px-3 py-1.5 text-sm"
+                        className="px-4 py-2 text-base"
                       >
                         {s.specialty}
                       </Badge>
@@ -574,17 +562,17 @@ export default function ProviderDetailPage() {
             {provider.categories.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-xl">
                     <Briefcase className="h-5 w-5 text-primary-600" />
                     Services offered
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-3">
                     {provider.categories.map((pc) => (
                       <span
                         key={pc.id}
-                        className={`inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-sm font-semibold ${
+                        className={`inline-flex items-center gap-2 rounded-full border-2 px-4 py-2 text-base font-semibold ${
                           pc.isPrimary
                             ? "border-primary-300 bg-primary-50 text-primary-700"
                             : "border-secondary-200 bg-white text-secondary-700"
@@ -592,7 +580,7 @@ export default function ProviderDetailPage() {
                       >
                         {pc.category.name}
                         {pc.isPrimary && (
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-primary-500">
+                          <span className="text-xs font-bold uppercase tracking-wide text-primary-500">
                             Primary
                           </span>
                         )}
@@ -607,13 +595,13 @@ export default function ProviderDetailPage() {
             {provider.gallery && provider.gallery.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-xl">
                     <ImageIcon className="h-5 w-5 text-primary-600" />
                     Work gallery
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                     {provider.gallery.map((g) => (
                       <a
                         key={g.id}
@@ -629,7 +617,7 @@ export default function ProviderDetailPage() {
                           className="aspect-square w-full object-cover transition-transform group-hover:scale-105"
                         />
                         {g.title && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-xs font-semibold text-white">
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-sm font-semibold text-white">
                             {g.title}
                           </div>
                         )}
@@ -640,30 +628,68 @@ export default function ProviderDetailPage() {
               </Card>
             )}
 
+            {/* Reviews — flattened, not behind a tab */}
             <Card>
               <CardHeader>
-                <CardTitle>Contact information</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Star className="h-5 w-5 text-primary-600" />
+                  Reviews ({reviews.length})
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent>
+                {reviews.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <Star className="mx-auto h-12 w-12 text-secondary-300" />
+                    <p className="mt-4 text-base text-secondary-600">No reviews yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {reviews.map((review) => (
+                      <ReviewCard
+                        key={review.id}
+                        review={review}
+                        canReply={
+                          user?.role === "PROVIDER" &&
+                          user?.id === provider?.user?.id
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column: Action sidebar */}
+          <div className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+            {/* Contact Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Phone className="h-5 w-5 text-primary-600" />
+                  Contact information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 {provider.user.email && (
-                  <div className="flex items-center gap-3">
-                    <Mail className="h-5 w-5 text-secondary-400" />
-                    <span className="text-secondary-700">
+                  <div className="flex items-center gap-4">
+                    <Mail className="h-5 w-5 shrink-0 text-secondary-400" />
+                    <span className="text-base text-secondary-700">
                       {provider.user.email}
                     </span>
                   </div>
                 )}
                 {provider.user.phone && (
-                  <div className="flex items-center gap-3">
-                    <Phone className="h-5 w-5 text-secondary-400" />
-                    <span className="text-secondary-700">
+                  <div className="flex items-center gap-4">
+                    <Phone className="h-5 w-5 shrink-0 text-secondary-400" />
+                    <span className="text-base text-secondary-700">
                       {provider.user.phone}
                     </span>
                   </div>
                 )}
-                <div className="flex items-center gap-3">
-                  <MapPin className="h-5 w-5 text-secondary-400" />
-                  <span className="text-secondary-700">
+                <div className="flex items-center gap-4">
+                  <MapPin className="h-5 w-5 shrink-0 text-secondary-400" />
+                  <span className="text-base text-secondary-700">
                     {provider.location}
                     {provider.serviceRadiusKm &&
                       ` · serves up to ${provider.serviceRadiusKm} km`}
@@ -671,36 +697,29 @@ export default function ProviderDetailPage() {
                 </div>
               </CardContent>
             </Card>
-          </div>
-        )}
 
-        {activeTab === "reviews" && (
-          <div className="space-y-4">
-            {reviews.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Star className="mx-auto h-12 w-12 text-secondary-300" />
-                  <p className="mt-4 text-secondary-600">No reviews yet</p>
-                </CardContent>
-              </Card>
-            ) : (
-              reviews.map((review) => (
-                <ReviewCard
-                  key={review.id}
-                  review={review}
-                  canReply={
-                    user?.role === "PROVIDER" &&
-                    user?.id === provider?.user?.id
-                  }
-                />
-              ))
-            )}
-          </div>
-        )}
+            {/* Availability Calendar */}
+            <ProviderAvailabilitySection provider={provider} />
 
-        {activeTab === "availability" && (
-          <ProviderAvailabilityTab provider={provider} />
-        )}
+            {/* Book CTA (sticky sidebar) */}
+            <Card className="border-2 border-primary-200 bg-primary-50">
+              <CardContent className="p-6 text-center">
+                <h3 className="text-xl font-bold text-secondary-900">
+                  Ready to book?
+                </h3>
+                <p className="mt-2 text-base text-secondary-600">
+                  Pick a date and time, and the provider will confirm.
+                </p>
+                <Button size="xl" className="mt-6 w-full" asChild>
+                  <Link href={`/book/${provider.id}`}>
+                    <Calendar className="mr-2 h-5 w-5" />
+                    Book Now
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -180,11 +180,14 @@ export default function BookProviderPage() {
 
   if (!provider) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center">
-        <h1 className="text-2xl font-bold text-secondary-900">
+      <div className="flex min-h-screen flex-col items-center justify-center px-4">
+        <h1 className="text-3xl font-bold text-secondary-900">
           Provider not found
         </h1>
-        <Button asChild className="mt-4">
+        <p className="mt-4 text-lg text-secondary-600">
+          We could not find this service provider.
+        </p>
+        <Button asChild className="mt-6" size="lg">
           <Link href="/search">Back to Search</Link>
         </Button>
       </div>
@@ -195,39 +198,39 @@ export default function BookProviderPage() {
 
   return (
     <div className="min-h-screen bg-secondary-50 py-8">
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl px-4 sm:px-8 lg:px-8">
         {/* Header */}
         <Link
           href={`/providers/${provider.id}`}
-          className="mb-6 inline-flex items-center text-sm text-secondary-600 hover:text-secondary-900"
+          className="mb-8 inline-flex items-center gap-2 text-base font-medium text-secondary-600 hover:text-secondary-900"
         >
-          <ChevronLeft className="mr-1 h-4 w-4" />
+          <ChevronLeft className="h-5 w-5" />
           Back to provider
         </Link>
 
-        <h1 className="mb-8 text-2xl font-bold text-secondary-900">
+        <h1 className="mb-8 text-3xl font-bold text-secondary-900">
           Book a Service
         </h1>
 
         {/* Progress Steps */}
         <div className="mb-8 flex items-center justify-center gap-4">
           {[1, 2, 3].map((s) => (
-            <div key={s} className="flex items-center gap-2">
+            <div key={s} className="flex items-center gap-3">
               <div
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium",
+                  "flex h-12 w-12 items-center justify-center rounded-full text-base font-bold",
                   step >= s
                     ? "bg-primary-600 text-white"
                     : "bg-secondary-200 text-secondary-600",
                 )}
               >
-                {step > s ? <CheckCircle className="h-5 w-5" /> : s}
+                {step > s ? <CheckCircle className="h-6 w-6" /> : s}
               </div>
               <span
                 className={cn(
-                  "text-sm",
+                  "text-base",
                   step >= s
-                    ? "font-medium text-secondary-900"
+                    ? "font-bold text-secondary-900"
                     : "text-secondary-500",
                 )}
               >
@@ -246,33 +249,34 @@ export default function BookProviderPage() {
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg bg-error-50 p-4 text-error-700">
+          <div className="mb-8 rounded-xl bg-error-50 p-6 text-base font-medium text-error-700">
             {error}
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-8 lg:grid-cols-3">
           {/* Main Content */}
           <div className="lg:col-span-2">
             {step === 1 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <Calendar className="h-6 w-6 text-primary-600" />
                     Select a Date
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {/* Calendar Navigation */}
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-6 flex items-center justify-between">
                     <Button
                       variant="outline"
-                      size="sm"
+                      size="icon"
                       onClick={() => navigateMonth("prev")}
+                      aria-label="Previous month"
                     >
-                      <ChevronLeft className="h-4 w-4" />
+                      <ChevronLeft className="h-5 w-5" />
                     </Button>
-                    <h3 className="font-semibold text-secondary-900">
+                    <h3 className="text-lg font-bold text-secondary-900">
                       {currentMonth.toLocaleDateString("en-US", {
                         month: "long",
                         year: "numeric",
@@ -280,10 +284,11 @@ export default function BookProviderPage() {
                     </h3>
                     <Button
                       variant="outline"
-                      size="sm"
+                      size="icon"
                       onClick={() => navigateMonth("next")}
+                      aria-label="Next month"
                     >
-                      <ChevronRight className="h-4 w-4" />
+                      <ChevronRight className="h-5 w-5" />
                     </Button>
                   </div>
 
@@ -292,7 +297,7 @@ export default function BookProviderPage() {
                     {DAYS.map((day) => (
                       <div
                         key={day}
-                        className="py-2 text-center text-xs font-medium text-secondary-500"
+                        className="py-2 text-center text-sm font-semibold text-secondary-500"
                       >
                         {day}
                       </div>
@@ -318,13 +323,13 @@ export default function BookProviderPage() {
                           onClick={() => !isDisabled && setSelectedDate(date)}
                           disabled={isDisabled}
                           className={cn(
-                            "rounded-lg p-2 text-sm transition-colors",
+                            "flex min-h-[48px] items-center justify-center rounded-xl text-base font-medium transition-colors",
                             isDisabled
                               ? "cursor-not-allowed text-secondary-300"
                               : isSelected
                                 ? "bg-primary-600 text-white"
                                 : isToday
-                                  ? "bg-primary-100 text-primary-700"
+                                  ? "bg-primary-100 font-bold text-primary-700"
                                   : "text-secondary-900 hover:bg-secondary-100",
                           )}
                         >
@@ -334,8 +339,8 @@ export default function BookProviderPage() {
                     })}
                   </div>
 
-                  <div className="mt-6 flex justify-end">
-                    <Button onClick={() => setStep(2)} disabled={!selectedDate}>
+                  <div className="mt-8 flex justify-end">
+                    <Button size="lg" onClick={() => setStep(2)} disabled={!selectedDate}>
                       Continue
                     </Button>
                   </div>
@@ -346,39 +351,41 @@ export default function BookProviderPage() {
             {step === 2 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <Clock className="h-6 w-6 text-primary-600" />
                     Choose a Time Slot
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="mb-4 text-secondary-600">
+                  <p className="mb-6 text-base text-secondary-600">
                     Available times for{" "}
                     {selectedDate && formatDate(selectedDate.toISOString())}
                   </p>
 
                   {loadingSlots ? (
-                    <div className="flex justify-center py-8">
+                    <div className="flex justify-center py-12">
                       <Spinner />
                     </div>
                   ) : availableSlots.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-secondary-200 p-6 text-center">
+                    <div className="rounded-xl border border-dashed border-secondary-200 p-8 text-center">
                       <Clock className="mx-auto h-12 w-12 text-secondary-300" />
-                      <p className="mt-4 font-medium text-secondary-900">
+                      <p className="mt-4 text-lg font-bold text-secondary-900">
                         No fixed time slots published for this date.
                       </p>
-                      <p className="mt-1 text-sm text-secondary-600">
+                      <p className="mt-2 text-base text-secondary-600">
                         You can request a flexible booking — the provider will
                         confirm the exact time with you via messaging.
                       </p>
-                      <div className="mt-4 flex flex-wrap justify-center gap-2">
+                      <div className="mt-6 flex flex-wrap justify-center gap-4">
                         <Button
                           variant="outline"
+                          size="lg"
                           onClick={() => setStep(1)}
                         >
                           Choose Another Date
                         </Button>
                         <Button
+                          size="lg"
                           onClick={() => {
                             setFlexibleTime(true);
                             setSelectedSlot(null);
@@ -391,7 +398,7 @@ export default function BookProviderPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                      <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
                         {availableSlots.map((slot) => (
                           <button
                             key={slot.id}
@@ -400,7 +407,7 @@ export default function BookProviderPage() {
                               setFlexibleTime(false);
                             }}
                             className={cn(
-                              "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                              "flex min-h-[48px] items-center justify-center rounded-xl border-2 px-4 py-3 text-base font-semibold transition-colors",
                               selectedSlot?.id === slot.id
                                 ? "border-primary-600 bg-primary-50 text-primary-700"
                                 : "border-secondary-200 text-secondary-700 hover:border-primary-300 hover:bg-primary-50",
@@ -417,22 +424,23 @@ export default function BookProviderPage() {
                           setSelectedSlot(null);
                         }}
                         className={cn(
-                          "mt-3 w-full rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                          "mt-4 flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 px-4 py-3 text-base font-semibold transition-colors",
                           flexibleTime
                             ? "border-primary-600 bg-primary-50 text-primary-700"
                             : "border-dashed border-secondary-300 text-secondary-600 hover:border-primary-300 hover:bg-primary-50",
                         )}
                       >
-                        I'm flexible — let the provider confirm a time
+                        I&apos;m flexible — let the provider confirm a time
                       </button>
                     </>
                   )}
 
-                  <div className="mt-6 flex justify-between">
-                    <Button variant="outline" onClick={() => setStep(1)}>
+                  <div className="mt-8 flex justify-between">
+                    <Button variant="outline" size="lg" onClick={() => setStep(1)}>
                       Back
                     </Button>
                     <Button
+                      size="lg"
                       onClick={() => setStep(3)}
                       disabled={!selectedSlot && !flexibleTime}
                     >
@@ -446,14 +454,14 @@ export default function BookProviderPage() {
             {step === 3 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <MapPin className="h-6 w-6 text-primary-600" />
                     Service Details
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-secondary-700">
+                    <label className="mb-2 block text-base font-semibold text-secondary-700">
                       Service Address *
                     </label>
                     <Input
@@ -464,23 +472,24 @@ export default function BookProviderPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-secondary-700">
+                    <label className="mb-2 block text-base font-semibold text-secondary-700">
                       Describe the issue or service needed *
                     </label>
                     <textarea
                       value={problemDescription}
                       onChange={(e) => setProblemDescription(e.target.value)}
                       rows={4}
-                      className="w-full rounded-lg border border-secondary-300 px-3 py-2 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                      className="w-full rounded-xl border-2 border-secondary-200 bg-white px-4 py-3 text-base text-secondary-900 placeholder:text-secondary-400 transition-all hover:border-secondary-300 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                       placeholder="Please describe what you need help with..."
                     />
                   </div>
 
-                  <div className="mt-6 flex justify-between">
-                    <Button variant="outline" onClick={() => setStep(2)}>
+                  <div className="mt-8 flex justify-between">
+                    <Button variant="outline" size="lg" onClick={() => setStep(2)}>
                       Back
                     </Button>
                     <Button
+                      size="lg"
                       onClick={handleBooking}
                       disabled={!serviceAddress || !problemDescription}
                       isLoading={isBooking}
@@ -494,29 +503,30 @@ export default function BookProviderPage() {
           </div>
 
           {/* Sidebar - Provider Info */}
-          <div className="space-y-4">
+          <div className="space-y-6">
             <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
                   <Avatar
                     size="lg"
                     src={provider.user.profileImage}
                     name={provider.user.name}
+                    className="h-16 w-16"
                   />
                   <div>
-                    <h3 className="font-semibold text-secondary-900">
+                    <h3 className="text-lg font-bold text-secondary-900">
                       {provider.user.name}
                     </h3>
-                    <div className="flex items-center gap-1 text-sm text-secondary-500">
-                      <Star className="h-4 w-4 fill-warning-500 text-warning-500" />
-                      <span>{Number(provider.rating).toFixed(1)}</span>
+                    <div className="mt-1 flex items-center gap-2 text-base text-secondary-500">
+                      <Star className="h-5 w-5 fill-warning-500 text-warning-500" />
+                      <span className="font-semibold">{Number(provider.rating).toFixed(1)}</span>
                       <span>({provider.reviewCount} reviews)</span>
                     </div>
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {provider.categories.slice(0, 2).map((pc) => (
-                    <Badge key={pc.id} variant="secondary">
+                    <Badge key={pc.id} variant="secondary" className="px-3 py-1.5 text-sm">
                       {pc.category.name}
                     </Badge>
                   ))}
@@ -526,34 +536,46 @@ export default function BookProviderPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Booking Summary</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Calendar className="h-5 w-5 text-primary-600" />
+                  Booking Summary
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
+              <CardContent className="space-y-4 text-base">
                 {selectedDate && (
                   <div className="flex justify-between">
-                    <span className="text-secondary-500">Date</span>
-                    <span className="font-medium text-secondary-900">
+                    <span className="flex items-center gap-2 text-secondary-500">
+                      <Calendar className="h-5 w-5" />
+                      Date
+                    </span>
+                    <span className="font-bold text-secondary-900">
                       {formatDate(selectedDate.toISOString())}
                     </span>
                   </div>
                 )}
                 {selectedSlot && (
                   <div className="flex justify-between">
-                    <span className="text-secondary-500">Time</span>
-                    <span className="font-medium text-secondary-900">
+                    <span className="flex items-center gap-2 text-secondary-500">
+                      <Clock className="h-5 w-5" />
+                      Time
+                    </span>
+                    <span className="font-bold text-secondary-900">
                       {formatTime(selectedSlot.startTime)} - {formatTime(selectedSlot.endTime)}
                     </span>
                   </div>
                 )}
                 {flexibleTime && !selectedSlot && (
                   <div className="flex justify-between">
-                    <span className="text-secondary-500">Time</span>
-                    <span className="font-medium text-secondary-900">
+                    <span className="flex items-center gap-2 text-secondary-500">
+                      <Clock className="h-5 w-5" />
+                      Time
+                    </span>
+                    <span className="font-bold text-secondary-900">
                       Flexible (provider confirms)
                     </span>
                   </div>
                 )}
-                <p className="border-t pt-2 text-xs text-secondary-500">
+                <p className="border-t border-secondary-200 pt-4 text-sm text-secondary-500">
                   Final amount is agreed with the provider after the job and
                   paid offline.
                 </p>

@@ -103,7 +103,7 @@ export function DialogTitle({
   return (
     <h3
       className={cn(
-        "font-display text-2xl font-bold leading-tight text-gray-900",
+        "font-sans text-2xl font-bold leading-tight text-gray-900",
         className
       )}
       {...props}

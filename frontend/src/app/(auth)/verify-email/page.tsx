@@ -54,7 +54,7 @@ function VerifyEmailContent() {
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-50">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
         </div>
-        <h1 className="mt-6 font-display text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+        <h1 className="mt-6 font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
           Verifying your email…
         </h1>
         <p className="mt-3 text-gray-600">
@@ -70,7 +70,7 @@ function VerifyEmailContent() {
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50">
           <CheckCircle2 className="h-8 w-8 text-green-600" />
         </div>
-        <h1 className="mt-6 font-display text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+        <h1 className="mt-6 font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
           Email <span className="italic text-primary-600">verified.</span>
         </h1>
         <p className="mt-3 text-gray-600">
@@ -94,7 +94,7 @@ function VerifyEmailContent() {
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50">
         <AlertCircle className="h-8 w-8 text-red-600" />
       </div>
-      <h1 className="mt-6 font-display text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+      <h1 className="mt-6 font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
         Verification failed.
       </h1>
       <p className="mt-3 text-gray-600">

@@ -49,7 +49,7 @@ export default function ForgotPasswordPage() {
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-50">
           <MailCheck className="h-8 w-8 text-primary-600" />
         </div>
-        <h1 className="mt-6 font-display text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+        <h1 className="mt-6 font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
           Check your <span className="italic text-primary-600">inbox.</span>
         </h1>
         <p className="mt-3 text-gray-600">
@@ -92,7 +92,7 @@ export default function ForgotPasswordPage() {
       <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
         Forgot password
       </p>
-      <h1 className="mt-2 font-display text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+      <h1 className="mt-2 font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
         No worries — let&apos;s{" "}
         <span className="italic text-primary-600">fix that.</span>
       </h1>

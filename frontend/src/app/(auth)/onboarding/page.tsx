@@ -183,7 +183,7 @@ export default function OnboardingPage() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
             Step 1 of 2
           </p>
-          <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-gray-900">
+          <h1 className="mt-1 font-sans text-2xl font-bold tracking-tight text-gray-900">
             Set up your{" "}
             <span className="italic text-primary-600">provider profile.</span>
           </h1>
@@ -270,7 +270,7 @@ export default function OnboardingPage() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
             Step 2 of 2
           </p>
-          <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-gray-900">
+          <h1 className="mt-1 font-sans text-2xl font-bold tracking-tight text-gray-900">
             What services do{" "}
             <span className="italic text-primary-600">you offer?</span>
           </h1>
@@ -363,7 +363,7 @@ export default function OnboardingPage() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
             Profile created
           </p>
-          <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-gray-900">
+          <h1 className="mt-2 font-sans text-2xl font-bold tracking-tight text-gray-900">
             You&apos;re ready to{" "}
             <span className="italic text-primary-600">get customers.</span>
           </h1>

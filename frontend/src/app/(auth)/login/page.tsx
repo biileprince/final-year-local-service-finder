@@ -57,7 +57,7 @@ function LoginForm() {
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
         Welcome back
       </p>
-      <h1 className="mt-2 font-display text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+      <h1 className="mt-2 font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
         Login to <span className="italic text-primary-600">your</span> account.
       </h1>
       <p className="mt-3 text-gray-600">

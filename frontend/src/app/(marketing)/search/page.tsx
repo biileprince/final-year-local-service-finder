@@ -66,6 +66,30 @@ function SearchContent() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list" | "map">("grid");
 
+  // Scroll visibility state
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      // Make the header hide on scroll down, show on scroll up (especially for mobile)
+      if (currentScrollY < 10) {
+        setIsHeaderVisible(true);
+      } else if (currentScrollY > lastScrollY && currentScrollY > 100) {
+        // Scrolling down past 100px
+        setIsHeaderVisible(false);
+      } else if (currentScrollY < lastScrollY) {
+        // Scrolling up
+        setIsHeaderVisible(true);
+      }
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [lastScrollY]);
+
   const [selectedCategory, setSelectedCategory] = useState<string>(
     categoryParam ?? "all",
   );
@@ -164,16 +188,21 @@ function SearchContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ============ Sticky search header ============ */}
-      <div className="sticky top-0 z-30 border-b border-gray-200 bg-white">
+      <div
+        className={cn(
+          "sticky z-30 border-b border-gray-200 bg-white transition-all duration-300",
+          isHeaderVisible ? "top-0" : "-top-full"
+        )}
+      >
         {/* Search form */}
         <div className="">
-          <div className="mx-auto max-w-7xl px-4 pt-4 pb-2 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 pt-3 pb-2 sm:px-6 lg:px-8">
             <form
               onSubmit={onSubmitSearch}
               className="flex flex-col gap-4 lg:flex-row"
             >
               <div className="flex flex-1 flex-col gap-3 sm:flex-row">
-                <div className="flex flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20">
+                <div className="flex flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20">
                   <Search className="h-5 w-5 shrink-0 text-gray-400" />
                   <input
                     type="text"
@@ -193,7 +222,7 @@ function SearchContent() {
                     </button>
                   )}
                 </div>
-                <div className="flex flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20 sm:max-w-[220px]">
+                <div className="flex flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20 sm:max-w-[200px]">
                   <MapPin className="h-5 w-5 shrink-0 text-gray-400" />
                   <input
                     type="text"
@@ -210,6 +239,7 @@ function SearchContent() {
                 <div className="hidden items-center rounded-xl bg-gray-100 p-1 sm:flex">
                   <button
                     type="button"
+                    title="Grid View"
                     onClick={() => setViewMode("grid")}
                     aria-label="Grid view"
                     aria-pressed={viewMode === "grid"}
@@ -224,6 +254,7 @@ function SearchContent() {
                   </button>
                   <button
                     type="button"
+                    title="List View"
                     onClick={() => setViewMode("list")}
                     aria-label="List view"
                     aria-pressed={viewMode === "list"}
@@ -238,6 +269,7 @@ function SearchContent() {
                   </button>
                   <button
                     type="button"
+                    title="Map View"
                     onClick={() => setViewMode("map")}
                     aria-label="Map view"
                     aria-pressed={viewMode === "map"}
@@ -274,7 +306,7 @@ function SearchContent() {
         </div>
 
         {/* Category pills */}
-        <div className="mx-auto max-w-7xl px-4 py-2 pb-3 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-2 sm:px-6 lg:px-8">
           <div className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
             <CategoryPill
               active={selectedCategory === "all"}
@@ -303,13 +335,13 @@ function SearchContent() {
       </div>
 
       {/* ============ Main body ============ */}
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
         <div className="flex gap-6">
           {/* Desktop sidebar filters */}
           <aside className="hidden w-72 shrink-0 lg:block">
             <Card className="sticky top-36 max-h-[calc(100vh-9rem)] overflow-y-auto p-6">
               <div className="mb-6 flex items-center justify-between">
-                <h3 className="font-display text-lg font-bold text-gray-900">
+                <h3 className="font-sans text-lg font-bold text-gray-900">
                   Filters
                 </h3>
                 {activeFiltersCount > 0 && (
@@ -498,8 +530,8 @@ function SearchContent() {
               <div
                 className={cn(
                   viewMode === "grid"
-                    ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
-                    : "space-y-4",
+                    ? "grid gap-6 sm:grid-cols-2 xl:grid-cols-3"
+                    : "space-y-6",
                 )}
               >
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -526,7 +558,7 @@ function SearchContent() {
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
                   <Search className="h-8 w-8 text-gray-400" />
                 </div>
-                <h3 className="mt-4 font-display text-xl font-bold text-gray-900">
+                <h3 className="mt-4 font-sans text-xl font-bold text-gray-900">
                   No service providers found
                 </h3>
                 <p className="mt-1 text-gray-500">
@@ -552,7 +584,7 @@ function SearchContent() {
                     ))}
                   </div>
                 ) : viewMode === "list" ? (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     {providers.map((p) => (
                       <ProviderCard key={p.id} provider={p} variant="row" />
                     ))}
@@ -570,7 +602,7 @@ function SearchContent() {
       <div className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
         <Card className="border-2 border-primary-100 p-6 md:p-8">
           <div className="mb-5 flex items-center justify-between">
-            <h3 className="font-display text-lg font-bold text-gray-900 md:text-xl">
+            <h3 className="font-sans text-lg font-bold text-gray-900 md:text-xl">
               Platform overview
             </h3>
             <Badge variant="soft">Live totals</Badge>
@@ -598,7 +630,7 @@ function SearchContent() {
           <div className="absolute bottom-0 right-0 top-0 w-full max-w-sm overflow-y-auto bg-white shadow-2xl">
             <div className="p-6">
               <div className="mb-6 flex items-center justify-between">
-                <h3 className="font-display text-xl font-bold text-gray-900">
+                <h3 className="font-sans text-xl font-bold text-gray-900">
                   Filters &amp; sort
                 </h3>
                 <button
@@ -739,61 +771,94 @@ function ProviderGridCard({ provider }: { provider: Provider }) {
       href={`/providers/${provider.id}`}
       className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
     >
-      <Card className="h-full border-2 border-transparent p-5 transition-all hover:-translate-y-1 hover:border-primary-300 hover:shadow-lg">
-        <div className="mb-4 flex items-start gap-4">
-          <div className="relative">
-            <Avatar className="h-14 w-14" size="lg">
-              <AvatarImage
-                src={provider.user.profileImage}
-                alt={provider.user.name}
-              />
-              <AvatarFallback className="text-base font-bold">
-                {getInitials(provider.user.name)}
-              </AvatarFallback>
-            </Avatar>
-            {verified && (
-              <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-blue-500">
-                <CheckCircle className="h-3 w-3 text-white" />
-              </span>
-            )}
+      <Card className="h-full border-2 border-transparent transition-all hover:-translate-y-1 hover:border-primary-300 hover:shadow-lg">
+        {/* Provider image */}
+        {provider.user.profileImage && (
+          <div className="h-36 w-full overflow-hidden rounded-t-2xl bg-gray-100">
+            <img
+              src={provider.user.profileImage}
+              alt={provider.user.name}
+              className="h-full w-full object-cover"
+            />
           </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-base font-bold text-gray-900">
-              {provider.user.name}
-            </h3>
-            <p className="truncate text-sm font-medium capitalize text-gray-600">
-              {primaryCategory?.name ?? "Service provider"}
-            </p>
-            <div className="mt-1 flex items-center gap-1">
-              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-              <span className="text-sm font-bold text-gray-900">
-                {Number(provider.rating).toFixed(1)}
-              </span>
-              <span className="text-xs text-gray-500">
-                ({provider.reviewCount})
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-3 flex items-center gap-1 text-sm text-gray-600">
-          <MapPin className="h-4 w-4 text-primary-500" />
-          <span className="truncate font-medium">{provider.location}</span>
-          <span className="text-gray-300">·</span>
-          <span className="whitespace-nowrap">
-            {provider.yearsExperience}+ yrs
-          </span>
-        </div>
-
-        {provider.featured && (
-          <Badge variant="warning" className="mb-3 gap-1">
-            <Clock className="h-3 w-3" />
-            Fast response
-          </Badge>
         )}
 
-        <div className="flex items-center justify-end border-t border-gray-100 pt-3">
-          <Button size="sm">View &amp; Book</Button>
+        <div className="p-4">
+          {/* Name + verification */}
+          <div className="mb-1 flex items-start gap-2">
+            <h3 className="text-base font-bold text-gray-900">
+              {provider.user.name}
+            </h3>
+            {verified && (
+              <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 fill-blue-500 text-white" />
+            )}
+          </div>
+
+          {/* Primary category */}
+          <p className="text-sm font-medium capitalize text-primary-600">
+            {primaryCategory?.name ?? "Service provider"}
+          </p>
+
+          {/* All categories */}
+          {provider.categories.length > 1 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {provider.categories.map((pc) => (
+                <span
+                  key={pc.id}
+                  className={cn(
+                    "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
+                    pc.isPrimary
+                      ? "bg-primary-100 text-primary-700"
+                      : "bg-gray-100 text-gray-600",
+                  )}
+                >
+                  {pc.category.name}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Rating + location */}
+          <div className="mt-3 flex items-center gap-3 text-sm text-gray-600">
+            <div className="flex items-center gap-1">
+              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+              <span className="font-bold text-gray-900">
+                {Number(provider.rating).toFixed(1)}
+              </span>
+              <span className="text-gray-400">({provider.reviewCount})</span>
+            </div>
+            <span className="text-gray-300">·</span>
+            <div className="flex items-center gap-1">
+              <MapPin className="h-3.5 w-3.5 text-primary-500" />
+              <span>{provider.location}</span>
+            </div>
+          </div>
+
+          {/* Bio / About description */}
+          {(provider.bio || provider.specialties?.length) && (
+            <p className="mt-3 text-sm leading-relaxed text-gray-600">
+              {provider.bio ||
+                provider.specialties?.map((s) => s.specialty).join(" · ") ||
+                ""}
+            </p>
+          )}
+
+          {/* Experience */}
+          <div className="mt-3 flex items-center gap-1 text-xs text-gray-500">
+            <Clock className="h-3.5 w-3.5" />
+            {provider.yearsExperience}+ years experience
+          </div>
+
+          {provider.featured && (
+            <Badge variant="warning" className="mt-3 gap-1">
+              <Clock className="h-3 w-3" />
+              Fast response
+            </Badge>
+          )}
+
+          <div className="mt-4 border-t border-gray-100 pt-3">
+            <Button variant="outline" className="w-full border-primary-200 text-primary-700 hover:bg-primary-50 hover:text-primary-800">View &amp; Book</Button>
+          </div>
         </div>
       </Card>
     </Link>
@@ -814,7 +879,7 @@ function CategoryPill({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
+        "inline-flex min-h-[44px] items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
         active
           ? "bg-primary-500 text-white shadow-md shadow-primary-500/30"
           : "bg-gray-100 text-gray-700 hover:bg-gray-200",
@@ -836,7 +901,7 @@ function FilterGroup({
 }) {
   return (
     <div className={cn(last ? "mb-0" : "mb-6")}>
-      <label className="mb-3 block text-sm font-semibold text-gray-700">
+      <label className="mb-3 block text-base font-semibold text-gray-700">
         {label}
       </label>
       <div className="space-y-2">{children}</div>
@@ -858,7 +923,7 @@ function RadioRow({
   return (
     <label
       className={cn(
-        "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors",
+        "flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-colors min-h-[48px]",
         active
           ? "border-primary-200 bg-primary-50"
           : "border-transparent bg-gray-50 hover:bg-gray-100",
@@ -871,7 +936,7 @@ function RadioRow({
         onChange={onClick}
         className="h-4 w-4 cursor-pointer border-gray-300 text-primary-500 focus:ring-2 focus:ring-primary-500/30"
       />
-      <span className="flex flex-1 items-center gap-2 text-sm font-medium text-gray-900">
+      <span className="flex flex-1 items-center gap-2 text-base font-medium text-gray-900">
         {children}
       </span>
     </label>
@@ -902,7 +967,7 @@ function QuickChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+        "inline-flex min-h-[44px] items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
         tones[tone],
       )}
     >
@@ -922,7 +987,7 @@ function RemovableChip({
     <button
       type="button"
       onClick={onRemove}
-      className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-200"
+      className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200"
     >
       {children}
       <X className="h-3 w-3" />
@@ -948,8 +1013,8 @@ function StatTile({
 }) {
   return (
     <div className={cn("rounded-2xl p-4 text-center", toneStyles[tone])}>
-      <p className="font-display text-2xl font-bold">{value}</p>
-      <p className="mt-1 text-xs font-semibold opacity-80">{label}</p>
+      <p className="font-sans text-2xl font-bold">{value}</p>
+      <p className="mt-1 text-sm font-semibold opacity-80">{label}</p>
     </div>
   );
 }
