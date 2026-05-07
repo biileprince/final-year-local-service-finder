@@ -12,6 +12,8 @@ import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { CacheService } from "../../cache/cache.service";
 import { PrismaService } from "../../database/prisma.service";
+import { VerificationService } from "./verification.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { v4 as uuidv4 } from "uuid";
 
 export interface TokenPayload {
@@ -36,6 +38,8 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly cacheService: CacheService,
     private readonly prisma: PrismaService,
+    private readonly verificationService: VerificationService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthTokens> {
@@ -60,6 +64,23 @@ export class AuthService {
     });
 
     this.logger.log(`New user registered: ${email}`);
+
+    // Fire-and-forget welcome + verification emails. Failures are logged but
+    // don't block registration — a user with no email pipe is still better than
+    // a 500 on signup.
+    void this.notificationsService.sendWelcomeEmail(
+      user.id,
+      user.name,
+      (user.role as "CUSTOMER" | "PROVIDER") ?? "CUSTOMER",
+      user.email,
+    );
+    void this.verificationService
+      .sendEmailVerification(user.id)
+      .catch((err) =>
+        this.logger.warn(
+          `Auto verification email failed for ${email}: ${(err as Error).message}`,
+        ),
+      );
 
     // Generate tokens
     return this.generateTokens(user);

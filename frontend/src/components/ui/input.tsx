@@ -18,7 +18,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="mb-1.5 block text-sm font-medium text-secondary-700"
+            className="mb-2 block text-base font-semibold text-secondary-700"
           >
             {label}
           </label>
@@ -33,7 +33,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             type={type}
             id={inputId}
             className={cn(
-              "flex h-11 w-full rounded-xl border-2 border-gray-200 bg-white px-3.5 py-2 text-sm font-medium text-gray-900 placeholder:text-gray-400",
+              "flex h-12 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base font-medium text-gray-900 placeholder:text-gray-400",
               "transition-all duration-200",
               "hover:border-gray-300",
               "focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20",

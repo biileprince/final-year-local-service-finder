@@ -18,13 +18,18 @@ import {
   Wrench,
   ShieldCheck,
   Users,
+  Star,
+  Folder,
+  History,
+  MailWarning,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/spinner";
 import { useRequireAuth } from "@/hooks";
-import { notificationsService, messagesService } from "@/lib/api";
+import { notificationsService, messagesService, authService } from "@/lib/api";
 import { useMessagesSocket } from "@/lib/messages-socket";
 
 const customerNavItems = [
@@ -38,9 +43,12 @@ const customerNavItems = [
 
 const adminNavItems = [
   { href: "/admin", label: "Admin Home", icon: LayoutDashboard },
-  { href: "/admin/providers", label: "Verification Queue", icon: ShieldCheck },
+  { href: "/admin/providers", label: "Verification", icon: ShieldCheck },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/bookings", label: "Bookings", icon: Calendar },
+  { href: "/admin/reviews", label: "Reviews", icon: Star },
+  { href: "/admin/categories", label: "Categories", icon: Folder },
+  { href: "/admin/audit-logs", label: "Audit", icon: History },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -77,6 +85,9 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [sendingVerify, setSendingVerify] = useState(false);
+  const [verifySent, setVerifySent] = useState(false);
+  const [showVerifyBanner, setShowVerifyBanner] = useState(true);
 
   const navItems =
     user?.role === "ADMIN"
@@ -199,7 +210,8 @@ export default function DashboardLayout({
           {/* Navigation */}
           <nav className="flex-1 space-y-1 overflow-y-auto p-4">
             {navItems.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const isActive =
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
               const badgeCount =
                 item.href === "/messages"
                   ? unreadMessages
@@ -281,6 +293,41 @@ export default function DashboardLayout({
             </Link>
           </div>
         </header>
+
+        {/* Email verification banner */}
+        {!user.emailVerifiedAt && showVerifyBanner && (
+          <div className="mx-4 mt-3 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm sm:mx-6 lg:mx-8">
+            <MailWarning className="h-5 w-5 shrink-0 text-amber-600" />
+            <p className="flex-1 text-amber-800">
+              <strong>Verify your email</strong> to unlock bookings and messaging.
+            </p>
+            {verifySent ? (
+              <span className="shrink-0 text-xs font-semibold text-green-600">Email sent ✓</span>
+            ) : (
+              <button
+                disabled={sendingVerify}
+                onClick={async () => {
+                  setSendingVerify(true);
+                  try {
+                    await authService.sendVerification();
+                    setVerifySent(true);
+                  } catch { /* ignore */ }
+                  setSendingVerify(false);
+                }}
+                className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
+              >
+                {sendingVerify ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Send verification"}
+              </button>
+            )}
+            <button
+              onClick={() => setShowVerifyBanner(false)}
+              className="shrink-0 text-amber-400 hover:text-amber-600"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* Page Content */}
         <main className="p-4 pb-24 sm:p-6 lg:p-8 lg:pb-8">{children}</main>

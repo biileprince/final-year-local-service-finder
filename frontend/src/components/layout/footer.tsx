@@ -59,7 +59,7 @@ export function Footer() {
                 <Search className="h-5 w-5 text-white" strokeWidth={2.5} />
               </span>
               <span className="flex flex-col leading-tight">
-                <span className="font-display text-base font-bold tracking-tight text-gray-900 dark:text-white">
+                <span className="font-sans text-base font-bold tracking-tight text-gray-900 dark:text-white">
                   Local Service
                 </span>
                 <span className="text-[10px] font-bold tracking-[0.2em] text-primary-600 dark:text-primary-400">
@@ -80,7 +80,7 @@ export function Footer() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={s.label}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 transition-all hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:border-primary-400/40 dark:hover:text-primary-400"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 transition-all hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:border-primary-400/40 dark:hover:text-primary-400"
                 >
                   <s.icon className="h-4 w-4" />
                 </a>
@@ -159,7 +159,7 @@ function FooterColumn({
           <li key={l.label}>
             <Link
               href={l.href}
-              className="text-sm font-semibold text-gray-600 transition-colors hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
+              className="inline-flex items-center py-1 text-sm font-semibold text-gray-600 transition-colors hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
             >
               {l.label}
             </Link>

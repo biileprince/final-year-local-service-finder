@@ -174,6 +174,21 @@ export class ProvidersController {
     return this.providersService.removeGalleryItem(id, user.id, itemId);
   }
 
+  @Put(":id/verification-documents")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Attach uploaded ID / business-license files to the provider",
+  })
+  async setVerificationDocuments(
+    @Param("id") id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Body()
+    body: { idDocumentId?: string | null; businessLicenseId?: string | null },
+  ) {
+    return this.providersService.setVerificationDocuments(id, user.id, body);
+  }
+
   @Delete(":id")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

@@ -1,19 +1,12 @@
 import type { Metadata } from "next";
-import { Atkinson_Hyperlegible, Fraunces } from "next/font/google";
+import { Roboto } from "next/font/google";
 import "@/styles/globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 
-const bodyFont = Atkinson_Hyperlegible({
+const roboto = Roboto({
   subsets: ["latin"],
   variable: "--font-body",
-  weight: ["400", "700"],
-  display: "swap",
-});
-
-const headingFont = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-heading",
-  weight: ["400", "600", "700"],
+  weight: ["400", "500", "700"],
   display: "swap",
 });
 
@@ -63,7 +56,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${bodyFont.variable} ${headingFont.variable}`}
+      className={roboto.variable}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
     >

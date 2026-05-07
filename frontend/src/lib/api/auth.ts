@@ -82,8 +82,9 @@ export const authService = {
   async updateUser(data: {
     name?: string;
     phone?: string;
+    profileImage?: string;
   }): Promise<import("@/types").User> {
-    return apiClient.patch<import("@/types").User>("/users/me", data, true);
+    return apiClient.put<import("@/types").User>("/users/me", data, true);
   },
 
   isAuthenticated(): boolean {

@@ -41,6 +41,10 @@ export interface Provider {
   categories: ProviderCategory[];
   specialties: ProviderSpecialty[];
   gallery?: ProviderGalleryItem[];
+  idDocumentId?: string | null;
+  businessLicenseId?: string | null;
+  idDocument?: { id: string; url: string; fileName?: string } | null;
+  businessLicense?: { id: string; url: string; fileName?: string } | null;
 }
 
 export interface ProviderCategory {

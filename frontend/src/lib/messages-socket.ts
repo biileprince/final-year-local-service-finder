@@ -5,29 +5,48 @@ import type { Message } from "@/types";
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:3001";
 
+export interface ReadReceipt {
+  conversationId: string;
+  readBy: string;
+  readAt: string;
+}
+
+export interface TypingPayload {
+  conversationId: string;
+  userId: string;
+  isTyping: boolean;
+}
+
 interface UseMessagesSocketReturn {
   socket: Socket | null;
   isConnected: boolean;
   joinConversation: (conversationId: string) => void;
   leaveConversation: (conversationId: string) => void;
-  sendMessage: (conversationId: string, content: string) => void;
-  onNewMessage: (callback: (message: Message) => void) => () => void;
-  onTyping: (
-    callback: (data: { conversationId: string; userId: string }) => void,
-  ) => () => void;
+  sendMessage: (
+    conversationId: string,
+    content: string,
+    extras?: { messageType?: string; fileId?: string },
+  ) => void;
+  markRead: (conversationId: string) => void;
   startTyping: (conversationId: string) => void;
   stopTyping: (conversationId: string) => void;
+  onNewMessage: (callback: (message: Message) => void) => () => void;
+  onTyping: (callback: (data: TypingPayload) => void) => () => void;
+  onMessagesRead: (callback: (data: ReadReceipt) => void) => () => void;
+  onUnreadCount: (
+    callback: (data: { total: number; asCustomer: number; asProvider: number }) => void,
+  ) => () => void;
 }
 
 export function useMessagesSocket(): UseMessagesSocketReturn {
   const { user } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const messageCallbacksRef = useRef<Set<(message: Message) => void>>(
-    new Set(),
-  );
-  const typingCallbacksRef = useRef<
-    Set<(data: { conversationId: string; userId: string }) => void>
+  const messageCallbacksRef = useRef<Set<(message: Message) => void>>(new Set());
+  const typingCallbacksRef = useRef<Set<(data: TypingPayload) => void>>(new Set());
+  const readCallbacksRef = useRef<Set<(data: ReadReceipt) => void>>(new Set());
+  const unreadCallbacksRef = useRef<
+    Set<(data: { total: number; asCustomer: number; asProvider: number }) => void>
   >(new Set());
 
   useEffect(() => {
@@ -39,38 +58,42 @@ export function useMessagesSocket(): UseMessagesSocketReturn {
       return;
     }
 
-    const socketInstance = io(SOCKET_URL, {
-      auth: {
-        token,
-      },
+    // Backend mounts the gateway at the `/messages` namespace.
+    const socketInstance = io(`${SOCKET_URL}/messages`, {
+      auth: { token },
       transports: ["websocket", "polling"],
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
     });
 
-    socketInstance.on("connect", () => {
-      console.log("Socket connected");
-      setIsConnected(true);
+    socketInstance.on("connect", () => setIsConnected(true));
+    socketInstance.on("disconnect", () => setIsConnected(false));
+    socketInstance.on("connect_error", () => setIsConnected(false));
+
+    socketInstance.on("new_message", (message: Message) => {
+      messageCallbacksRef.current.forEach((cb) => cb(message));
     });
 
-    socketInstance.on("disconnect", () => {
-      console.log("Socket disconnected");
-      setIsConnected(false);
+    // Personal-room delivery for messages outside the active conversation room.
+    socketInstance.on(
+      "message_notification",
+      (payload: { conversationId: string; message: Message }) => {
+        messageCallbacksRef.current.forEach((cb) => cb(payload.message));
+      },
+    );
+
+    socketInstance.on("user_typing", (data: TypingPayload) => {
+      typingCallbacksRef.current.forEach((cb) => cb(data));
     });
 
-    socketInstance.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
-      setIsConnected(false);
-    });
-
-    socketInstance.on("newMessage", (message: Message) => {
-      messageCallbacksRef.current.forEach((callback) => callback(message));
+    socketInstance.on("messages_read", (data: ReadReceipt) => {
+      readCallbacksRef.current.forEach((cb) => cb(data));
     });
 
     socketInstance.on(
-      "userTyping",
-      (data: { conversationId: string; userId: string }) => {
-        typingCallbacksRef.current.forEach((callback) => callback(data));
+      "unread_count",
+      (data: { total: number; asCustomer: number; asProvider: number }) => {
+        unreadCallbacksRef.current.forEach((cb) => cb(data));
       },
     );
 
@@ -86,7 +109,7 @@ export function useMessagesSocket(): UseMessagesSocketReturn {
   const joinConversation = useCallback(
     (conversationId: string) => {
       if (socket && isConnected) {
-        socket.emit("joinConversation", { conversationId });
+        socket.emit("join_conversation", { conversationId });
       }
     },
     [socket, isConnected],
@@ -95,16 +118,52 @@ export function useMessagesSocket(): UseMessagesSocketReturn {
   const leaveConversation = useCallback(
     (conversationId: string) => {
       if (socket && isConnected) {
-        socket.emit("leaveConversation", { conversationId });
+        socket.emit("leave_conversation", { conversationId });
       }
     },
     [socket, isConnected],
   );
 
   const sendMessage = useCallback(
-    (conversationId: string, content: string) => {
+    (
+      conversationId: string,
+      content: string,
+      extras?: { messageType?: string; fileId?: string },
+    ) => {
       if (socket && isConnected) {
-        socket.emit("sendMessage", { conversationId, content });
+        socket.emit("send_message", {
+          conversationId,
+          content,
+          messageType: extras?.messageType,
+          fileId: extras?.fileId,
+        });
+      }
+    },
+    [socket, isConnected],
+  );
+
+  const markRead = useCallback(
+    (conversationId: string) => {
+      if (socket && isConnected) {
+        socket.emit("mark_read", { conversationId });
+      }
+    },
+    [socket, isConnected],
+  );
+
+  const startTyping = useCallback(
+    (conversationId: string) => {
+      if (socket && isConnected) {
+        socket.emit("typing_start", { conversationId });
+      }
+    },
+    [socket, isConnected],
+  );
+
+  const stopTyping = useCallback(
+    (conversationId: string) => {
+      if (socket && isConnected) {
+        socket.emit("typing_stop", { conversationId });
       }
     },
     [socket, isConnected],
@@ -117,32 +176,34 @@ export function useMessagesSocket(): UseMessagesSocketReturn {
     };
   }, []);
 
-  const onTyping = useCallback(
-    (callback: (data: { conversationId: string; userId: string }) => void) => {
-      typingCallbacksRef.current.add(callback);
+  const onTyping = useCallback((callback: (data: TypingPayload) => void) => {
+    typingCallbacksRef.current.add(callback);
+    return () => {
+      typingCallbacksRef.current.delete(callback);
+    };
+  }, []);
+
+  const onMessagesRead = useCallback((callback: (data: ReadReceipt) => void) => {
+    readCallbacksRef.current.add(callback);
+    return () => {
+      readCallbacksRef.current.delete(callback);
+    };
+  }, []);
+
+  const onUnreadCount = useCallback(
+    (
+      callback: (data: {
+        total: number;
+        asCustomer: number;
+        asProvider: number;
+      }) => void,
+    ) => {
+      unreadCallbacksRef.current.add(callback);
       return () => {
-        typingCallbacksRef.current.delete(callback);
+        unreadCallbacksRef.current.delete(callback);
       };
     },
     [],
-  );
-
-  const startTyping = useCallback(
-    (conversationId: string) => {
-      if (socket && isConnected) {
-        socket.emit("typing", { conversationId, isTyping: true });
-      }
-    },
-    [socket, isConnected],
-  );
-
-  const stopTyping = useCallback(
-    (conversationId: string) => {
-      if (socket && isConnected) {
-        socket.emit("typing", { conversationId, isTyping: false });
-      }
-    },
-    [socket, isConnected],
   );
 
   return {
@@ -151,9 +212,12 @@ export function useMessagesSocket(): UseMessagesSocketReturn {
     joinConversation,
     leaveConversation,
     sendMessage,
-    onNewMessage,
-    onTyping,
+    markRead,
     startTyping,
     stopTyping,
+    onNewMessage,
+    onTyping,
+    onMessagesRead,
+    onUnreadCount,
   };
 }

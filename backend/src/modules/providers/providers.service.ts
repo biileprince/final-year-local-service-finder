@@ -226,6 +226,35 @@ export class ProvidersService {
     return created;
   }
 
+  async setVerificationDocuments(
+    id: string,
+    userId: string,
+    docs: { idDocumentId?: string | null; businessLicenseId?: string | null },
+  ) {
+    const provider = await this.providersRepository.findById(id);
+    if (!provider) throw new NotFoundException("Provider not found");
+    if (provider.userId !== userId) {
+      throw new ForbiddenException("Not authorized to update this provider");
+    }
+
+    const data: {
+      idDocumentId?: string | null;
+      businessLicenseId?: string | null;
+    } = {};
+    if (docs.idDocumentId !== undefined) data.idDocumentId = docs.idDocumentId;
+    if (docs.businessLicenseId !== undefined)
+      data.businessLicenseId = docs.businessLicenseId;
+
+    const updated = await this.prisma.provider.update({
+      where: { id },
+      data,
+      include: { idDocument: true, businessLicense: true },
+    });
+
+    await this.cacheService.invalidateProviderProfile(id);
+    return updated;
+  }
+
   async removeGalleryItem(id: string, userId: string, galleryItemId: string) {
     const provider = await this.providersRepository.findById(id);
     if (!provider) throw new NotFoundException("Provider not found");

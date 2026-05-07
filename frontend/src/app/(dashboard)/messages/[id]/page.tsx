@@ -68,8 +68,22 @@ export default function ConversationPage() {
     }
   };
 
-  const { socket, isConnected, joinConversation, sendMessage } =
-    useMessagesSocket();
+  const {
+    isConnected,
+    joinConversation,
+    leaveConversation,
+    sendMessage,
+    markRead,
+    startTyping,
+    stopTyping,
+    onNewMessage,
+    onTyping,
+    onMessagesRead,
+  } = useMessagesSocket();
+
+  const [otherIsTyping, setOtherIsTyping] = useState(false);
+  const [otherReadAt, setOtherReadAt] = useState<string | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (params.id) {
@@ -78,30 +92,57 @@ export default function ConversationPage() {
   }, [params.id]);
 
   useEffect(() => {
-    if (conversation && socket && isConnected) {
-      joinConversation(conversation.id);
+    if (!conversation || !isConnected) return;
+    joinConversation(conversation.id);
+    // Joining the conversation already marks-as-read on the server (see gateway).
+    return () => {
+      leaveConversation(conversation.id);
+    };
+  }, [conversation, isConnected, joinConversation, leaveConversation]);
 
-      // Mark messages as read
-      messagesService.markAsRead(conversation.id);
-    }
-  }, [conversation, socket, isConnected]);
-
+  // Live new messages
   useEffect(() => {
-    if (socket) {
-      const handleNewMessage = (message: Message) => {
-        if (message.conversationId === conversation?.id) {
-          setMessages((prev) => [...prev, message]);
-          scrollToBottom();
-        }
-      };
+    return onNewMessage((message) => {
+      if (message.conversationId !== conversation?.id) return;
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        return [...prev, message];
+      });
+      // If the other party sent it and we're viewing the thread, mark read.
+      if (message.senderId !== user?.id && conversation?.id) {
+        markRead(conversation.id);
+      }
+      scrollToBottom();
+    });
+  }, [onNewMessage, conversation, user?.id, markRead]);
 
-      socket.on("newMessage", handleNewMessage);
+  // Typing indicator from the other side
+  useEffect(() => {
+    return onTyping((data) => {
+      if (data.conversationId !== conversation?.id) return;
+      if (data.userId === user?.id) return;
+      setOtherIsTyping(data.isTyping);
+    });
+  }, [onTyping, conversation, user?.id]);
 
-      return () => {
-        socket.off("newMessage", handleNewMessage);
-      };
-    }
-  }, [socket, conversation]);
+  // Read receipts from the other side
+  useEffect(() => {
+    return onMessagesRead((data) => {
+      if (data.conversationId !== conversation?.id) return;
+      if (data.readBy === user?.id) return;
+      setOtherReadAt(data.readAt);
+    });
+  }, [onMessagesRead, conversation, user?.id]);
+
+  const handleTypingChange = (text: string) => {
+    setMessageText(text);
+    if (!conversation || !isConnected) return;
+    startTyping(conversation.id);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      stopTyping(conversation.id);
+    }, 1500);
+  };
 
   useEffect(() => {
     scrollToBottom();
@@ -133,17 +174,17 @@ export default function ConversationPage() {
 
     setIsSending(true);
     try {
-      // Use socket if connected, fallback to REST API
-      if (isConnected) {
-        sendMessage(conversation.id, messageText.trim());
-      } else {
-        const newMessage = await messagesService.sendMessage(
-          conversation.id,
-          { content: messageText.trim() },
-        );
-        setMessages((prev) => [...prev, newMessage]);
-      }
+      // Always send via REST so we get the persisted message back even if the
+      // socket round-trip drops; the gateway will broadcast and we de-dupe by id.
+      const newMessage = await messagesService.sendMessage(
+        conversation.id,
+        { content: messageText.trim() },
+      );
+      setMessages((prev) =>
+        prev.some((m) => m.id === newMessage.id) ? prev : [...prev, newMessage],
+      );
       setMessageText("");
+      if (conversation && isConnected) stopTyping(conversation.id);
     } catch (error) {
       console.error("Failed to send message:", error);
     } finally {
@@ -340,6 +381,23 @@ export default function ConversationPage() {
               );
             })
           )}
+          {otherIsTyping && (
+            <div className="flex items-center gap-2 pl-11 text-xs text-secondary-500">
+              <span className="flex gap-0.5">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-secondary-400 [animation-delay:-0.3s]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-secondary-400 [animation-delay:-0.15s]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-secondary-400" />
+              </span>
+              <span>{otherUser?.name?.split(" ")[0] ?? "They"} is typing…</span>
+            </div>
+          )}
+          {otherReadAt &&
+            messages.length > 0 &&
+            messages[messages.length - 1]?.senderId === user?.id && (
+              <p className="pr-2 text-right text-[11px] text-secondary-400">
+                Read {formatRelativeTime(otherReadAt)}
+              </p>
+            )}
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -368,7 +426,7 @@ export default function ConversationPage() {
         <input
           type="text"
           value={messageText}
-          onChange={(e) => setMessageText(e.target.value)}
+          onChange={(e) => handleTypingChange(e.target.value)}
           placeholder="Type a message..."
           className="flex-1 rounded-full border border-secondary-300 bg-secondary-50 px-4 py-2 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
         />
