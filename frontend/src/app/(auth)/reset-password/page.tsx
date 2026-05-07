@@ -135,7 +135,7 @@ function ResetPasswordForm() {
           label="New password"
           type={showPassword ? "text" : "password"}
           autoComplete="new-password"
-          placeholder="At least 8 characters"
+          placeholder="Enter your new password"
           leftIcon={<KeyRound className="h-5 w-5" />}
           error={errors.password?.message}
           rightIcon={
@@ -159,7 +159,7 @@ function ResetPasswordForm() {
           label="Confirm new password"
           type={showConfirm ? "text" : "password"}
           autoComplete="new-password"
-          placeholder="Re-enter password"
+          placeholder="Enter your new password again"
           leftIcon={<KeyRound className="h-5 w-5" />}
           error={errors.confirmPassword?.message}
           rightIcon={

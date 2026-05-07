@@ -79,6 +79,7 @@ const servicesSecondary: ServiceItem[] = [
 ];
 
 const directLinks = [
+  { name: "Browse Services", href: "/search" },
   { name: "How it works", href: "/#how-it-works" },
   { name: "For providers", href: "/register?role=provider" },
 ];
@@ -193,7 +194,7 @@ export function Header() {
         </Link>
 
         {/* Desktop Nav */}
-        <nav className="hidden items-center gap-1 lg:flex">
+        <nav className="hidden items-center gap-1 md:flex">
           <Link
             href="/"
             className={cn(
@@ -251,7 +252,7 @@ export function Header() {
                 className="absolute -top-2 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-tl-sm border-l border-t border-gray-200/80 bg-white"
               />
 
-              <div className="grid grid-cols-1 gap-1 lg:grid-cols-[1fr_1fr_280px]">
+              <div className="grid grid-cols-1 gap-1 md:grid-cols-[1fr_1fr_280px]">
                 {/* Primary services column */}
                 <div>
                   <p className="px-3 pb-2 pt-3 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">
@@ -340,7 +341,7 @@ export function Header() {
         </nav>
 
         {/* Right side */}
-        <div className="hidden items-center gap-2 lg:flex">
+        <div className="hidden items-center gap-2 md:flex">
           {/* Compact search trigger */}
           <form
             onSubmit={(e) => {
@@ -454,20 +455,27 @@ export function Header() {
           )}
         </div>
 
-        {/* Mobile menu button */}
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen((s) => !s)}
-          className="rounded-xl p-2.5 text-gray-700 transition-all hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 lg:hidden"
-          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={mobileMenuOpen}
-        >
-          {mobileMenuOpen ? (
-            <X className="h-6 w-6" strokeWidth={2.5} />
-          ) : (
-            <Menu className="h-6 w-6" strokeWidth={2.5} />
-          )}
-        </button>
+        {/* Mobile action links and menu button */}
+        <div className="flex items-center gap-2 md:hidden">
+          {/* Quick action link always visible on mobile */}
+          <Button variant="ghost" size="sm" className="px-2 text-primary-600" asChild>
+            <Link href="/search">Browse Services</Link>
+          </Button>
+
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((s) => !s)}
+            className="rounded-xl p-2 text-gray-700 transition-all hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? (
+              <X className="h-6 w-6" strokeWidth={2.5} />
+            ) : (
+              <Menu className="h-6 w-6" strokeWidth={2.5} />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Mobile menu */}
@@ -505,17 +513,6 @@ export function Header() {
                 )}
               >
                 Home
-              </Link>
-              <Link
-                href="/search"
-                className={cn(
-                  "block rounded-xl px-4 py-4 text-base font-semibold transition-all min-h-[48px] flex items-center font-sans",
-                  isActiveLink("/search")
-                    ? "bg-primary-50 text-primary-600"
-                    : "text-gray-700 hover:bg-gray-50",
-                )}
-              >
-                Browse Services
               </Link>
               {directLinks.map((link) => (
                 <Link
