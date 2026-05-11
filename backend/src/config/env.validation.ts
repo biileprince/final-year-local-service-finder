@@ -14,8 +14,15 @@ const envSchema = z.object({
       (v) => v.startsWith("postgres://") || v.startsWith("postgresql://"),
       "DATABASE_URL must be a postgres connection string",
     ),
+  // Unpooled connection for Prisma Migrate (Neon requires the non-pooler URL
+  // because pgbouncer doesn't support all the prepared statements Migrate
+  // uses). Falls back to DATABASE_URL when unset.
+  DIRECT_URL: z.string().optional(),
 
-  // --- Redis (host/port form, matches CacheService) ---
+  // --- Redis ---
+  // REDIS_URL takes precedence (Upstash/Heroku Redis style, rediss:// → TLS).
+  // Discrete host/port/password are kept for local docker-compose.
+  REDIS_URL: z.string().optional(),
   REDIS_HOST: z.string().min(1).default("localhost"),
   REDIS_PORT: z.coerce.number().int().positive().default(6379),
   REDIS_PASSWORD: z.string().optional(),
@@ -62,6 +69,13 @@ const envSchema = z.object({
 
   // --- Sentry (optional) ---
   SENTRY_DSN: z.url().optional(),
+
+  // --- Metrics scrape protection ---
+  // When both are set, /metrics requires HTTP Basic auth matching these.
+  // Grafana Cloud's hosted Prometheus uses this when scraping over the
+  // public internet.
+  METRICS_AUTH_USER: z.string().optional(),
+  METRICS_AUTH_PASSWORD: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuth, useRedirectIfAuthenticated } from "@/hooks";
+import { useAuth } from "@/hooks";
 import { cn } from "@/lib/utils";
 
 const registerSchema = z
@@ -58,7 +58,6 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const defaultRole =
     searchParams.get("role") === "provider" ? "PROVIDER" : "CUSTOMER";
-  useRedirectIfAuthenticated("/dashboard");
   const { register: registerUser, isLoading, error, clearError } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -86,7 +85,7 @@ function RegisterForm() {
         phone: data.phone,
         role: data.role,
       });
-      router.push(data.role === "PROVIDER" ? "/onboarding" : "/dashboard");
+      router.replace(data.role === "PROVIDER" ? "/onboarding" : "/dashboard");
     } catch {
       // handled by store
     }

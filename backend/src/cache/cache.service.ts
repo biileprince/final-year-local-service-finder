@@ -25,15 +25,23 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   constructor(private configService: ConfigService) {}
 
   async onModuleInit() {
-    this.redis = new Redis({
-      host: this.configService.get("REDIS_HOST", "localhost"),
-      port: this.configService.get("REDIS_PORT", 6379),
-      password: this.configService.get("REDIS_PASSWORD"),
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
-    });
+    // Prefer REDIS_URL (Upstash/Heroku Redis style). Falls back to discrete
+    // host/port/password for local docker-compose. rediss:// in the URL flips
+    // ioredis into TLS mode automatically.
+    const redisUrl = this.configService.get<string>("REDIS_URL");
+    const retryStrategy = (times: number) => Math.min(times * 50, 2000);
+
+    this.redis = redisUrl
+      ? new Redis(redisUrl, {
+          retryStrategy,
+          maxRetriesPerRequest: 3,
+        })
+      : new Redis({
+          host: this.configService.get("REDIS_HOST", "localhost"),
+          port: this.configService.get("REDIS_PORT", 6379),
+          password: this.configService.get("REDIS_PASSWORD"),
+          retryStrategy,
+        });
 
     this.redis.on("connect", () => {
       this.logger.log("Redis connection established");
