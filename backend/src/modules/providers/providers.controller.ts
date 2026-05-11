@@ -107,8 +107,27 @@ export class ProvidersController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() updateProviderDto: UpdateProviderDto,
   ) {
-    const provider = await this.providersService.findByUserId(user.id);
-    return this.providersService.update(provider.id, user.id, updateProviderDto);
+    // First-time onboarding: no provider row exists yet, so create one.
+    // Subsequent saves update the existing row.
+    try {
+      const provider = await this.providersService.findByUserId(user.id);
+      return await this.providersService.update(
+        provider.id,
+        user.id,
+        updateProviderDto,
+      );
+    } catch {
+      return this.providersService.create({
+        userId: user.id,
+        hourlyRate: updateProviderDto.hourlyRate ?? 0,
+        location: updateProviderDto.location ?? "",
+        bio: updateProviderDto.bio,
+        yearsExperience: updateProviderDto.yearsExperience,
+        latitude: updateProviderDto.latitude,
+        longitude: updateProviderDto.longitude,
+        serviceRadiusKm: updateProviderDto.serviceRadiusKm,
+      });
+    }
   }
 
   @Put(":id")

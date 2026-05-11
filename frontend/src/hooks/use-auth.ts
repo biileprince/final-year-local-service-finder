@@ -130,13 +130,19 @@ export function useRequireRole(
   };
 }
 
+// Only redirect users who were ALREADY authenticated when the page mounted.
+// Skips the redirect if auth flips to true mid-session (e.g. right after a
+// successful register/login submission), so the submit handler stays in
+// control of where the new user lands.
 export function useRedirectIfAuthenticated(redirectTo = "/dashboard") {
   const router = useRouter();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const [wasAuthedOnMount] = useState(() =>
+    useAuthStore.getState().isAuthenticated,
+  );
 
   useEffect(() => {
-    if (isAuthenticated) {
-      router.push(redirectTo);
-    }
-  }, [isAuthenticated, router, redirectTo]);
+    if (!wasAuthedOnMount || !isAuthenticated) return;
+    router.replace(redirectTo);
+  }, [wasAuthedOnMount, isAuthenticated, router, redirectTo]);
 }

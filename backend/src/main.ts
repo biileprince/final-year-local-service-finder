@@ -1,11 +1,12 @@
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe } from "@nestjs/common";
+import { ValidationPipe, RequestMethod } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import helmet from "helmet";
 import * as cookieParser from "cookie-parser";
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/http-exception.filter";
+import { MetricsInterceptor, MetricsService } from "./monitoring";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -22,8 +23,14 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Global prefix
-  app.setGlobalPrefix("api");
+  // Global prefix — /metrics stays unprefixed so Prometheus's default
+  // scrape path works without per-job overrides.
+  app.setGlobalPrefix("api", {
+    exclude: [{ path: "metrics", method: RequestMethod.GET }],
+  });
+
+  // Prometheus HTTP metrics for every request
+  app.useGlobalInterceptors(new MetricsInterceptor(app.get(MetricsService)));
 
   // Validation
   app.useGlobalPipes(

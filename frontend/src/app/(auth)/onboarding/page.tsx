@@ -68,12 +68,18 @@ export default function OnboardingPage() {
     },
   });
 
-  // Redirect non-providers or unauthenticated users
+  // Redirect non-providers or unauthenticated users. The `user` guard is
+  // important: during a fresh register → onboarding transition the store's
+  // isAuthenticated can flip true before `user` is populated on the next
+  // render, and `undefined !== "PROVIDER"` would otherwise bounce providers
+  // straight to the dashboard.
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (isLoading) return;
+    if (!isAuthenticated) {
       router.replace("/login");
+      return;
     }
-    if (!isLoading && isAuthenticated && user?.role !== "PROVIDER") {
+    if (user && user.role !== "PROVIDER") {
       router.replace("/dashboard");
     }
   }, [isLoading, isAuthenticated, user, router]);
