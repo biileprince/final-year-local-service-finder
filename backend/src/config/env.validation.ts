@@ -59,7 +59,10 @@ const envSchema = z.object({
   EMAIL_REPLY_TO: z.email().optional(),
 
   // --- SMS provider switch + credentials ---
-  SMS_PROVIDER: z.enum(["twilio", "africas_talking"]).default("africas_talking"),
+  // "disabled" turns off SMS entirely (production won't require creds).
+  SMS_PROVIDER: z
+    .enum(["twilio", "africas_talking", "disabled"])
+    .default("disabled"),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_PHONE_NUMBER: z.string().optional(),
@@ -111,7 +114,7 @@ export function validateEnv(raw: Record<string, unknown>): Env {
       );
     }
 
-    // SMS provider must have its credentials when in prod
+    // SMS provider must have its credentials when in prod (unless disabled)
     if (env.SMS_PROVIDER === "twilio") {
       const smsMissing = (
         ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER"] as const

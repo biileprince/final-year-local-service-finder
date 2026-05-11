@@ -12,12 +12,13 @@ export class SmsService {
   private readonly twilioAccountSid: string;
   private readonly twilioAuthToken: string;
   private readonly twilioPhoneNumber: string;
-  private readonly smsProvider: "twilio" | "africas_talking";
+  private readonly smsProvider: "twilio" | "africas_talking" | "disabled";
 
   constructor(private readonly configService: ConfigService) {
     this.smsProvider =
-      this.configService.get<"twilio" | "africas_talking">("SMS_PROVIDER") ||
-      "twilio";
+      this.configService.get<"twilio" | "africas_talking" | "disabled">(
+        "SMS_PROVIDER",
+      ) || "disabled";
 
     // Twilio config
     this.twilioAccountSid =
@@ -34,11 +35,14 @@ export class SmsService {
     // Format phone number (ensure it has country code)
     const formattedPhone = this.formatPhoneNumber(to);
 
+    if (this.smsProvider === "disabled") {
+      this.logger.warn(`SMS disabled — skipping message to ${formattedPhone}`);
+      return false;
+    }
     if (this.smsProvider === "twilio") {
       return this.sendViaTwilio(formattedPhone, message);
-    } else {
-      return this.sendViaAfricasTalking(formattedPhone, message);
     }
+    return this.sendViaAfricasTalking(formattedPhone, message);
   }
 
   private async sendViaTwilio(to: string, message: string): Promise<boolean> {
