@@ -139,6 +139,13 @@ export class ProvidersRepository {
           },
         },
         specialties: true,
+        gallery: {
+          where: { deletedAt: null },
+          orderBy: { displayOrder: "asc" },
+          include: { file: true },
+        },
+        idDocument: true,
+        businessLicense: true,
       },
     });
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,14 +13,18 @@ import {
   FileText,
   ArrowRight,
   Tag,
+  ShieldCheck,
+  Upload,
+  X,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
-import { providersService } from "@/lib/api";
-import { categoriesService } from "@/lib/api";
-import type { Category } from "@/types";
+import { providersService, categoriesService, filesService } from "@/lib/api";
+import type { Category, Provider } from "@/types";
 import { cn } from "@/lib/utils";
 
 const profileSchema = z.object({
@@ -41,18 +45,40 @@ const profileSchema = z.object({
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
-const STEPS = ["Your profile", "Service categories", "You're ready"] as const;
+const STEPS = [
+  "Your profile",
+  "Service categories",
+  "Verification",
+  "You're ready",
+] as const;
+
+interface UploadedDoc {
+  id: string;
+  url: string;
+  fileName: string;
+  mimeType: string;
+}
 
 export default function OnboardingPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading } = useAuth();
 
+  const [provider, setProvider] = useState<Provider | null>(null);
   const [step, setStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [catLoading, setCatLoading] = useState(true);
+
+  // Verification document state
+  const [idDoc, setIdDoc] = useState<UploadedDoc | null>(null);
+  const [licenseDoc, setLicenseDoc] = useState<UploadedDoc | null>(null);
+  const [uploadingKind, setUploadingKind] = useState<"id" | "license" | null>(
+    null,
+  );
+  const idInputRef = useRef<HTMLInputElement>(null);
+  const licenseInputRef = useRef<HTMLInputElement>(null);
 
   const {
     register,
@@ -84,13 +110,47 @@ export default function OnboardingPage() {
     }
   }, [isLoading, isAuthenticated, user, router]);
 
+  // Load existing provider profile (for pre-filling docs on revisit) + categories.
   useEffect(() => {
-    categoriesService
-      .getAll()
-      .then(setCategories)
-      .catch(() => setCategories([]))
-      .finally(() => setCatLoading(false));
-  }, []);
+    if (!isAuthenticated || (user && user.role !== "PROVIDER")) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [me, cats] = await Promise.all([
+          providersService.getMyProfile().catch(() => null),
+          categoriesService.getAll(),
+        ]);
+        if (cancelled) return;
+        if (me) {
+          setProvider(me);
+          if (me.idDocument) {
+            setIdDoc({
+              id: me.idDocument.id,
+              url: me.idDocument.url,
+              fileName: me.idDocument.fileName || "ID document",
+              mimeType: me.idDocument.mimeType || "",
+            });
+          }
+          if (me.businessLicense) {
+            setLicenseDoc({
+              id: me.businessLicense.id,
+              url: me.businessLicense.url,
+              fileName: me.businessLicense.fileName || "Business license",
+              mimeType: me.businessLicense.mimeType || "",
+            });
+          }
+        }
+        setCategories(cats);
+      } catch {
+        setCategories([]);
+      } finally {
+        if (!cancelled) setCatLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, user]);
 
   const toggleCategory = (id: string) => {
     setSelectedCategoryIds((prev) =>
@@ -106,12 +166,13 @@ export default function OnboardingPage() {
     setIsSaving(true);
     setSaveError(null);
     try {
-      await providersService.updateProfile({
+      const updated = await providersService.updateProfile({
         bio: data.bio,
         location: data.location,
         yearsExperience: data.yearsExperience,
         hourlyRate: data.hourlyRate,
       });
+      setProvider(updated);
       setStep(1);
     } catch (err) {
       setSaveError(
@@ -138,6 +199,72 @@ export default function OnboardingPage() {
     }
   };
 
+  const handleDocUpload = async (
+    file: File,
+    kind: "id" | "license",
+  ): Promise<void> => {
+    if (!provider) {
+      setSaveError("Profile is still loading — please retry in a moment.");
+      return;
+    }
+    setUploadingKind(kind);
+    setSaveError(null);
+    try {
+      const uploaded = await filesService.upload(file, "VERIFICATION");
+      const docs =
+        kind === "id"
+          ? { idDocumentId: uploaded.id }
+          : { businessLicenseId: uploaded.id };
+      await providersService.setVerificationDocuments(provider.id, docs);
+      const next: UploadedDoc = {
+        id: uploaded.id,
+        url: uploaded.url,
+        fileName: uploaded.fileName,
+        mimeType: uploaded.mimeType,
+      };
+      if (kind === "id") setIdDoc(next);
+      else setLicenseDoc(next);
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? err.message : "Upload failed. Try again.",
+      );
+    } finally {
+      setUploadingKind(null);
+    }
+  };
+
+  const handleDocRemove = async (kind: "id" | "license") => {
+    if (!provider) return;
+    setUploadingKind(kind);
+    setSaveError(null);
+    try {
+      const docs =
+        kind === "id"
+          ? { idDocumentId: null }
+          : { businessLicenseId: null };
+      await providersService.setVerificationDocuments(provider.id, docs);
+      if (kind === "id") setIdDoc(null);
+      else setLicenseDoc(null);
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? err.message : "Couldn't remove the document.",
+      );
+    } finally {
+      setUploadingKind(null);
+    }
+  };
+
+  const onSubmitDocuments = () => {
+    if (!idDoc) {
+      setSaveError(
+        "Please upload a government-issued ID so we can verify your account.",
+      );
+      return;
+    }
+    setSaveError(null);
+    setStep(3);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -147,7 +274,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-lg">
+    <>
       {/* Progress */}
       <div className="mb-8">
         <div className="flex items-center gap-2">
@@ -187,7 +314,7 @@ export default function OnboardingPage() {
       {step === 0 && (
         <>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
-            Step 1 of 2
+            Step 1 of 3
           </p>
           <h1 className="mt-1 font-sans text-2xl font-bold tracking-tight text-gray-900">
             Set up your{" "}
@@ -274,7 +401,7 @@ export default function OnboardingPage() {
       {step === 1 && (
         <>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
-            Step 2 of 2
+            Step 2 of 3
           </p>
           <h1 className="mt-1 font-sans text-2xl font-bold tracking-tight text-gray-900">
             What services do{" "}
@@ -360,8 +487,73 @@ export default function OnboardingPage() {
         </>
       )}
 
-      {/* Step 2 — Success */}
+      {/* Step 2 — Verification documents */}
       {step === 2 && (
+        <>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
+            Step 3 of 3
+          </p>
+          <h1 className="mt-1 flex items-center gap-2 font-sans text-2xl font-bold tracking-tight text-gray-900">
+            <ShieldCheck className="h-6 w-6 text-primary-600" />
+            Verify your{" "}
+            <span className="italic text-primary-600">identity.</span>
+          </h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Upload a government-issued ID so customers can trust you. If you run
+            a registered business, attach the business license too. Both stay
+            private and are only seen by our verification team.
+          </p>
+
+          {saveError && (
+            <div className="mt-4 rounded-xl border-2 border-red-100 bg-red-50 p-3 text-sm font-semibold text-red-700">
+              {saveError}
+            </div>
+          )}
+
+          <div className="mt-6 space-y-4">
+            <DocumentUploader
+              label="Government-issued ID"
+              hint="Required. JPG, PNG, or PDF up to 10MB."
+              required
+              doc={idDoc}
+              busy={uploadingKind === "id"}
+              onUpload={(f) => handleDocUpload(f, "id")}
+              onRemove={() => handleDocRemove("id")}
+              inputRef={idInputRef}
+            />
+            <DocumentUploader
+              label="Business license"
+              hint="Optional. Helps with faster verification if you run a business."
+              doc={licenseDoc}
+              busy={uploadingKind === "license"}
+              onUpload={(f) => handleDocUpload(f, "license")}
+              onRemove={() => handleDocRemove("license")}
+              inputRef={licenseInputRef}
+            />
+          </div>
+
+          <div className="mt-6 flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setStep(1)}
+            >
+              Back
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={onSubmitDocuments}
+              disabled={!idDoc}
+              rightIcon={<ArrowRight className="h-4 w-4" />}
+            >
+              Continue
+            </Button>
+          </div>
+        </>
+      )}
+
+      {/* Step 3 — Success */}
+      {step === 3 && (
         <div className="text-center">
           <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary-50">
             <CheckCircle className="h-10 w-10 text-primary-600" />
@@ -374,9 +566,9 @@ export default function OnboardingPage() {
             <span className="italic text-primary-600">get customers.</span>
           </h1>
           <p className="mt-3 text-sm text-gray-600">
-            Your profile is live. Customers in your area can now discover and
-            book your services. Head to your dashboard to manage bookings,
-            messages, and availability.
+            Your profile is submitted. Once an admin approves your verification
+            documents (usually 1–2 business days), customers can discover and
+            book your services.
           </p>
 
           <div className="mt-8 space-y-3">
@@ -389,7 +581,7 @@ export default function OnboardingPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-green-500" />
-                    Profile is visible to customers
+                    {idDoc ? "ID document submitted" : "ID document pending"}
                   </li>
                   <li className="flex items-center gap-2 text-gray-400">
                     <Clock className="h-4 w-4" />
@@ -409,6 +601,116 @@ export default function OnboardingPage() {
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+function DocumentUploader({
+  label,
+  hint,
+  required,
+  doc,
+  busy,
+  onUpload,
+  onRemove,
+  inputRef,
+}: {
+  label: string;
+  hint: string;
+  required?: boolean;
+  doc: UploadedDoc | null;
+  busy: boolean;
+  onUpload: (file: File) => void;
+  onRemove: () => void;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+}) {
+  const isImage = doc ? doc.mimeType.startsWith("image/") : false;
+
+  return (
+    <div className="rounded-xl border-2 border-gray-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">
+            {label}
+            {required && <span className="ml-1 text-red-500">*</span>}
+          </p>
+          <p className="mt-0.5 text-xs text-gray-500">{hint}</p>
+        </div>
+        {doc && !busy && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-red-500"
+            aria-label="Remove document"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3">
+        {doc ? (
+          <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
+            {isImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={doc.url}
+                alt={label}
+                className="h-16 w-16 rounded-lg object-cover"
+              />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary-50">
+                <FileText className="h-7 w-7 text-primary-600" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-gray-900">
+                {doc.fileName}
+              </p>
+              <a
+                href={doc.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold text-primary-600 hover:underline"
+              >
+                View uploaded file
+              </a>
+            </div>
+            <CheckCircle className="h-5 w-5 shrink-0 text-green-500" />
+          </div>
+        ) : (
+          <label
+            className={cn(
+              "flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed py-4 text-sm font-semibold transition-colors",
+              busy
+                ? "border-gray-200 text-gray-400"
+                : "border-gray-300 text-gray-600 hover:border-primary-400 hover:bg-primary-50 hover:text-primary-700",
+            )}
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) onUpload(file);
+              }}
+            />
+            {busy ? (
+              <Spinner size="sm" />
+            ) : (
+              <>
+                <Upload className="h-4 w-4" />
+                <span>Choose file</span>
+                <ImageIcon className="h-4 w-4 opacity-60" />
+              </>
+            )}
+          </label>
+        )}
+      </div>
     </div>
   );
 }

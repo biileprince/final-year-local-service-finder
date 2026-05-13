@@ -455,7 +455,7 @@ export default function BookingDetailPage() {
               ) : (
                 <div className="flex flex-wrap gap-3">
                   {booking.attachments?.map((a) => {
-                    const isImage = a.file.mimeType.startsWith("image/");
+                    const isImage = (a.file.mimeType || "").startsWith("image/");
                     const canRemove = a.uploadedById === user?.id;
                     return (
                       <div

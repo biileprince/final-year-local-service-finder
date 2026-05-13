@@ -36,6 +36,21 @@ export const reviewsService = {
     params?: { page?: number; limit?: number },
   ): Promise<PaginatedResponse<Review>> {
     const qs = buildQueryString(params || {});
-    return apiClient.get(`/providers/${providerId}/reviews${qs}`);
+    const raw = await apiClient.get<{
+      items: Review[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    }>(`/reviews/provider/${providerId}${qs}`);
+    return {
+      data: raw.items ?? [],
+      pagination: {
+        page: raw.page ?? 1,
+        limit: raw.limit ?? (raw.items?.length ?? 0),
+        total: raw.total ?? 0,
+        totalPages: raw.totalPages ?? 1,
+      },
+    };
   },
 };

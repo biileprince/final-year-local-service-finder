@@ -511,7 +511,7 @@ export default function BookProviderPage() {
                     </p>
                     <div className="flex flex-wrap gap-3">
                       {attachments.map((a) => {
-                        const isImage = a.mimeType.startsWith("image/");
+                        const isImage = (a.mimeType || "").startsWith("image/");
                         return (
                           <div
                             key={a.id}
