@@ -661,6 +661,7 @@ export class AdminService {
     description?: string;
     icon?: string;
     color?: string;
+    imageId?: string;
     parentId?: string;
     displayOrder?: number;
   }) {
@@ -684,6 +685,7 @@ export class AdminService {
       description: string;
       icon: string;
       color: string;
+      imageId: string | null;
       parentId: string;
       displayOrder: number;
       isActive: boolean;

@@ -3,6 +3,8 @@ import {
   IsNumber,
   IsOptional,
   IsDateString,
+  IsArray,
+  ArrayMaxSize,
   Matches,
   MinLength,
   MaxLength,
@@ -74,4 +76,14 @@ export class CreateBookingDto {
   @Type(() => Number)
   @Min(0)
   estimatedAmount?: number;
+
+  @ApiPropertyOptional({
+    description: "File IDs to attach to the booking (max 10)",
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  attachmentIds?: string[];
 }

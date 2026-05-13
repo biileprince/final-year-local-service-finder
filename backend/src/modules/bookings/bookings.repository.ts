@@ -13,6 +13,7 @@ export interface CreateBookingData {
   serviceLongitude?: number;
   problemDescription: string;
   estimatedAmount?: number;
+  attachmentIds?: string[];
 }
 
 export interface UpdateBookingData {
@@ -71,6 +72,16 @@ export class BookingsRepository {
           ? new Prisma.Decimal(data.estimatedAmount)
           : null,
         createdById: data.customerId,
+        attachments:
+          data.attachmentIds && data.attachmentIds.length > 0
+            ? {
+                create: data.attachmentIds.map((fileId) => ({
+                  fileId,
+                  attachmentType: "INITIAL",
+                  uploadedById: data.customerId,
+                })),
+              }
+            : undefined,
       },
       include: {
         customer: {
@@ -123,10 +134,22 @@ export class BookingsRepository {
             },
           },
         },
-        review: true,
+        review: {
+          include: {
+            images: {
+              include: {
+                file: {
+                  select: { id: true, url: true, thumbnailUrl: true },
+                },
+              },
+              orderBy: { displayOrder: "asc" },
+            },
+          },
+        },
         attachments: {
           include: {
             file: true,
+            uploadedBy: { select: { id: true, name: true } },
           },
         },
       },

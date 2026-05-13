@@ -2,10 +2,12 @@ import {
   IsString,
   IsNumber,
   IsOptional,
+  IsArray,
   Min,
   Max,
   MinLength,
   MaxLength,
+  ArrayMaxSize,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
@@ -40,4 +42,14 @@ export class CreateReviewDto {
   @MinLength(10)
   @MaxLength(2000)
   comment: string;
+
+  @ApiPropertyOptional({
+    description: "File IDs for review photos (max 6)",
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(6)
+  @IsString({ each: true })
+  imageIds?: string[];
 }

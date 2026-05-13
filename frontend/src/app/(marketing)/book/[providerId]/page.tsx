@@ -11,6 +11,9 @@ import {
   ChevronRight,
   Star,
   CheckCircle,
+  Paperclip,
+  X,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +26,7 @@ import {
   providersService,
   availabilityService,
   bookingsService,
+  filesService,
 } from "@/lib/api";
 import type { Provider, TimeSlot } from "@/types";
 import { formatCurrency, formatDate, formatTime, cn } from "@/lib/utils";
@@ -56,6 +60,15 @@ export default function BookProviderPage() {
   const [serviceAddress, setServiceAddress] = useState("");
   const [problemDescription, setProblemDescription] = useState("");
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [attachments, setAttachments] = useState<
+    {
+      id: string;
+      url: string;
+      fileName: string;
+      mimeType: string;
+    }[]
+  >([]);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
 
   useEffect(() => {
     if (params.providerId) {
@@ -125,6 +138,7 @@ export default function BookProviderPage() {
             : extractHHMMSS(selectedSlot.startTime),
         serviceAddress,
         problemDescription,
+        attachmentIds: attachments.map((a) => a.id),
       });
 
       router.push(`/bookings/${booking.id}?success=true`);
@@ -482,6 +496,106 @@ export default function BookProviderPage() {
                       className="w-full rounded-xl border-2 border-secondary-200 bg-white px-4 py-3 text-base text-secondary-900 placeholder:text-secondary-400 transition-all hover:border-secondary-300 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                       placeholder="Please describe what you need help with..."
                     />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-base font-semibold text-secondary-700">
+                      Photos or documents{" "}
+                      <span className="font-normal text-secondary-400">
+                        (optional, up to 10)
+                      </span>
+                    </label>
+                    <p className="mb-3 text-sm text-secondary-500">
+                      Attach photos of the issue or any reference documents to
+                      help the provider prepare.
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      {attachments.map((a) => {
+                        const isImage = a.mimeType.startsWith("image/");
+                        return (
+                          <div
+                            key={a.id}
+                            className="relative h-24 w-24 overflow-hidden rounded-lg border border-secondary-200 bg-secondary-50"
+                          >
+                            {isImage ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={a.url}
+                                alt={a.fileName}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full flex-col items-center justify-center px-1 text-center">
+                                <FileText className="h-6 w-6 text-secondary-400" />
+                                <span className="mt-1 truncate text-[10px] text-secondary-600">
+                                  {a.fileName}
+                                </span>
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setAttachments((prev) =>
+                                  prev.filter((p) => p.id !== a.id),
+                                )
+                              }
+                              className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white"
+                              aria-label="Remove attachment"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {attachments.length < 10 && (
+                        <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-secondary-300 text-secondary-500 hover:border-primary-400 hover:text-primary-600">
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              e.target.value = "";
+                              if (!file) return;
+                              setAttachmentUploading(true);
+                              try {
+                                const uploaded = await filesService.upload(
+                                  file,
+                                  "BOOKING",
+                                );
+                                setAttachments((prev) => [
+                                  ...prev,
+                                  {
+                                    id: uploaded.id,
+                                    url: uploaded.url,
+                                    fileName: uploaded.fileName,
+                                    mimeType: uploaded.mimeType,
+                                  },
+                                ]);
+                              } catch (err) {
+                                setError(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Upload failed",
+                                );
+                              } finally {
+                                setAttachmentUploading(false);
+                              }
+                            }}
+                          />
+                          {attachmentUploading ? (
+                            <Spinner size="sm" />
+                          ) : (
+                            <>
+                              <Paperclip className="h-5 w-5" />
+                              <span className="mt-1 text-[11px] font-medium">
+                                Add file
+                              </span>
+                            </>
+                          )}
+                        </label>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-8 flex justify-between">

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { notificationsService } from "@/lib/api";
+import { useNotificationsSocket } from "@/lib/notifications-socket";
 import type { Notification } from "@/types";
 import { formatRelativeTime, cn } from "@/lib/utils";
 
@@ -26,10 +27,19 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const { onNewNotification, markRead, markAllRead } = useNotificationsSocket();
 
   useEffect(() => {
     loadNotifications();
   }, []);
+
+  useEffect(() => {
+    return onNewNotification((n) => {
+      setNotifications((prev) =>
+        prev.some((existing) => existing.id === n.id) ? prev : [n, ...prev],
+      );
+    });
+  }, [onNewNotification]);
 
   const loadNotifications = async () => {
     setIsLoading(true);
@@ -53,6 +63,7 @@ export default function NotificationsPage() {
             : n,
         ),
       );
+      markRead(id);
     } catch (error) {
       console.error("Failed to mark as read:", error);
     }
@@ -68,6 +79,7 @@ export default function NotificationsPage() {
           readAt: new Date().toISOString(),
         })),
       );
+      markAllRead();
     } catch (error) {
       console.error("Failed to mark all as read:", error);
     }
