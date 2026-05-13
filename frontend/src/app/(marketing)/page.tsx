@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PopularServices } from "@/components/home/popular-services";
 
 const heroBgImage =
   "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1800&q=80";
@@ -36,51 +37,6 @@ const serviceChips = [
   "AC Repair",
   "Handyman",
   "Laundry",
-];
-
-const categories = [
-  {
-    name: "Plumbing",
-    count: 150,
-    description: "Fix leaks, install pipes, and repair taps and toilets.",
-    image:
-      "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    name: "Electrical",
-    count: 120,
-    description: "Wiring, lights, sockets, and safety checks for your home.",
-    image:
-      "https://images.unsplash.com/photo-1519750157634-b6d493a0f77c?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    name: "Cleaning",
-    count: 200,
-    description: "Home, office, and move-in or move-out cleaning services.",
-    image:
-      "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    name: "Painting",
-    count: 80,
-    description: "Walls, rooms, fences, and small touch-ups.",
-    image:
-      "https://images.unsplash.com/photo-1501045661006-fcebe0257c3f?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    name: "Carpentry",
-    count: 90,
-    description: "Shelves, doors, furniture, and wood repairs.",
-    image:
-      "https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    name: "AC Repair",
-    count: 70,
-    description: "AC installation, servicing, and gas refills.",
-    image:
-      "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=800&q=80",
-  },
 ];
 
 const howItWorksCustomer = [
@@ -296,63 +252,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ====== Popular services ====== */}
-      <section id="popular-services" className="py-24">
-        <div className="mx-auto max-w-7xl px-4 sm:px-8 lg:px-8">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2 className="text-3xl font-bold text-secondary-900 sm:text-4xl">
-                Popular services
-              </h2>
-              <p className="mt-4 text-lg text-secondary-600">
-                We cover many services. If you provide a service, you can list
-                it and reach customers who need it.
-              </p>
-            </div>
-            <Button variant="outline" size="lg" asChild>
-              <Link href="/categories">
-                View all categories <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
-            </Button>
-          </div>
-
-          <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {categories.map((category) => (
-              <Card key={category.name} className="overflow-hidden shadow-soft">
-                <div className="h-48 w-full overflow-hidden">
-                  <Image
-                    src={category.image}
-                    alt={category.name}
-                    width={800}
-                    height={600}
-                    className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
-                  />
-                </div>
-                <CardContent className="p-6">
-                  <h3 className="text-xl font-bold text-secondary-900">
-                    {category.name}
-                  </h3>
-                  <p className="mt-2 text-base text-secondary-600">
-                    {category.description}
-                  </p>
-                  <div className="mt-6 flex items-center justify-between">
-                    <p className="text-sm font-medium text-secondary-500">
-                      {category.count}+ service providers
-                    </p>
-                    <Button size="default" asChild>
-                      <Link
-                        href={`/search?category=${category.name.toLowerCase()}`}
-                      >
-                        View
-                      </Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
+      <PopularServices />
 
       {/* ====== How it works ====== */}
       <section id="how-it-works" className="relative bg-secondary-50 py-24">

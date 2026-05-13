@@ -7,6 +7,7 @@ export interface CreateReviewDto {
   rating: number;
   title?: string;
   comment: string;
+  imageIds?: string[];
 }
 
 export const reviewsService = {

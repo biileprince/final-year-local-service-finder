@@ -130,6 +130,16 @@ export class BookingsService {
           problemDescription: data.problemDescription,
           estimatedAmount: data.estimatedAmount,
           createdById: data.customerId,
+          attachments:
+            data.attachmentIds && data.attachmentIds.length > 0
+              ? {
+                  create: data.attachmentIds.map((fileId) => ({
+                    fileId,
+                    attachmentType: "INITIAL",
+                    uploadedById: data.customerId,
+                  })),
+                }
+              : undefined,
         },
         include: {
           customer: {
@@ -207,6 +217,54 @@ export class BookingsService {
     }
 
     return booking;
+  }
+
+  async addAttachment(
+    bookingId: string,
+    userId: string,
+    fileId: string,
+    description?: string,
+  ) {
+    const booking = await this.findById(bookingId, userId);
+    const isCustomer = booking.customerId === userId;
+    const isProvider = booking.provider.userId === userId;
+    if (!isCustomer && !isProvider) {
+      throw new ForbiddenException(
+        "Only the customer or provider can attach files to this booking",
+      );
+    }
+    return this.prisma.bookingAttachment.create({
+      data: {
+        bookingId,
+        fileId,
+        attachmentType: isProvider ? "PROVIDER" : "CUSTOMER",
+        description,
+        uploadedById: userId,
+      },
+      include: {
+        file: true,
+        uploadedBy: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  async removeAttachment(
+    bookingId: string,
+    userId: string,
+    attachmentId: string,
+  ) {
+    const attachment = await this.prisma.bookingAttachment.findUnique({
+      where: { id: attachmentId },
+      select: { id: true, bookingId: true, uploadedById: true },
+    });
+    if (!attachment || attachment.bookingId !== bookingId) {
+      throw new NotFoundException("Attachment not found");
+    }
+    if (attachment.uploadedById !== userId) {
+      throw new ForbiddenException("You can only remove your own attachments");
+    }
+    await this.prisma.bookingAttachment.delete({ where: { id: attachmentId } });
+    return { success: true };
   }
 
   async findByBookingNumber(bookingNumber: string) {

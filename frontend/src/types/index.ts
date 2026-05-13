@@ -72,6 +72,8 @@ export interface Category {
   description?: string;
   icon?: string;
   color?: string;
+  imageId?: string | null;
+  image?: { id: string; url: string; thumbnailUrl?: string | null } | null;
   providerCount: number;
 }
 
@@ -101,6 +103,24 @@ export interface Booking {
   cancellationReason?: string;
   createdAt: string;
   review?: Review;
+  attachments?: BookingAttachment[];
+}
+
+export interface BookingAttachment {
+  id: string;
+  attachmentType: string;
+  description?: string | null;
+  uploadedById: string;
+  uploadedBy?: { id: string; name: string };
+  createdAt: string;
+  file: {
+    id: string;
+    url: string;
+    thumbnailUrl?: string | null;
+    fileName: string;
+    mimeType: string;
+    fileSize?: number;
+  };
 }
 
 // Review types

@@ -1,5 +1,10 @@
 import { apiClient, buildQueryString } from "./client";
-import type { Booking, BookingStatus, PaginatedResponse } from "@/types";
+import type {
+  Booking,
+  BookingAttachment,
+  BookingStatus,
+  PaginatedResponse,
+} from "@/types";
 
 type BookingListResponse =
   | PaginatedResponse<Booking>
@@ -45,6 +50,7 @@ export interface CreateBookingDto {
   serviceAddress: string;
   problemDescription: string;
   estimatedAmount?: number;
+  attachmentIds?: string[];
 }
 
 export interface BookingsQueryParams {
@@ -128,6 +134,22 @@ export const bookingsService = {
     data: { paymentMethod: string; paymentReference: string },
   ): Promise<Booking> {
     return apiClient.put<Booking>(`/bookings/${id}/record-payment`, data, true);
+  },
+
+  async addAttachment(
+    id: string,
+    fileId: string,
+    description?: string,
+  ): Promise<BookingAttachment> {
+    return apiClient.post<BookingAttachment>(
+      `/bookings/${id}/attachments`,
+      { fileId, description },
+      true,
+    );
+  },
+
+  async removeAttachment(id: string, attachmentId: string): Promise<void> {
+    return apiClient.delete(`/bookings/${id}/attachments/${attachmentId}`, true);
   },
 
   // Get upcoming bookings for dashboard

@@ -1,10 +1,11 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Inject, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../database/prisma.service";
 import { NotificationType as PrismaNotificationType } from "@prisma/client";
 import { NotificationsRepository } from "./notifications.repository";
 import { EmailService } from "./services/email.service";
 import { SmsService } from "./services/sms.service";
+import { NotificationsGateway } from "./notifications.gateway";
 
 // Internal notification categories (stored in referenceType)
 export enum NotificationCategory {
@@ -69,6 +70,8 @@ export class NotificationsService {
     private readonly repository: NotificationsRepository,
     private readonly emailService: EmailService,
     private readonly smsService: SmsService,
+    @Inject(forwardRef(() => NotificationsGateway))
+    private readonly gateway: NotificationsGateway,
   ) {}
 
   // ============================================================================
@@ -109,7 +112,7 @@ export class NotificationsService {
     // Create in-app notification
     if (channels.includes("in_app")) {
       try {
-        await this.repository.create({
+        const created = await this.repository.create({
           userId,
           title,
           body,
@@ -118,6 +121,13 @@ export class NotificationsService {
           referenceId,
         });
         results.inApp = true;
+        // Fan out to any open sockets for this user. Failures here must not
+        // block notification delivery — the row is already persisted.
+        this.gateway.emitNewNotification(userId, created).catch((err) => {
+          this.logger.warn(
+            `Socket emit failed for user ${userId}: ${(err as Error).message}`,
+          );
+        });
       } catch (error) {
         this.logger.error(`Failed to create in-app notification: ${(error as Error).message}`);
         results.inApp = false;
@@ -519,11 +529,15 @@ export class NotificationsService {
   }
 
   async markAsRead(notificationId: string, userId: string) {
-    return this.repository.markAsRead(notificationId, userId);
+    const result = await this.repository.markAsRead(notificationId, userId);
+    this.gateway.emitUnreadCount(userId).catch(() => undefined);
+    return result;
   }
 
   async markAllAsRead(userId: string) {
-    return this.repository.markAllAsRead(userId);
+    const result = await this.repository.markAllAsRead(userId);
+    this.gateway.emitUnreadCount(userId).catch(() => undefined);
+    return result;
   }
 
   async getUnreadCount(userId: string) {
@@ -531,7 +545,9 @@ export class NotificationsService {
   }
 
   async deleteNotification(notificationId: string, userId: string) {
-    return this.repository.delete(notificationId, userId);
+    const result = await this.repository.delete(notificationId, userId);
+    this.gateway.emitUnreadCount(userId).catch(() => undefined);
+    return result;
   }
 
   // ============================================================================

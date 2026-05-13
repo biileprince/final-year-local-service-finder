@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -180,6 +181,35 @@ export class BookingsController {
     @Body() cancelBookingDto: CancelBookingDto,
   ) {
     return this.bookingsService.cancel(id, user.id, cancelBookingDto.reason);
+  }
+
+  @Post(":id/attachments")
+  @ApiOperation({
+    summary: "Attach a file (image or document) to a booking",
+  })
+  @ApiResponse({ status: 201, description: "Attachment added" })
+  async addAttachment(
+    @Param("id") id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() body: { fileId: string; description?: string },
+  ) {
+    return this.bookingsService.addAttachment(
+      id,
+      user.id,
+      body.fileId,
+      body.description,
+    );
+  }
+
+  @Delete(":id/attachments/:attachmentId")
+  @ApiOperation({ summary: "Remove an attachment from a booking" })
+  @ApiResponse({ status: 200, description: "Attachment removed" })
+  async removeAttachment(
+    @Param("id") id: string,
+    @Param("attachmentId") attachmentId: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.bookingsService.removeAttachment(id, user.id, attachmentId);
   }
 
   @Put(":id/record-payment")

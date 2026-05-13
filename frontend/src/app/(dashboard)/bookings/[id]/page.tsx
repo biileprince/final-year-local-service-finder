@@ -16,6 +16,10 @@ import {
   Star,
   Banknote,
   CalendarClock,
+  ImagePlus,
+  X,
+  Paperclip,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/hooks";
-import { bookingsService, reviewsService, messagesService } from "@/lib/api";
+import { bookingsService, reviewsService, messagesService, filesService } from "@/lib/api";
 import type { Booking, BookingStatus } from "@/types";
 import { formatDate, formatTime, formatCurrency, cn } from "@/lib/utils";
 
@@ -73,6 +77,11 @@ export default function BookingDetailPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewImages, setReviewImages] = useState<
+    { id: string; url: string }[]
+  >([]);
+  const [reviewUploading, setReviewUploading] = useState(false);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
 
   // Reschedule state
   const [showReschedule, setShowReschedule] = useState(false);
@@ -176,9 +185,11 @@ export default function BookingDetailPage() {
         bookingId: booking.id,
         rating: reviewRating,
         comment: trimmed,
+        imageIds: reviewImages.map((i) => i.id),
       });
       setShowReviewForm(false);
       setReviewComment("");
+      setReviewImages([]);
       loadBooking(booking.id);
     } catch (err) {
       setReviewError(
@@ -186,6 +197,38 @@ export default function BookingDetailPage() {
       );
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleAttachmentUpload = async (file: File) => {
+    if (!booking) return;
+    setAttachmentUploading(true);
+    try {
+      const uploaded = await filesService.upload(file, "BOOKING");
+      await bookingsService.addAttachment(booking.id, uploaded.id);
+      await loadBooking(booking.id);
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Upload failed",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setAttachmentUploading(false);
+    }
+  };
+
+  const handleAttachmentRemove = async (attachmentId: string) => {
+    if (!booking) return;
+    try {
+      await bookingsService.removeAttachment(booking.id, attachmentId);
+      await loadBooking(booking.id);
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Couldn't remove attachment",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
     }
   };
 
@@ -395,6 +438,98 @@ export default function BookingDetailPage() {
             </CardContent>
           </Card>
 
+          {/* ── Attachments ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Paperclip className="h-5 w-5" />
+                Attachments
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(booking.attachments?.length ?? 0) === 0 ? (
+                <p className="text-sm text-secondary-500">
+                  No attachments yet. Photos or documents shared here are
+                  visible to both the customer and the provider.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {booking.attachments?.map((a) => {
+                    const isImage = a.file.mimeType.startsWith("image/");
+                    const canRemove = a.uploadedById === user?.id;
+                    return (
+                      <div
+                        key={a.id}
+                        className="relative w-32 overflow-hidden rounded-lg border border-secondary-200 bg-secondary-50"
+                      >
+                        <a
+                          href={a.file.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          {isImage ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={a.file.thumbnailUrl || a.file.url}
+                              alt={a.file.fileName}
+                              className="h-28 w-32 object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-28 w-32 flex-col items-center justify-center px-2 text-center">
+                              <FileText className="h-7 w-7 text-secondary-400" />
+                              <span className="mt-1 truncate text-[11px] text-secondary-600">
+                                {a.file.fileName}
+                              </span>
+                            </div>
+                          )}
+                        </a>
+                        {a.uploadedBy && (
+                          <p className="truncate border-t border-secondary-100 bg-white px-2 py-1 text-[10px] text-secondary-500">
+                            by {a.uploadedBy.name}
+                          </p>
+                        )}
+                        {canRemove && (
+                          <button
+                            type="button"
+                            onClick={() => handleAttachmentRemove(a.id)}
+                            className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white"
+                            aria-label="Remove attachment"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {booking.status !== "CANCELLED" &&
+                booking.status !== "COMPLETED" && (
+                  <div className="mt-4">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-secondary-300 px-3 py-2 text-sm font-medium text-secondary-700 hover:border-primary-400 hover:text-primary-600">
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (file) void handleAttachmentUpload(file);
+                        }}
+                      />
+                      {attachmentUploading ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        <Paperclip className="h-4 w-4" />
+                      )}
+                      Add file
+                    </label>
+                  </div>
+                )}
+            </CardContent>
+          </Card>
+
           {/* ── Provider workflow actions ── */}
           {isProvider && booking.status === "PENDING" && (
             <Card>
@@ -588,6 +723,76 @@ export default function BookingDetailPage() {
                         placeholder="Share your experience…"
                       />
                     </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-secondary-700">
+                        Photos <span className="text-secondary-400">(up to 6)</span>
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {reviewImages.map((img) => (
+                          <div
+                            key={img.id}
+                            className="relative h-20 w-20 overflow-hidden rounded-lg border border-secondary-200"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={img.url}
+                              alt="Review attachment"
+                              className="h-full w-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setReviewImages((prev) =>
+                                  prev.filter((p) => p.id !== img.id),
+                                )
+                              }
+                              className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white"
+                              aria-label="Remove image"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {reviewImages.length < 6 && (
+                          <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-secondary-300 text-secondary-400 hover:border-primary-400 hover:text-primary-500">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = "";
+                                if (!file) return;
+                                setReviewUploading(true);
+                                try {
+                                  const uploaded = await filesService.upload(
+                                    file,
+                                    "REVIEW",
+                                  );
+                                  setReviewImages((prev) => [
+                                    ...prev,
+                                    { id: uploaded.id, url: uploaded.url },
+                                  ]);
+                                } catch (err) {
+                                  setReviewError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Upload failed",
+                                  );
+                                } finally {
+                                  setReviewUploading(false);
+                                }
+                              }}
+                            />
+                            {reviewUploading ? (
+                              <Spinner size="sm" />
+                            ) : (
+                              <ImagePlus className="h-6 w-6" />
+                            )}
+                          </label>
+                        )}
+                      </div>
+                    </div>
                     <div className="flex gap-3">
                       <Button onClick={handleSubmitReview} isLoading={isUpdating}>
                         Submit Review
@@ -597,6 +802,7 @@ export default function BookingDetailPage() {
                         onClick={() => {
                           setShowReviewForm(false);
                           setReviewError(null);
+                          setReviewImages([]);
                         }}
                       >
                         Cancel
@@ -629,6 +835,19 @@ export default function BookingDetailPage() {
                 </div>
                 {booking.review.comment && (
                   <p className="text-secondary-700">{booking.review.comment}</p>
+                )}
+                {booking.review.images && booking.review.images.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {booking.review.images.map((img) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={img.id}
+                        src={img.file.thumbnailUrl || img.file.url}
+                        alt="Review photo"
+                        className="h-20 w-20 rounded-lg object-cover"
+                      />
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>

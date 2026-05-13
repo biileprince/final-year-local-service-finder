@@ -167,6 +167,7 @@ export const adminService = {
     description?: string;
     icon?: string;
     color?: string;
+    imageId?: string | null;
     displayOrder?: number;
   }): Promise<Category> {
     return apiClient.post("/admin/categories", data, true);
@@ -180,6 +181,7 @@ export const adminService = {
       description: string;
       icon: string;
       color: string;
+      imageId: string | null;
       displayOrder: number;
       isActive: boolean;
     }>,
