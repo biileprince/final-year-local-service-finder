@@ -92,9 +92,24 @@ export const providersService = {
     params?: { page?: number; limit?: number },
   ): Promise<PaginatedResponse<Review>> {
     const queryString = buildQueryString(params || {});
-    return apiClient.get<PaginatedResponse<Review>>(
-      `/providers/${providerId}/reviews${queryString}`,
-    );
+    // Reviews controller returns { items, total, page, limit, totalPages }
+    // — normalize into the shared PaginatedResponse<T> shape.
+    const raw = await apiClient.get<{
+      items: Review[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    }>(`/reviews/provider/${providerId}${queryString}`);
+    return {
+      data: raw.items ?? [],
+      pagination: {
+        page: raw.page ?? 1,
+        limit: raw.limit ?? (raw.items?.length ?? 0),
+        total: raw.total ?? 0,
+        totalPages: raw.totalPages ?? 1,
+      },
+    };
   },
 
   async getAvailability(

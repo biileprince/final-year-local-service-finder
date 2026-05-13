@@ -23,6 +23,7 @@ export interface FileUploadResult {
   thumbnailUrl?: string;
   storageKey: string;
   fileName: string;
+  mimeType: string;
   fileType: FileType;
   fileSize: number;
 }
@@ -98,6 +99,7 @@ export class FilesService {
         thumbnailUrl: savedFile.thumbnailUrl || undefined,
         storageKey: savedFile.storageKey,
         fileName: savedFile.originalName,
+        mimeType: savedFile.mimeType,
         fileType: savedFile.fileType,
         fileSize: savedFile.fileSize,
       };
@@ -262,6 +264,7 @@ export class FilesService {
       thumbnailUrl: file.thumbnailUrl || undefined,
       storageKey: file.storageKey,
       fileName: file.originalName,
+      mimeType: file.mimeType,
       fileType: file.fileType,
       fileSize: file.fileSize,
     };

@@ -30,6 +30,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get("returnUrl") ?? "/dashboard";
+  const reason = searchParams.get("reason");
   useRedirectIfAuthenticated(returnUrl);
   const { login, isLoading, error, clearError } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
@@ -63,6 +64,15 @@ function LoginForm() {
       <p className="mt-3 text-gray-600">
         Enter your email and password to continue and manage your bookings.
       </p>
+
+      {reason === "session-expired" && !error && (
+        <div
+          role="status"
+          className="mt-6 rounded-xl border-2 border-amber-100 bg-amber-50 p-3 text-sm font-semibold text-amber-800"
+        >
+          Your session expired. Please log in again to continue.
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">
         {error && (

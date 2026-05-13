@@ -41,29 +41,66 @@ class ApiClient {
     localStorage.removeItem("refreshToken");
   }
 
+  /**
+   * Coalesces concurrent refresh attempts so a single 401 burst (many parallel
+   * requests after the access token expires) results in ONE refresh call.
+   */
+  private refreshPromise: Promise<boolean> | null = null;
+
   private async refreshTokens(): Promise<boolean> {
-    const refreshToken = this.getRefreshToken();
-    if (!refreshToken) return false;
+    if (this.refreshPromise) return this.refreshPromise;
 
-    try {
-      const response = await fetch(`${this.baseUrl}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
-      });
+    this.refreshPromise = (async () => {
+      const refreshToken = this.getRefreshToken();
+      if (!refreshToken) return false;
 
-      if (!response.ok) {
+      try {
+        const response = await fetch(`${this.baseUrl}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken }),
+        });
+
+        if (!response.ok) {
+          this.clearTokens();
+          return false;
+        }
+
+        const data = await response.json();
+        this.setTokens(data.accessToken, data.refreshToken);
+        return true;
+      } catch {
         this.clearTokens();
         return false;
+      } finally {
+        // Allow the next 401 (well after this refresh) to try again.
+        setTimeout(() => {
+          this.refreshPromise = null;
+        }, 0);
       }
+    })();
 
-      const data = await response.json();
-      this.setTokens(data.accessToken, data.refreshToken);
-      return true;
-    } catch {
-      this.clearTokens();
-      return false;
+    return this.refreshPromise;
+  }
+
+  /**
+   * Called when both the access token request and a refresh attempt have
+   * failed. Clears storage and bounces the user to /login with a returnUrl so
+   * they land back where they were after logging in. We use window.location
+   * (not next/router) because this runs outside any React render and we want a
+   * hard reload — that also resets any in-memory zustand state that might be
+   * holding stale auth flags.
+   */
+  private handleAuthFailure(): void {
+    if (typeof window === "undefined") return;
+    this.clearTokens();
+    const current = window.location.pathname + window.location.search;
+    // Avoid redirect loop if we're already on an auth page.
+    if (/^\/(login|register|forgot-password|reset-password|verify-email)/.test(window.location.pathname)) {
+      return;
     }
+    const returnUrl = encodeURIComponent(current);
+    window.location.href = `/login?returnUrl=${returnUrl}&reason=session-expired`;
   }
 
   async request<T>(
@@ -110,6 +147,12 @@ class ApiClient {
           ...fetchOptions,
           headers: requestHeaders,
         });
+        // If the retry is also unauthorized, the session is truly gone.
+        if (response.status === 401) {
+          this.handleAuthFailure();
+        }
+      } else {
+        this.handleAuthFailure();
       }
     }
 
@@ -148,19 +191,38 @@ class ApiClient {
   }
 
   async uploadFile(endpoint: string, file: File, context?: string): Promise<any> {
-    const formData = new FormData();
-    formData.append("file", file);
-    if (context) formData.append("context", context);
+    const sendOnce = async (token: string | null) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (context) formData.append("context", context);
+      return fetch(`${this.baseUrl}${endpoint}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+    };
 
-    const token = this.getToken();
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
+    let token = this.getToken();
+    let response = await sendOnce(token);
+
+    if (response.status === 401) {
+      const refreshed = await this.refreshTokens();
+      if (refreshed) {
+        token = this.getToken();
+        response = await sendOnce(token);
+        if (response.status === 401) {
+          this.handleAuthFailure();
+        }
+      } else {
+        this.handleAuthFailure();
+      }
+    }
 
     if (!response.ok) {
-      throw new Error("File upload failed");
+      const error = await response.json().catch(() => ({
+        message: "File upload failed",
+      }));
+      throw new Error(error.message || "File upload failed");
     }
 
     return response.json();

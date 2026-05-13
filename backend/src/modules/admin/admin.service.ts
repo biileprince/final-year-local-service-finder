@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { PrismaService } from "../../database/prisma.service";
+import { CacheService } from "../../cache/cache.service";
 import {
   UserRole,
   BookingStatus,
@@ -71,7 +72,10 @@ export interface BookingListParams {
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService,
+  ) {}
 
   // ============================================================================
   // Dashboard & Analytics
@@ -674,7 +678,14 @@ export class AdminService {
       throw new BadRequestException("Category with this slug already exists");
     }
 
-    return this.prisma.category.create({ data });
+    const created = await this.prisma.category.create({
+      data,
+      include: {
+        image: { select: { id: true, url: true, thumbnailUrl: true } },
+      },
+    });
+    await this.cacheService.invalidateCategories();
+    return created;
   }
 
   async updateCategory(
@@ -697,10 +708,15 @@ export class AdminService {
       throw new NotFoundException("Category not found");
     }
 
-    return this.prisma.category.update({
+    const updated = await this.prisma.category.update({
       where: { id },
       data,
+      include: {
+        image: { select: { id: true, url: true, thumbnailUrl: true } },
+      },
     });
+    await this.cacheService.invalidateCategories();
+    return updated;
   }
 
   async deleteCategory(id: string) {
@@ -719,10 +735,12 @@ export class AdminService {
       );
     }
 
-    return this.prisma.category.update({
+    const deleted = await this.prisma.category.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
+    await this.cacheService.invalidateCategories();
+    return deleted;
   }
 
   // ============================================================================

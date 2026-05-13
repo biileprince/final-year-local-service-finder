@@ -11,9 +11,11 @@ export type FileContext =
 export interface UploadedFile {
   id: string;
   url: string;
+  thumbnailUrl?: string;
   storageKey: string;
   fileName: string;
   mimeType: string;
+  fileType?: string;
   fileSize: number;
   context?: FileContext;
 }

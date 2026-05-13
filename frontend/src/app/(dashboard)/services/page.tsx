@@ -448,7 +448,8 @@ export default function ProviderServicesPage() {
                 kind === "id" ? provider.idDocument : provider.businessLicense;
               const label = kind === "id" ? "ID document" : "Business license";
               const isImg =
-                file?.url && /\.(png|jpe?g|gif|webp)$/i.test(file.url);
+                file?.mimeType?.startsWith("image/") ||
+                (file?.url && /\.(png|jpe?g|gif|webp)$/i.test(file.url));
               return (
                 <div
                   key={kind}
