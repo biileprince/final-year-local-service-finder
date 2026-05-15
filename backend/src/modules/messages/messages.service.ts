@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from "@nestjs/common";
 import { PrismaService } from "../../database/prisma.service";
 import {
@@ -9,12 +11,15 @@ import {
   CreateMessageData,
   MessageListParams,
 } from "./messages.repository";
+import { MessagesGateway } from "./messages.gateway";
 
 @Injectable()
 export class MessagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly messagesRepository: MessagesRepository,
+    @Inject(forwardRef(() => MessagesGateway))
+    private readonly messagesGateway: MessagesGateway,
   ) {}
 
   async getOrCreateConversation(
@@ -148,6 +153,18 @@ export class MessagesService {
       content,
       senderId,
     );
+
+    // Real-time fan-out (room + per-user notification + unread count).
+    // Wrapped so a transient socket failure can't roll back a persisted message.
+    try {
+      await this.messagesGateway.broadcastNewMessage(
+        message,
+        conversationId,
+        senderId,
+      );
+    } catch {
+      // ignore — message is persisted; client will pick it up on next load.
+    }
 
     return message;
   }

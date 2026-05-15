@@ -12,6 +12,9 @@ import {
   Video,
   Calendar,
   ArrowRight,
+  Mic,
+  Square,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
@@ -85,6 +88,16 @@ export default function ConversationPage() {
   const [otherReadAt, setOtherReadAt] = useState<string | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Voice note recording
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [sendingVoice, setSendingVoice] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cancelRecordingRef = useRef(false);
+  const MAX_RECORD_SECONDS = 120;
+
   useEffect(() => {
     if (params.id) {
       loadConversation(params.id as string);
@@ -134,6 +147,126 @@ export default function ConversationPage() {
     });
   }, [onMessagesRead, conversation, user?.id]);
 
+  const pickAudioMime = (): string => {
+    // MediaRecorder support is fragmented: Chrome ships webm/opus, Safari/iOS
+    // only mp4/aac. Empty string lets the browser pick its native default.
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg;codecs=opus",
+    ];
+    if (typeof MediaRecorder === "undefined") return "";
+    for (const c of candidates) {
+      if (MediaRecorder.isTypeSupported(c)) return c;
+    }
+    return "";
+  };
+
+  const startRecording = async () => {
+    if (!conversation || isRecording || sendingVoice) return;
+    cancelRecordingRef.current = false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = pickAudioMime();
+      const recorder = new MediaRecorder(
+        stream,
+        mime ? { mimeType: mime } : undefined,
+      );
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (recordTimerRef.current) {
+          clearInterval(recordTimerRef.current);
+          recordTimerRef.current = null;
+        }
+        const chunks = audioChunksRef.current;
+        audioChunksRef.current = [];
+        setIsRecording(false);
+        if (cancelRecordingRef.current) return;
+        if (chunks.length === 0) return;
+        const blobType = mime || chunks[0]?.type || "audio/webm";
+        const blob = new Blob(chunks, { type: blobType });
+        const ext = blobType.includes("mp4")
+          ? "m4a"
+          : blobType.includes("ogg")
+            ? "ogg"
+            : "webm";
+        const file = new File(
+          [blob],
+          `voice-${Date.now()}.${ext}`,
+          { type: blobType },
+        );
+        setSendingVoice(true);
+        try {
+          const uploaded = await filesService.upload(file, "MESSAGE");
+          const newMessage = await messagesService.sendMessage(conversation.id, {
+            content: "Voice message",
+            messageType: "voice",
+            fileId: uploaded.id,
+          });
+          setMessages((prev) =>
+            prev.some((m) => m.id === newMessage.id)
+              ? prev
+              : [...prev, newMessage],
+          );
+        } catch (err) {
+          toast({
+            variant: "error",
+            title: "Couldn't send voice note",
+            description: err instanceof Error ? err.message : "Try again.",
+          });
+        } finally {
+          setSendingVoice(false);
+        }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setRecordSeconds(0);
+      recordTimerRef.current = setInterval(() => {
+        setRecordSeconds((s) => {
+          if (s + 1 >= MAX_RECORD_SECONDS) {
+            // Auto-stop at the cap so we don't accidentally upload huge blobs.
+            mediaRecorderRef.current?.stop();
+          }
+          return s + 1;
+        });
+      }, 1000);
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Microphone unavailable",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Grant mic permission to record voice notes.",
+      });
+    }
+  };
+
+  const stopRecording = (cancel = false) => {
+    cancelRecordingRef.current = cancel;
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      const r = mediaRecorderRef.current;
+      if (r && r.state !== "inactive") r.stop();
+    };
+  }, []);
+
+  const formatRecordTime = (s: number) =>
+    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
   const handleTypingChange = (text: string) => {
     setMessageText(text);
     if (!conversation || !isConnected) return;
@@ -157,6 +290,14 @@ export default function ConversationPage() {
       ]);
       setConversation(conversationData);
       setMessages(messagesData);
+      // Seed the read-receipt indicator from the persisted last-read timestamp
+      // for the *other* party so it shows up on first paint, before any live
+      // `messages_read` event arrives.
+      const otherLastRead =
+        user?.role === "PROVIDER"
+          ? conversationData.customerLastReadAt
+          : conversationData.providerLastReadAt;
+      setOtherReadAt(otherLastRead ?? null);
     } catch (error) {
       console.error("Failed to load conversation:", error);
     } finally {
@@ -335,7 +476,13 @@ export default function ConversationPage() {
                         : "rounded-tl-sm bg-secondary-100 text-secondary-900",
                     )}
                   >
-                    {message.file ? (
+                    {message.file && message.messageType === "voice" ? (
+                      <audio
+                        controls
+                        src={message.file.url}
+                        className="h-10 w-full max-w-[220px]"
+                      />
+                    ) : message.file ? (
                       message.file.thumbnailUrl ||
                       /\.(png|jpe?g|gif|webp)$/i.test(message.file.fileName) ? (
                         <a
@@ -391,54 +538,109 @@ export default function ConversationPage() {
               <span>{otherUser?.name?.split(" ")[0] ?? "They"} is typing…</span>
             </div>
           )}
-          {otherReadAt &&
-            messages.length > 0 &&
-            messages[messages.length - 1]?.senderId === user?.id && (
+          {(() => {
+            if (!otherReadAt || messages.length === 0) return null;
+            const lastOwn = [...messages]
+              .reverse()
+              .find((m) => m.senderId === user?.id);
+            if (!lastOwn) return null;
+            if (new Date(otherReadAt) < new Date(lastOwn.createdAt)) return null;
+            if (messages[messages.length - 1]?.senderId !== user?.id)
+              return null;
+            return (
               <p className="pr-2 text-right text-[11px] text-secondary-400">
                 Read {formatRelativeTime(otherReadAt)}
               </p>
-            )}
+            );
+          })()}
           <div ref={messagesEndRef} />
         </div>
       </div>
 
       {/* Input */}
-      <form
-        onSubmit={handleSendMessage}
-        className="flex items-center gap-3 border-t px-4 py-3"
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          onChange={handleFileAttach}
-          className="hidden"
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploadingFile}
-          aria-label="Attach file"
+      {isRecording ? (
+        <div className="flex items-center gap-3 border-t px-4 py-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => stopRecording(true)}
+            aria-label="Cancel recording"
+          >
+            <Trash2 className="h-5 w-5 text-error-600" />
+          </Button>
+          <div className="flex flex-1 items-center gap-2 rounded-full bg-error-50 px-4 py-2 text-error-700">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-error-500" />
+            <span className="text-sm font-medium">Recording…</span>
+            <span className="ml-auto font-mono text-sm tabular-nums">
+              {formatRecordTime(recordSeconds)} /{" "}
+              {formatRecordTime(MAX_RECORD_SECONDS)}
+            </span>
+          </div>
+          <Button
+            type="button"
+            size="icon"
+            onClick={() => stopRecording(false)}
+            aria-label="Stop and send"
+            className="rounded-full"
+          >
+            <Square className="h-5 w-5" />
+          </Button>
+        </div>
+      ) : (
+        <form
+          onSubmit={handleSendMessage}
+          className="flex items-center gap-3 border-t px-4 py-3"
         >
-          <Paperclip className="h-5 w-5" />
-        </Button>
-        <input
-          type="text"
-          value={messageText}
-          onChange={(e) => handleTypingChange(e.target.value)}
-          placeholder="Type a message..."
-          className="flex-1 rounded-full border border-secondary-300 bg-secondary-50 px-4 py-2 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-        />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={!messageText.trim() || isSending}
-          className="rounded-full"
-        >
-          <Send className="h-5 w-5" />
-        </Button>
-      </form>
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileAttach}
+            className="hidden"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingFile || sendingVoice}
+            aria-label="Attach file"
+          >
+            <Paperclip className="h-5 w-5" />
+          </Button>
+          <input
+            type="text"
+            value={messageText}
+            onChange={(e) => handleTypingChange(e.target.value)}
+            placeholder={
+              sendingVoice ? "Sending voice note…" : "Type a message..."
+            }
+            disabled={sendingVoice}
+            className="flex-1 rounded-full border border-secondary-300 bg-secondary-50 px-4 py-2 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-60"
+          />
+          {messageText.trim() ? (
+            <Button
+              type="submit"
+              size="icon"
+              disabled={isSending}
+              className="rounded-full"
+            >
+              <Send className="h-5 w-5" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="icon"
+              onClick={startRecording}
+              disabled={sendingVoice || uploadingFile}
+              aria-label="Record voice note"
+              className="rounded-full"
+            >
+              <Mic className="h-5 w-5" />
+            </Button>
+          )}
+        </form>
+      )}
     </div>
   );
 }

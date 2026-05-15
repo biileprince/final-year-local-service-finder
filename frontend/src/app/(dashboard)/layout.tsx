@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/spinner";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { useRequireAuth } from "@/hooks";
 import { notificationsService, messagesService } from "@/lib/api";
 import { useMessagesSocket } from "@/lib/messages-socket";
@@ -260,6 +261,8 @@ export default function DashboardLayout({
           </button>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <ThemeToggle className="p-2" />
+
             {/* Messages */}
             <Link
               href="/messages"

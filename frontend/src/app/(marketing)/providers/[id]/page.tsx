@@ -34,6 +34,7 @@ import type { Provider, Review, Availability } from "@/types";
 import { formatRelativeTime, formatTime, cn } from "@/lib/utils";
 import { useAuth } from "@/hooks";
 import { ReviewCard } from "@/components/reviews/review-card";
+import { ProvidersMap } from "@/components/providers/providers-map";
 
 // ─── Availability Section ────────────────────────────────────────────────────
 
@@ -698,6 +699,9 @@ export default function ProviderDetailPage() {
               </CardContent>
             </Card>
 
+            {/* Map + directions */}
+            <ProviderLocationCard provider={provider} />
+
             {/* Availability Calendar */}
             <ProviderAvailabilitySection provider={provider} />
 
@@ -722,5 +726,100 @@ export default function ProviderDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Location + Directions ──────────────────────────────────────────────────
+
+function ProviderLocationCard({ provider }: { provider: Provider }) {
+  const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(
+    null,
+  );
+  const [geoStatus, setGeoStatus] = useState<
+    "idle" | "locating" | "ready" | "denied" | "unsupported"
+  >("idle");
+
+  if (
+    typeof provider.latitude !== "number" ||
+    typeof provider.longitude !== "number"
+  ) {
+    return null;
+  }
+
+  const requestLocation = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoStatus("unsupported");
+      return;
+    }
+    setGeoStatus("locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGeoStatus("ready");
+      },
+      () => setGeoStatus("denied"),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 },
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <MapPin className="h-5 w-5 text-primary-600" />
+          Location & directions
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <ProvidersMap
+          providers={[provider]}
+          userLocation={userLoc}
+          enableRouting={!!userLoc}
+          height="320px"
+          linkProviderProfile={false}
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-secondary-500">
+            Click <strong>Get directions</strong> to share your location and
+            see the driving route + estimated travel time.
+          </p>
+          {userLoc ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setUserLoc(null);
+                setGeoStatus("idle");
+              }}
+            >
+              Clear directions
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={requestLocation}
+              isLoading={geoStatus === "locating"}
+              disabled={geoStatus === "unsupported"}
+            >
+              {geoStatus === "denied"
+                ? "Permission denied — retry"
+                : geoStatus === "unsupported"
+                  ? "Geolocation unsupported"
+                  : "Get directions"}
+            </Button>
+          )}
+        </div>
+        {userLoc && (
+          <a
+            href={`https://www.openstreetmap.org/directions?from=${userLoc.lat},${userLoc.lng}&to=${provider.latitude},${provider.longitude}&route=car`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold text-primary-600 hover:underline"
+          >
+            Open full turn-by-turn directions in OpenStreetMap →
+          </a>
+        )}
+      </CardContent>
+    </Card>
   );
 }

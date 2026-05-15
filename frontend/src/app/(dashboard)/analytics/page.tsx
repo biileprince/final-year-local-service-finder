@@ -214,7 +214,7 @@ export default function ProviderAnalyticsPage() {
           <CardTitle>Booking pipeline</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <StatusTile
               icon={<Clock className="h-4 w-4" />}
               label="Pending"
@@ -302,7 +302,7 @@ export default function ProviderAnalyticsPage() {
             <CardTitle>Reputation</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-6">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
               <div className="flex flex-col items-center">
                 <div className="flex items-center gap-1">
                   <Star className="h-5 w-5 fill-warning-500 text-warning-500" />

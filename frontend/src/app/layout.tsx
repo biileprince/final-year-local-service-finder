@@ -3,6 +3,10 @@ import { Roboto } from "next/font/google";
 import "@/styles/globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 import { SearchOverlayProvider } from "@/components/search/search-trigger";
+import {
+  ThemeProvider,
+  themeNoFlashScript,
+} from "@/components/theme/theme-provider";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -61,13 +65,20 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
       suppressHydrationWarning
     >
+      <head>
+        {/* Runs before hydration to apply the stored theme on the first paint
+            (avoids the white→dark flicker). */}
+        <script dangerouslySetInnerHTML={{ __html: themeNoFlashScript }} />
+      </head>
       <body
         className="min-h-screen bg-white font-sans antialiased text-gray-900"
         suppressHydrationWarning
       >
-        <ToastProvider>
-          <SearchOverlayProvider>{children}</SearchOverlayProvider>
-        </ToastProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <SearchOverlayProvider>{children}</SearchOverlayProvider>
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

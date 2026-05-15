@@ -227,22 +227,22 @@ export default function BookProviderPage() {
         </h1>
 
         {/* Progress Steps */}
-        <div className="mb-8 flex items-center justify-center gap-4">
+        <div className="mb-8 flex items-center justify-center gap-2 sm:gap-4">
           {[1, 2, 3].map((s) => (
-            <div key={s} className="flex items-center gap-3">
+            <div key={s} className="flex items-center gap-2 sm:gap-3">
               <div
                 className={cn(
-                  "flex h-12 w-12 items-center justify-center rounded-full text-base font-bold",
+                  "flex h-10 w-10 items-center justify-center rounded-full text-base font-bold sm:h-12 sm:w-12",
                   step >= s
                     ? "bg-primary-600 text-white"
                     : "bg-secondary-200 text-secondary-600",
                 )}
               >
-                {step > s ? <CheckCircle className="h-6 w-6" /> : s}
+                {step > s ? <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6" /> : s}
               </div>
               <span
                 className={cn(
-                  "text-base",
+                  "hidden text-sm sm:inline sm:text-base",
                   step >= s
                     ? "font-bold text-secondary-900"
                     : "text-secondary-500",
@@ -253,7 +253,7 @@ export default function BookProviderPage() {
               {s < 3 && (
                 <div
                   className={cn(
-                    "h-0.5 w-8",
+                    "h-0.5 w-6 sm:w-8",
                     step > s ? "bg-primary-600" : "bg-secondary-200",
                   )}
                 />
