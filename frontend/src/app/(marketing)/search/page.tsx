@@ -22,14 +22,13 @@ import {
   Map as MapIcon,
 } from "lucide-react";
 import { ProvidersMap } from "@/components/providers/providers-map";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProviderCard } from "@/components/providers/provider-card";
-import { providersService, categoriesService } from "@/lib/api";
+import { searchService, categoriesService, type ProviderSortBy } from "@/lib/api";
 import type { Provider, Category } from "@/types";
-import { cn, getInitials } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 const categoryIcons: Record<
   string,
@@ -43,7 +42,8 @@ const categoryIcons: Record<
   painting: Paintbrush,
 };
 
-type SortBy = "rating" | "reviews" | "distance";
+type SortBy = ProviderSortBy;
+type ProviderWithDistance = Provider & { distanceKm?: number | null };
 
 export default function SearchPage() {
   return (
@@ -98,12 +98,45 @@ function SearchContent() {
   const [availabilityFilter, setAvailabilityFilter] = useState<string | null>(
     null,
   );
-  const [sortBy, setSortBy] = useState<SortBy>("rating");
+  const [sortBy, setSortBy] = useState<SortBy>("relevance");
+  const [maxHourlyRate, setMaxHourlyRate] = useState<number | null>(null);
+
+  // Geo-radius: only active once the user grants location permission.
+  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoStatus, setGeoStatus] = useState<
+    "idle" | "locating" | "ready" | "denied" | "unsupported"
+  >("idle");
+  const [radiusKm, setRadiusKm] = useState<number>(25);
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
+  const [providers, setProviders] = useState<ProviderWithDistance[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [totalResults, setTotalResults] = useState(0);
+
+  const requestGeolocation = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoStatus("unsupported");
+      return;
+    }
+    setGeoStatus("locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGeoStatus("ready");
+        // Auto-switch sort to distance once geo is on (only if currently
+        // on the default).
+        setSortBy((s) => (s === "relevance" || s === "rating" ? "distance" : s));
+      },
+      () => setGeoStatus("denied"),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 },
+    );
+  }, []);
+
+  const clearGeo = useCallback(() => {
+    setGeo(null);
+    setGeoStatus("idle");
+  }, []);
 
   // Resolve slug-based category param to id (prototype uses slug)
   const resolvedCategoryId = useMemo(() => {
@@ -136,26 +169,51 @@ function SearchContent() {
   const loadProviders = useCallback(async () => {
     setProvidersLoading(true);
     try {
-      const result = await providersService.search({
-        search: searchQuery || undefined,
-        categoryId: resolvedCategoryId,
+      const result = await searchService.searchProviders({
+        q: searchQuery || undefined,
+        categoryIds: resolvedCategoryId ? [resolvedCategoryId] : undefined,
+        location: locationQuery || undefined,
+        lat: geo?.lat,
+        lng: geo?.lng,
+        radiusKm: geo ? radiusKm : undefined,
         minRating: minRating > 0 ? minRating : undefined,
+        maxHourlyRate: maxHourlyRate ?? undefined,
         verified: verifiedOnly || undefined,
         sortBy,
-        sortOrder: "desc",
         limit: 30,
       });
-      setProviders(result.providers);
+      setProviders(result.providers as ProviderWithDistance[]);
+      setTotalResults(result.total);
     } catch {
       setProviders([]);
+      setTotalResults(0);
     } finally {
       setProvidersLoading(false);
     }
-  }, [searchQuery, resolvedCategoryId, minRating, verifiedOnly, sortBy]);
+  }, [
+    searchQuery,
+    resolvedCategoryId,
+    locationQuery,
+    geo,
+    radiusKm,
+    minRating,
+    maxHourlyRate,
+    verifiedOnly,
+    sortBy,
+  ]);
 
   useEffect(() => {
     loadProviders();
-  }, [resolvedCategoryId, minRating, verifiedOnly, sortBy, loadProviders]);
+  }, [
+    resolvedCategoryId,
+    minRating,
+    maxHourlyRate,
+    verifiedOnly,
+    sortBy,
+    geo,
+    radiusKm,
+    loadProviders,
+  ]);
 
   const onSubmitSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,13 +235,16 @@ function SearchContent() {
     setMinRating(0);
     setVerifiedOnly(false);
     setAvailabilityFilter(null);
-    setSortBy("rating");
+    setSortBy(geo ? "distance" : "relevance");
+    setMaxHourlyRate(null);
   };
 
   const activeFiltersCount =
     (minRating > 0 ? 1 : 0) +
     (verifiedOnly ? 1 : 0) +
-    (availabilityFilter ? 1 : 0);
+    (availabilityFilter ? 1 : 0) +
+    (maxHourlyRate ? 1 : 0) +
+    (geo ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -394,11 +455,26 @@ function SearchContent() {
                   onChange={(e) => setSortBy(e.target.value as SortBy)}
                   className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 >
+                  <option value="relevance">Most relevant</option>
                   <option value="rating">Highest rated</option>
                   <option value="reviews">Most reviewed</option>
-                  <option value="distance">Nearest</option>
+                  <option value="distance" disabled={!geo}>
+                    Nearest {geo ? "" : "(turn on location)"}
+                  </option>
+                  <option value="newest">Newest</option>
+                  <option value="priceLow">Price: low to high</option>
+                  <option value="priceHigh">Price: high to low</option>
                 </select>
               </FilterGroup>
+
+              <GeoRadiusGroup
+                geo={geo}
+                geoStatus={geoStatus}
+                radiusKm={radiusKm}
+                onRequest={requestGeolocation}
+                onClear={clearGeo}
+                onRadiusChange={setRadiusKm}
+              />
 
               {/* Rating */}
               <FilterGroup label="Minimum rating">
@@ -440,6 +516,28 @@ function SearchContent() {
                 ))}
               </FilterGroup>
 
+              {/* Max hourly rate */}
+              <FilterGroup label="Max hourly rate">
+                <div className="space-y-2">
+                  {[
+                    { value: null, label: "Any price" },
+                    { value: 50, label: "Up to GH₵50/hr" },
+                    { value: 100, label: "Up to GH₵100/hr" },
+                    { value: 200, label: "Up to GH₵200/hr" },
+                    { value: 500, label: "Up to GH₵500/hr" },
+                  ].map((opt) => (
+                    <RadioRow
+                      key={String(opt.value)}
+                      active={maxHourlyRate === opt.value}
+                      onClick={() => setMaxHourlyRate(opt.value)}
+                      name="price"
+                    >
+                      {opt.label}
+                    </RadioRow>
+                  ))}
+                </div>
+              </FilterGroup>
+
               {/* Verified */}
               <FilterGroup label="Trust" last>
                 <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-gray-50 p-3 transition-colors hover:bg-gray-100">
@@ -464,9 +562,9 @@ function SearchContent() {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <p className="text-gray-600">
                 <span className="font-bold text-gray-900">
-                  {providersLoading ? "—" : providers.length}
+                  {providersLoading ? "—" : totalResults || providers.length}
                 </span>{" "}
-                {providers.length === 1
+                {(totalResults || providers.length) === 1
                   ? "service provider"
                   : "service providers"}{" "}
                 found
@@ -474,6 +572,13 @@ function SearchContent() {
                   <span className="ml-1 capitalize">
                     {" "}
                     in {selectedCategory.replace(/-/g, " ")}
+                  </span>
+                )}
+                {geo && (
+                  <span className="ml-1">
+                    {" "}
+                    within{" "}
+                    <span className="font-bold text-gray-900">{radiusKm} km</span>
                   </span>
                 )}
               </p>
@@ -1016,6 +1121,82 @@ function StatTile({
       <p className="font-sans text-2xl font-bold">{value}</p>
       <p className="mt-1 text-sm font-semibold opacity-80">{label}</p>
     </div>
+  );
+}
+
+function GeoRadiusGroup({
+  geo,
+  geoStatus,
+  radiusKm,
+  onRequest,
+  onClear,
+  onRadiusChange,
+}: {
+  geo: { lat: number; lng: number } | null;
+  geoStatus: "idle" | "locating" | "ready" | "denied" | "unsupported";
+  radiusKm: number;
+  onRequest: () => void;
+  onClear: () => void;
+  onRadiusChange: (value: number) => void;
+}) {
+  return (
+    <FilterGroup label="Near me">
+      {geo ? (
+        <div className="space-y-3 rounded-xl border border-primary-100 bg-primary-50 p-3">
+          <div className="flex items-center justify-between gap-2 text-xs font-bold text-primary-700">
+            <span className="flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5" />
+              Using your location
+            </span>
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-primary-600 underline-offset-4 hover:underline"
+            >
+              Turn off
+            </button>
+          </div>
+          <div>
+            <label className="flex items-center justify-between text-xs font-semibold text-gray-700">
+              <span>Radius</span>
+              <span className="text-primary-700">{radiusKm} km</span>
+            </label>
+            <input
+              type="range"
+              min={1}
+              max={100}
+              step={1}
+              value={radiusKm}
+              onChange={(e) => onRadiusChange(Number(e.target.value))}
+              className="mt-1.5 w-full accent-primary-500"
+              aria-label="Search radius in kilometers"
+            />
+            <div className="mt-1 flex justify-between text-[10px] font-semibold text-gray-400">
+              <span>1km</span>
+              <span>25km</span>
+              <span>50km</span>
+              <span>100km</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onRequest}
+          disabled={geoStatus === "locating" || geoStatus === "unsupported"}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <MapPin className="h-4 w-4" />
+          {geoStatus === "locating"
+            ? "Locating…"
+            : geoStatus === "denied"
+              ? "Location denied — try again"
+              : geoStatus === "unsupported"
+                ? "Location unavailable"
+                : "Use my location"}
+        </button>
+      )}
+    </FilterGroup>
   );
 }
 

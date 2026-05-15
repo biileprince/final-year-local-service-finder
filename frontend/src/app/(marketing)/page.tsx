@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PopularServices } from "@/components/home/popular-services";
+import { TrendingNow } from "@/components/home/trending-now";
 
 const heroBgImage =
   "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1800&q=80";
@@ -253,6 +254,8 @@ export default function HomePage() {
       </section>
 
       <PopularServices />
+
+      <TrendingNow />
 
       {/* ====== How it works ====== */}
       <section id="how-it-works" className="relative bg-secondary-50 py-24">

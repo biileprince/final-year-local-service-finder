@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks";
 import { useNotificationsSocket } from "@/lib/notifications-socket";
+import { SearchTrigger } from "@/components/search/search-trigger";
 
 interface ServiceItem {
   name: string;
@@ -93,7 +94,6 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [searchValue, setSearchValue] = useState("");
   const [scrolled, setScrolled] = useState(false);
 
   const servicesRef = useRef<HTMLDivElement>(null);
@@ -139,11 +139,6 @@ export function Header() {
     router.push("/");
   };
 
-  const submitSearch = (value: string) => {
-    const q = value.trim();
-    if (!q) return router.push("/search");
-    router.push(`/search?q=${encodeURIComponent(q)}`);
-  };
 
   const isActiveLink = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -344,29 +339,8 @@ export function Header() {
 
         {/* Right side */}
         <div className="hidden items-center gap-2 md:flex">
-          {/* Compact search trigger */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submitSearch(searchValue);
-            }}
-            className="relative"
-          >
-            <label className="group flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20 hover:border-gray-300">
-              <Search className="h-4 w-4 text-gray-400 transition-colors group-focus-within:text-primary-500" />
-              <input
-                type="text"
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                placeholder="Search…"
-                className="w-32 bg-transparent font-medium outline-none placeholder:text-gray-400"
-                aria-label="Search services"
-              />
-              <kbd className="hidden rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-gray-400 xl:inline-block">
-                ↵
-              </kbd>
-            </label>
-          </form>
+          {/* Compact search trigger — opens the typeahead overlay */}
+          <SearchTrigger className="w-48 xl:w-64" placeholder="Search services…" />
 
           {isAuthenticated && (
             <Link
@@ -488,25 +462,7 @@ export function Header() {
       {mobileMenuOpen && (
         <div className="max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-gray-200 bg-white shadow-xl lg:hidden">
           <div className="space-y-6 px-4 py-5">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                submitSearch(searchValue);
-                setMobileMenuOpen(false);
-              }}
-            >
-              <label className="flex items-center gap-2 rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20">
-                <Search className="h-5 w-5 text-primary-500" />
-                <input
-                  type="text"
-                  value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
-                  placeholder="Search services…"
-                  className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-gray-500"
-                  aria-label="Search services"
-                />
-              </label>
-            </form>
+            <SearchTrigger className="w-full px-4 py-3" placeholder="Search services…" showShortcut={false} />
 
             <nav className="space-y-1">
               <Link

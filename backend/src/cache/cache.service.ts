@@ -246,4 +246,43 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     const count = await this.redis.get(key);
     return count ? parseInt(count, 10) : 0;
   }
+
+  // ============================================================================
+  // Search analytics (sorted-set of recent queries, used by /search/trending)
+  // ============================================================================
+
+  /**
+   * Bumps the score of `term` in a sorted set keyed by hour-bucket so the
+   * window naturally rolls forward without explicit eviction. Older buckets
+   * fall out via TTL on each bucket key.
+   */
+  async recordSearchTerm(term: string): Promise<void> {
+    const cleaned = term.trim().toLowerCase().slice(0, 64);
+    if (cleaned.length < 2) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `search:terms:${today}`;
+    await this.redis.zincrby(key, 1, cleaned);
+    // 8-day TTL means we always have ≥7 full days of data on hand even if
+    // recordings happen unevenly.
+    await this.redis.expire(key, 8 * 86400);
+  }
+
+  /** Returns the top N popular search terms aggregated across the last 7 days. */
+  async getTopSearchTerms(limit: number): Promise<string[]> {
+    const buckets: string[] = [];
+    const now = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now.getTime() - i * 86400 * 1000);
+      buckets.push(`search:terms:${d.toISOString().slice(0, 10)}`);
+    }
+    // ZUNIONSTORE the buckets into a temp key, then ZREVRANGE.
+    const aggKey = `search:terms:agg:tmp:${Math.random().toString(36).slice(2)}`;
+    try {
+      await this.redis.zunionstore(aggKey, buckets.length, ...buckets);
+      const top = await this.redis.zrevrange(aggKey, 0, limit - 1);
+      return top;
+    } finally {
+      await this.redis.del(aggKey).catch(() => undefined);
+    }
+  }
 }

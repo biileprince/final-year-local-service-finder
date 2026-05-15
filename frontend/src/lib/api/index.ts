@@ -12,8 +12,18 @@ export { reviewsService } from "./reviews";
 export { availabilityService } from "./availability";
 export { filesService, type FileContext, type UploadedFile } from "./files";
 export { adminService } from "./admin";
+export { searchService } from "./search";
 
 // Re-export types from services
+export type {
+  SuggestItem,
+  SuggestResponse,
+  TrendingResponse,
+  AdvancedSearchParams,
+  AdvancedSearchResponse,
+  ProviderSortBy,
+  SuggestType,
+} from "./search";
 export type { LoginDto, RegisterDto } from "./auth";
 export type { SearchProvidersParams, ProviderSearchResult } from "./providers";
 export type { CreateBookingDto, BookingsQueryParams } from "./bookings";

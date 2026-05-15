@@ -27,6 +27,7 @@ import { HealthModule } from "./modules/health/health.module";
 import { FilesModule } from "./modules/files/files.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { AdminModule } from "./modules/admin/admin.module";
+import { SearchModule } from "./modules/search/search.module";
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { AdminModule } from "./modules/admin/admin.module";
     FilesModule,
     NotificationsModule,
     AdminModule,
+    SearchModule,
   ],
   providers: [
     {
