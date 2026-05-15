@@ -185,4 +185,20 @@ export class AuthService {
   async validateUser(payload: TokenPayload) {
     return this.usersService.findById(payload.sub);
   }
+
+  /** Issues a fresh access+refresh pair for a user without checking a password.
+   *  Used by trusted callers (e.g. the Google OAuth flow after Google has
+   *  authenticated the user). */
+  async issueSessionForUserId(userId: string): Promise<AuthTokens> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException("User not found");
+    }
+    await this.usersService.updateLastLogin(user.id);
+    return this.generateTokens({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
+  }
 }

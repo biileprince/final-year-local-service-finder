@@ -61,10 +61,47 @@ export const authService = {
     return apiClient.post("/auth/reset-password", { token, password });
   },
 
-  async verifyEmail(token: string): Promise<void> {
-    return apiClient.get(
-      `/auth/verify-email?token=${encodeURIComponent(token)}`,
+  async verifyEmail(code: string): Promise<void> {
+    return apiClient.post("/auth/verify-email", { code }, true);
+  },
+
+  /** Build the URL to start the Google OAuth flow, with an optional role
+   *  hint signed into state on the backend. */
+  googleStartUrl(opts: {
+    role?: "CUSTOMER" | "PROVIDER";
+    returnUrl?: string;
+  } = {}): string {
+    const params = new URLSearchParams();
+    if (opts.role) params.set("role", opts.role);
+    if (opts.returnUrl) params.set("returnUrl", opts.returnUrl);
+    const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+    const qs = params.toString();
+    return qs ? `${base}/auth/google?${qs}` : `${base}/auth/google`;
+  },
+
+  async googleExchange(code: string): Promise<LoginResponse> {
+    const response = await apiClient.post<LoginResponse>(
+      "/auth/google/exchange",
+      { code },
     );
+    if (response.accessToken) {
+      apiClient.setTokens(response.accessToken, response.refreshToken);
+    }
+    return response;
+  },
+
+  async googleComplete(
+    signup: string,
+    role: "CUSTOMER" | "PROVIDER",
+  ): Promise<LoginResponse> {
+    const response = await apiClient.post<LoginResponse>(
+      "/auth/google/complete",
+      { signup, role },
+    );
+    if (response.accessToken) {
+      apiClient.setTokens(response.accessToken, response.refreshToken);
+    }
+    return response;
   },
 
   async sendVerification(): Promise<void> {

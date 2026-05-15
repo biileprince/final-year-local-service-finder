@@ -10,6 +10,7 @@ interface RequestOptions {
   headers?: Record<string, string>;
   cache?: RequestCache;
   next?: NextFetchRequestConfig;
+  signal?: AbortSignal;
 }
 
 class ApiClient {
@@ -39,6 +40,11 @@ class ApiClient {
     if (typeof window === "undefined") return;
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
+    // Also wipe the persisted Zustand auth-storage so isAuthenticated/user
+    // don't survive a token-only clear. Leaving them behind makes
+    // useRedirectIfAuthenticated on /login bounce the user back to /dashboard
+    // and create a redirect loop after the session expires.
+    localStorage.removeItem("auth-storage");
   }
 
   /**
@@ -108,7 +114,7 @@ class ApiClient {
     options: RequestOptions = {},
     requiresAuth = false
   ): Promise<T> {
-    const { method = "GET", body, headers = {}, cache, next } = options;
+    const { method = "GET", body, headers = {}, cache, next, signal } = options;
 
     const requestHeaders: Record<string, string> = {
       "Content-Type": "application/json",
@@ -127,6 +133,7 @@ class ApiClient {
       headers: requestHeaders,
       cache,
       next,
+      signal,
     };
 
     if (body && method !== "GET") {

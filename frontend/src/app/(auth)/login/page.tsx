@@ -9,6 +9,7 @@ import { z } from "zod";
 import { Eye, EyeOff, Mail, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ContinueWithGoogleButton } from "@/components/auth/google-button";
 import { useAuth, useRedirectIfAuthenticated } from "@/hooks";
 
 const loginSchema = z.object({
@@ -74,7 +75,19 @@ function LoginForm() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">
+      <div className="mt-8 space-y-3">
+        <ContinueWithGoogleButton
+          returnUrl={returnUrl !== "/dashboard" ? returnUrl : undefined}
+        />
+      </div>
+
+      <div className="my-6 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.15em] text-gray-400">
+        <span className="h-px flex-1 bg-gray-200" />
+        Or with email
+        <span className="h-px flex-1 bg-gray-200" />
+      </div>
+
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         {error && (
           <div
             role="alert"

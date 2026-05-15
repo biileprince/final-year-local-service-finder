@@ -35,6 +35,11 @@ const envSchema = z.object({
   // --- Frontend / CORS ---
   FRONTEND_URL: z.url().default("http://localhost:3000"),
 
+  // --- Google OAuth (optional; when set, "Continue with Google" is enabled) ---
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CALLBACK_URL: z.string().optional(),
+
   // --- Cookies / CSRF ---
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SECRET: z.string().min(16).optional(),

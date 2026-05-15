@@ -23,12 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
-import {
-  bookingsService,
-  messagesService,
-  authService,
-  providersService,
-} from "@/lib/api";
+import { bookingsService, messagesService, providersService } from "@/lib/api";
 import type { Booking, Conversation, Provider } from "@/types";
 import { formatDate, formatTime, formatCurrency } from "@/lib/utils";
 
@@ -62,7 +57,6 @@ export default function DashboardPage() {
   });
   const [providerProfile, setProviderProfile] = useState<Provider | null>(null);
   const [providerEarnings, setProviderEarnings] = useState(0);
-  const [verificationSent, setVerificationSent] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -183,32 +177,19 @@ export default function DashboardPage() {
                 Verify your email address
               </p>
               <p className="text-sm text-amber-700">
-                Check your inbox for a verification link. Verified accounts can
-                book services and receive messages.
+                We emailed you a 6-digit code. Enter it to unlock bookings and
+                messaging.
               </p>
             </div>
           </div>
-          {verificationSent ? (
-            <span className="shrink-0 text-sm font-semibold text-amber-700">
-              Email sent ✓
-            </span>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100"
-              onClick={async () => {
-                try {
-                  await authService.sendVerification();
-                  setVerificationSent(true);
-                } catch {
-                  // ignore — the user can retry
-                }
-              }}
-            >
-              Resend email
-            </Button>
-          )}
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100"
+          >
+            <Link href="/verify-email">Enter code</Link>
+          </Button>
         </div>
       )}
 

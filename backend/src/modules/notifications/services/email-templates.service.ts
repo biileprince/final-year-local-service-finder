@@ -97,23 +97,31 @@ export class EmailTemplatesService {
 
   emailVerification(opts: {
     name: string;
-    verifyUrl: string;
-    ttlHours: number;
+    code: string;
+    ttlMinutes: number;
   }): RenderedEmail {
-    const subject = "Verify your email";
+    const subject = `Your verification code is ${opts.code}`;
+    const codeDisplay = `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:24px 0">
+        <tr>
+          <td align="center">
+            <div style="display:inline-block;font-family:'Courier New',Courier,monospace;font-size:36px;font-weight:bold;letter-spacing:12px;color:${this.brand.textColor};background:${this.brand.bgColor};border:2px dashed ${this.brand.borderColor};border-radius:12px;padding:18px 28px">${escape(opts.code)}</div>
+          </td>
+        </tr>
+      </table>
+    `;
     const body = `
       <p style="${P}">Hi ${escape(opts.name.split(" ")[0])},</p>
-      <p style="${P}">Tap the button below to confirm your email address. This link expires in <strong>${opts.ttlHours} hours</strong>.</p>
-      ${this.button("Verify email address", opts.verifyUrl)}
-      <p style="${SMALL}">If the button doesn't work, copy and paste this URL into your browser:<br><a href="${opts.verifyUrl}" style="color:${this.brand.brandColor};word-break:break-all">${opts.verifyUrl}</a></p>
-      <p style="${SMALL}">Didn't sign up? You can safely ignore this email.</p>
+      <p style="${P}">Use the 6-digit code below to verify your email address. This code expires in <strong>${opts.ttlMinutes} minutes</strong>.</p>
+      ${codeDisplay}
+      <p style="${SMALL}">Enter the code on the verification screen. If you didn't request this, you can safely ignore the email — no one can access your account without the code.</p>
     `;
     return this.wrap({
       subject,
-      preheader: `Confirm your email — link expires in ${opts.ttlHours} hours.`,
+      preheader: `Your verification code is ${opts.code} — expires in ${opts.ttlMinutes} minutes.`,
       title: "Verify your email",
       body,
-      textIntro: `Hi ${opts.name},\n\nConfirm your email by visiting:\n${opts.verifyUrl}\n\nThis link expires in ${opts.ttlHours} hours.`,
+      textIntro: `Hi ${opts.name},\n\nYour verification code is: ${opts.code}\n\nIt expires in ${opts.ttlMinutes} minutes. Enter it on the verification screen to finish setting up your account.\n\nIf you didn't request this, ignore the email.`,
     });
   }
 

@@ -22,14 +22,13 @@ import {
   Folder,
   History,
   MailWarning,
-  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/spinner";
 import { useRequireAuth } from "@/hooks";
-import { notificationsService, messagesService, authService } from "@/lib/api";
+import { notificationsService, messagesService } from "@/lib/api";
 import { useMessagesSocket } from "@/lib/messages-socket";
 
 const customerNavItems = [
@@ -85,8 +84,6 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
-  const [sendingVerify, setSendingVerify] = useState(false);
-  const [verifySent, setVerifySent] = useState(false);
   const [showVerifyBanner, setShowVerifyBanner] = useState(true);
 
   const navItems =
@@ -301,24 +298,12 @@ export default function DashboardLayout({
             <p className="flex-1 text-amber-800">
               <strong>Verify your email</strong> to unlock bookings and messaging.
             </p>
-            {verifySent ? (
-              <span className="shrink-0 text-xs font-semibold text-green-600">Email sent ✓</span>
-            ) : (
-              <button
-                disabled={sendingVerify}
-                onClick={async () => {
-                  setSendingVerify(true);
-                  try {
-                    await authService.sendVerification();
-                    setVerifySent(true);
-                  } catch { /* ignore */ }
-                  setSendingVerify(false);
-                }}
-                className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
-              >
-                {sendingVerify ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Send verification"}
-              </button>
-            )}
+            <Link
+              href="/verify-email"
+              className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-700"
+            >
+              Enter code
+            </Link>
             <button
               onClick={() => setShowVerifyBanner(false)}
               className="shrink-0 text-amber-400 hover:text-amber-600"

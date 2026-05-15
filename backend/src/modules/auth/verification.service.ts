@@ -13,7 +13,7 @@ import {
 } from "../../common/errors";
 
 const RESET_TOKEN_TTL_MIN = 60;
-const VERIFY_EMAIL_TOKEN_TTL_HRS = 24;
+const VERIFY_EMAIL_CODE_TTL_MIN = 15;
 
 /**
  * Owns the "long URL token" verification flows: password reset and email
@@ -148,7 +148,13 @@ export class VerificationService {
     this.logger.log(`Password reset completed for user ${record.userId}`);
   }
 
-  // -- Email verification -----------------------------------------------------
+  // -- Email verification (6-digit code) -------------------------------------
+  //
+  // We store the SHA-256 of `userId:code` (not the code itself) so a leaked DB
+  // dump can't be used to forge verifications. The userId-namespacing also
+  // guarantees uniqueness across users — two people who happen to mint the
+  // same 6-digit code at the same moment won't collide on the @unique
+  // tokenHash column.
 
   async sendEmailVerification(
     userId: string,
@@ -169,8 +175,10 @@ export class VerificationService {
       data: { usedAt: new Date() },
     });
 
-    const { rawToken, tokenHash, expiresAt } = this.mintToken(
-      VERIFY_EMAIL_TOKEN_TTL_HRS * 60 * 60 * 1000,
+    const code = this.generateNumericCode(6);
+    const tokenHash = this.hashCode(userId, code);
+    const expiresAt = new Date(
+      Date.now() + VERIFY_EMAIL_CODE_TTL_MIN * 60 * 1000,
     );
 
     await this.prisma.verificationToken.create({
@@ -184,19 +192,15 @@ export class VerificationService {
       },
     });
 
-    const verifyUrl = `${this.frontendUrl}/verify-email?token=${encodeURIComponent(rawToken)}`;
-
     try {
       await this.emailService.send({
         to: user.email,
         subject: "Verify your email",
         template: "email-verification",
         data: {
-          title: "Verify your email",
           name: user.name,
-          verifyUrl,
-          ttlHours: VERIFY_EMAIL_TOKEN_TTL_HRS,
-          message: `Please confirm your email by clicking the link below. This link expires in ${VERIFY_EMAIL_TOKEN_TTL_HRS} hours.`,
+          code,
+          ttlMinutes: VERIFY_EMAIL_CODE_TTL_MIN,
         },
       });
     } catch (err) {
@@ -211,27 +215,46 @@ export class VerificationService {
     }
   }
 
-  async verifyEmail(rawToken: string): Promise<{ userId: string }> {
-    const tokenHash = this.hashToken(rawToken);
+  async verifyEmailByCode(
+    userId: string,
+    code: string,
+  ): Promise<{ userId: string }> {
+    const trimmed = code.replace(/\s+/g, "");
+    if (!/^\d{6}$/.test(trimmed)) {
+      throw new UnprocessableDomainError(
+        ErrorCode.TOKEN_INVALID,
+        "Enter the 6-digit code from your email.",
+      );
+    }
+
+    // If the user is already verified, treat as success. This makes the UI
+    // idempotent (e.g. someone hits submit twice in quick succession).
+    const user = await this.usersService.findById(userId);
+    if (user.emailVerifiedAt) {
+      return { userId };
+    }
+
+    const tokenHash = this.hashCode(userId, trimmed);
     const record = await this.prisma.verificationToken.findUnique({
       where: { tokenHash },
     });
 
     if (
       !record ||
+      record.userId !== userId ||
       record.purpose !== VerificationPurpose.EMAIL_VERIFICATION ||
       record.usedAt ||
       record.expiresAt < new Date()
     ) {
       throw new UnprocessableDomainError(
         ErrorCode.TOKEN_INVALID,
-        "This verification link is invalid or has expired. Request a new one.",
+        "That code is invalid or has expired. Tap 'Resend code' to get a new one.",
       );
     }
 
     await this.prisma.$transaction([
       this.prisma.user.update({
-        where: { id: record.userId },
+        where: { id: userId },
         data: { emailVerifiedAt: new Date() },
       }),
       this.prisma.verificationToken.update({
@@ -240,8 +263,8 @@ export class VerificationService {
       }),
     ]);
 
-    this.logger.log(`Email verified for user ${record.userId}`);
-    return { userId: record.userId };
+    this.logger.log(`Email verified for user ${userId}`);
+    return { userId };
   }
 
   // -- Helpers ----------------------------------------------------------------
@@ -255,5 +278,23 @@ export class VerificationService {
 
   private hashToken(raw: string): string {
     return createHash("sha256").update(raw).digest("hex");
+  }
+
+  /** Per-user hash so two users with the same code never collide. */
+  private hashCode(userId: string, code: string): string {
+    return createHash("sha256").update(`${userId}:${code}`).digest("hex");
+  }
+
+  /** Cryptographically random N-digit numeric code. */
+  private generateNumericCode(length: number): string {
+    let out = "";
+    while (out.length < length) {
+      const buf = randomBytes(length);
+      for (let i = 0; i < buf.length && out.length < length; i++) {
+        const digit = buf[i]! % 10;
+        out += digit.toString();
+      }
+    }
+    return out;
   }
 }
