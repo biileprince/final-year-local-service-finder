@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import "@/styles/globals.css";
 import { ToastProvider } from "@/components/ui/toast";
+import { SearchOverlayProvider } from "@/components/search/search-trigger";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -64,7 +65,9 @@ export default function RootLayout({
         className="min-h-screen bg-white font-sans antialiased text-gray-900"
         suppressHydrationWarning
       >
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <SearchOverlayProvider>{children}</SearchOverlayProvider>
+        </ToastProvider>
       </body>
     </html>
   );
