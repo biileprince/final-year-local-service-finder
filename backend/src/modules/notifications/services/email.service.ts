@@ -106,8 +106,8 @@ export class EmailService {
       case "email-verification":
         return this.templates.emailVerification({
           name: d.name,
-          verifyUrl: d.verifyUrl,
-          ttlHours: d.ttlHours ?? 24,
+          code: d.code,
+          ttlMinutes: d.ttlMinutes ?? 15,
         });
       case "password-reset":
         return this.templates.passwordReset({

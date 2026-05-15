@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -292,8 +293,6 @@ export default function ProfilePage() {
   const [phoneVerified, setPhoneVerified] = useState(false);
 
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [sendingVerification, setSendingVerification] = useState(false);
-  const [verificationSent, setVerificationSent] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -357,17 +356,6 @@ export default function ProfilePage() {
     setSaveError(null);
   };
 
-  const sendVerificationEmail = async () => {
-    setSendingVerification(true);
-    try {
-      await authService.sendVerification();
-      setVerificationSent(true);
-    } catch {
-      // ignore
-    } finally {
-      setSendingVerification(false);
-    }
-  };
 
   const handlePhoneVerified = () => {
     setPhoneVerified(true);
@@ -558,16 +546,9 @@ export default function ProfilePage() {
                   <CheckCircle className="h-4 w-4" />
                   Verified
                 </span>
-              ) : verificationSent ? (
-                <span className="text-sm text-gray-500">Email sent ✓</span>
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  isLoading={sendingVerification}
-                  onClick={sendVerificationEmail}
-                >
-                  Send verification
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/verify-email">Verify now</Link>
                 </Button>
               )}
             </div>

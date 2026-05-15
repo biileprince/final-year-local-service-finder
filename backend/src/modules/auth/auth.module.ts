@@ -5,8 +5,10 @@ import { PassportModule } from "@nestjs/passport";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./strategies/jwt.strategy";
+import { GoogleStrategy } from "./strategies/google.strategy";
 import { VerificationService } from "./verification.service";
 import { OtpService } from "./otp.service";
+import { GoogleAuthService } from "./google-auth.service";
 import { UsersModule } from "../users/users.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 
@@ -27,8 +29,21 @@ import { NotificationsModule } from "../notifications/notifications.module";
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, JwtStrategy, VerificationService, OtpService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    GoogleStrategy,
+    VerificationService,
+    OtpService,
+    GoogleAuthService,
+  ],
   controllers: [AuthController],
-  exports: [AuthService, JwtModule, VerificationService, OtpService],
+  exports: [
+    AuthService,
+    JwtModule,
+    VerificationService,
+    OtpService,
+    GoogleAuthService,
+  ],
 })
 export class AuthModule {}

@@ -1,15 +1,15 @@
 import {
   Controller,
-  Post,
   Get,
+  Post,
   Body,
-  Query,
   HttpCode,
   HttpStatus,
   UseGuards,
   Req,
   Res,
   UnauthorizedException,
+  BadRequestException,
 } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { Request, Response } from "express";
@@ -29,6 +29,9 @@ import {
 import { AuthService } from "./auth.service";
 import { VerificationService } from "./verification.service";
 import { OtpService } from "./otp.service";
+import { GoogleAuthService } from "./google-auth.service";
+import { GoogleAuthGuard } from "./guards/google-auth.guard";
+import { ConfigService } from "@nestjs/config";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
@@ -50,6 +53,8 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly verificationService: VerificationService,
     private readonly otpService: OtpService,
+    private readonly googleAuthService: GoogleAuthService,
+    private readonly configService: ConfigService,
   ) {}
 
   @Post("register")
@@ -179,8 +184,8 @@ export class AuthController {
   @Throttle({ long: { limit: 3, ttl: 3_600_000 } }) // 3/hour per IP
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Send (or resend) the email-verification link" })
-  @ApiResponse({ status: 202, description: "Verification email sent" })
+  @ApiOperation({ summary: "Send (or resend) the 6-digit verification code" })
+  @ApiResponse({ status: 202, description: "Verification code emailed" })
   async sendVerification(
     @CurrentUser() user: CurrentUserPayload,
     @Req() req: Request,
@@ -189,17 +194,25 @@ export class AuthController {
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"],
     });
-    return { message: "Verification email sent." };
+    return { message: "We've emailed you a 6-digit verification code." };
   }
 
-  @Get("verify-email")
-  @Public()
+  @Post("verify-email")
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ long: { limit: 10, ttl: 900_000 } }) // 10/15min per IP
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Confirm email via the token from the email link" })
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Confirm email by submitting the 6-digit code" })
   @ApiResponse({ status: 200, description: "Email verified" })
-  @ApiResponse({ status: 422, description: "Token invalid or expired" })
-  async verifyEmail(@Query("token") token: string) {
-    const result = await this.verificationService.verifyEmail(token);
+  @ApiResponse({ status: 422, description: "Code invalid or expired" })
+  async verifyEmail(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() body: { code: string },
+  ) {
+    const result = await this.verificationService.verifyEmailByCode(
+      user.id,
+      body?.code ?? "",
+    );
     return { message: "Email verified.", userId: result.userId };
   }
 
@@ -236,5 +249,125 @@ export class AuthController {
   ) {
     await this.otpService.verifyOtp(user.id, dto.code);
     return { message: "Phone verified." };
+  }
+
+  // -- Google OAuth ----------------------------------------------------------
+  //
+  // Flow:
+  //   1) Browser hits  GET /auth/google?role=PROVIDER  (or no role).
+  //      The GoogleAuthGuard signs the role hint into the OAuth `state` and
+  //      redirects to Google.
+  //   2) Google bounces back to  GET /auth/google/callback?state=...&code=...
+  //      where Passport verifies + decodes the profile. We then either:
+  //        a) issue a short-lived exchange code and redirect to
+  //           FRONTEND_URL/oauth/return?code=...   (existing user OR new
+  //           user with a role hint), or
+  //        b) issue a signup token and redirect to
+  //           FRONTEND_URL/oauth/finish?signup=...&email=...&name=...
+  //           (new user, no role hint — the page asks them to pick).
+  //   3) Frontend POSTs the code/signup token back to /auth/google/exchange
+  //      or /auth/google/complete, which returns real access + refresh tokens.
+
+  @Get("google")
+  @Public()
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: "Start the Google OAuth flow" })
+  async googleStart() {
+    // GoogleAuthGuard handles the redirect. Method body never executes.
+  }
+
+  @Get("google/callback")
+  @Public()
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: "Google OAuth callback — completes the handshake" })
+  async googleCallback(@Req() req: Request, @Res() res: Response) {
+    const frontendUrl =
+      this.configService.get<string>("FRONTEND_URL") ?? "http://localhost:3000";
+
+    const profile = req.user as
+      | {
+          googleId: string;
+          email: string;
+          name: string;
+          picture?: string;
+        }
+      | undefined;
+
+    if (!profile) {
+      return res.redirect(`${frontendUrl}/login?reason=google-failed`);
+    }
+
+    const stateRaw =
+      typeof req.query.state === "string" ? req.query.state : undefined;
+    const state = this.googleAuthService.decodeState(stateRaw);
+
+    const result = await this.googleAuthService.handleProfile(
+      profile,
+      state?.role,
+    );
+
+    if (result.kind === "session") {
+      const params = new URLSearchParams({ code: result.code });
+      if (state?.returnUrl) params.set("returnUrl", state.returnUrl);
+      return res.redirect(`${frontendUrl}/oauth/return?${params.toString()}`);
+    }
+
+    const params = new URLSearchParams({
+      signup: result.signupToken,
+      email: result.profile.email,
+      name: result.profile.name,
+    });
+    if (result.profile.picture) params.set("picture", result.profile.picture);
+    if (state?.returnUrl) params.set("returnUrl", state.returnUrl);
+    return res.redirect(`${frontendUrl}/oauth/finish?${params.toString()}`);
+  }
+
+  @Post("google/exchange")
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ long: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: "Exchange a one-time OAuth code for access + refresh tokens",
+  })
+  async googleExchange(
+    @Body() body: { code?: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (!body?.code) {
+      throw new BadRequestException("Missing exchange code");
+    }
+    const userId = await this.googleAuthService.exchangeCodeForUserId(
+      body.code,
+    );
+    const tokens = await this.authService.issueSessionForUserId(userId);
+    this.applySessionCookies(res, tokens.refreshToken);
+    return tokens;
+  }
+
+  @Post("google/complete")
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ long: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({
+    summary: "Finish a Google signup once the user picks a role",
+  })
+  async googleComplete(
+    @Body() body: { signup?: string; role?: "CUSTOMER" | "PROVIDER" },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (!body?.signup) {
+      throw new BadRequestException("Missing signup token");
+    }
+    if (body.role !== "CUSTOMER" && body.role !== "PROVIDER") {
+      throw new BadRequestException("role must be CUSTOMER or PROVIDER");
+    }
+    const { code } = await this.googleAuthService.completePendingSignup(
+      body.signup,
+      body.role,
+    );
+    const userId = await this.googleAuthService.exchangeCodeForUserId(code);
+    const tokens = await this.authService.issueSessionForUserId(userId);
+    this.applySessionCookies(res, tokens.refreshToken);
+    return tokens;
   }
 }
