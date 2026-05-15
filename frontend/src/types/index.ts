@@ -174,6 +174,8 @@ export interface Conversation {
   lastMessagePreview?: string;
   customerUnreadCount: number;
   providerUnreadCount: number;
+  customerLastReadAt?: string;
+  providerLastReadAt?: string;
   createdAt: string;
   booking?: {
     id: string;

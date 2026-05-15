@@ -54,6 +54,16 @@ export class FilesService {
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      // Voice notes — browsers produce different containers depending on platform:
+      // Chromium → audio/webm, Safari/iOS → audio/mp4 (m4a), Firefox → audio/ogg.
+      "audio/webm",
+      "audio/ogg",
+      "audio/mpeg",
+      "audio/mp4",
+      "audio/m4a",
+      "audio/x-m4a",
+      "audio/wav",
+      "audio/wave",
     ];
   }
 
@@ -297,7 +307,22 @@ export class FilesService {
         {
           folder: `local-service-finder/${context.toLowerCase()}`,
           resource_type: "auto",
-          allowed_formats: ["jpg", "jpeg", "png", "gif", "webp", "pdf", "doc", "docx"],
+          allowed_formats: [
+            "jpg",
+            "jpeg",
+            "png",
+            "gif",
+            "webp",
+            "pdf",
+            "doc",
+            "docx",
+            "webm",
+            "ogg",
+            "mp3",
+            "mp4",
+            "m4a",
+            "wav",
+          ],
         },
         (error: Error | undefined, result: UploadApiResponse | undefined) => {
           if (error) {
@@ -343,6 +368,9 @@ export class FilesService {
   private getFileType(mimeType: string): FileType {
     if (mimeType.startsWith("image/")) return FileType.IMAGE;
     if (mimeType.startsWith("video/")) return FileType.VIDEO;
+    // Audio (voice notes) — no dedicated FileType enum value yet; bucket as OTHER
+    // and let the message UI pick the audio player via messageType === "voice".
+    if (mimeType.startsWith("audio/")) return FileType.OTHER;
     if (
       mimeType.includes("pdf") ||
       mimeType.includes("document") ||

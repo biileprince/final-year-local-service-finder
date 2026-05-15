@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks";
 import { useNotificationsSocket } from "@/lib/notifications-socket";
 import { SearchTrigger } from "@/components/search/search-trigger";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 interface ServiceItem {
   name: string;
@@ -341,6 +342,8 @@ export function Header() {
         <div className="hidden items-center gap-2 md:flex">
           {/* Compact search trigger — opens the typeahead overlay */}
           <SearchTrigger className="w-48 xl:w-64" placeholder="Search services…" />
+
+          <ThemeToggle />
 
           {isAuthenticated && (
             <Link

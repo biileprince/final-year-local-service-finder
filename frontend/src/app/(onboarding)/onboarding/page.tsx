@@ -17,13 +17,20 @@ import {
   Upload,
   X,
   Image as ImageIcon,
+  Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import { Avatar } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks";
-import { providersService, categoriesService, filesService } from "@/lib/api";
+import {
+  providersService,
+  categoriesService,
+  filesService,
+  authService,
+} from "@/lib/api";
 import type { Category, Provider } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -61,7 +68,7 @@ interface UploadedDoc {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, setUser } = useAuth();
 
   const [provider, setProvider] = useState<Provider | null>(null);
   const [step, setStep] = useState(0);
@@ -70,6 +77,10 @@ export default function OnboardingPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [catLoading, setCatLoading] = useState(true);
+
+  // Profile photo (step 0)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // Verification document state
   const [idDoc, setIdDoc] = useState<UploadedDoc | null>(null);
@@ -160,6 +171,29 @@ export default function OnboardingPage() {
           ? [...prev, id]
           : prev,
     );
+  };
+
+  const handleAvatarUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    setSaveError(null);
+    try {
+      const uploaded = await filesService.upload(file, "AVATAR");
+      const updated = await authService.updateUser({
+        profileImage: uploaded.url,
+      });
+      setUser(updated);
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? err.message : "Couldn't upload profile photo.",
+      );
+    } finally {
+      setUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
   };
 
   const onSubmitProfile = async (data: ProfileFormData) => {
@@ -333,6 +367,47 @@ export default function OnboardingPage() {
                 {saveError}
               </div>
             )}
+
+            {/* Profile photo */}
+            <div className="flex items-center gap-4 rounded-xl border-2 border-gray-200 bg-white p-4">
+              <div className="relative">
+                <Avatar
+                  size="xl"
+                  src={user?.profileImage}
+                  name={user?.name}
+                />
+                {uploadingAvatar && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
+                    <Spinner size="sm" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-900">
+                  Profile photo
+                </p>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  A clear headshot helps customers trust you. JPG or PNG, up to
+                  10 MB.
+                </p>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
+                />
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:border-primary-400 hover:text-primary-700 disabled:opacity-50"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  {user?.profileImage ? "Change photo" : "Upload photo"}
+                </button>
+              </div>
+            </div>
 
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-gray-700">

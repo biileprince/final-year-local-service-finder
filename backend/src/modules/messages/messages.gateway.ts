@@ -8,7 +8,7 @@ import {
   MessageBody,
 } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
-import { Logger, UseGuards } from "@nestjs/common";
+import { Logger, UseGuards, Inject, forwardRef } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { MessagesService } from "./messages.service";
@@ -36,11 +36,41 @@ export class MessagesGateway
   private userSockets: Map<string, Set<string>> = new Map();
 
   constructor(
+    @Inject(forwardRef(() => MessagesService))
     private readonly messagesService: MessagesService,
     private readonly metricsService: MetricsService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
+
+  // Broadcast a freshly-created message to the conversation room + notify the
+  // other participant. Called from MessagesService.sendMessage so both the REST
+  // POST path and the `send_message` socket path deliver in real time.
+  async broadcastNewMessage(
+    message: any,
+    conversationId: string,
+    senderId: string,
+  ) {
+    this.server
+      .to(`conversation:${conversationId}`)
+      .emit("new_message", message);
+
+    const participantIds =
+      await this.messagesService.getParticipantIds(conversationId);
+
+    for (const participantId of participantIds) {
+      if (participantId === senderId) continue;
+      this.server.to(`user:${participantId}`).emit("message_notification", {
+        conversationId,
+        message,
+      });
+      const unreadCount =
+        await this.messagesService.getUnreadCount(participantId);
+      this.server.to(`user:${participantId}`).emit("unread_count", unreadCount);
+    }
+
+    this.metricsService.wsMessagesSent.inc({ event_type: "message" });
+  }
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
@@ -152,6 +182,8 @@ export class MessagesGateway
     }
 
     try {
+      // Service.sendMessage handles broadcast via broadcastNewMessage so the
+      // REST and socket paths converge on the same delivery code.
       const message = await this.messagesService.sendMessage(
         data.conversationId,
         client.userId,
@@ -159,34 +191,6 @@ export class MessagesGateway
         data.messageType,
         data.fileId,
       );
-
-      // Broadcast to conversation room
-      this.server
-        .to(`conversation:${data.conversationId}`)
-        .emit("new_message", message);
-
-      // Notify other participant
-      const participantIds = await this.messagesService.getParticipantIds(
-        data.conversationId,
-      );
-
-      for (const participantId of participantIds) {
-        if (participantId !== client.userId) {
-          // Send to user's personal room for notification
-          this.server.to(`user:${participantId}`).emit("message_notification", {
-            conversationId: data.conversationId,
-            message,
-          });
-
-          // Update unread count
-          const unreadCount =
-            await this.messagesService.getUnreadCount(participantId);
-          this.server.to(`user:${participantId}`).emit("unread_count", unreadCount);
-        }
-      }
-
-      this.metricsService.wsMessagesSent.inc({ event_type: "message" });
-
       return { success: true, message };
     } catch (error) {
       return { error: error.message };

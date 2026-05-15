@@ -695,7 +695,7 @@ function SearchContent() {
                     ))}
                   </div>
                 ) : (
-                  <ProvidersMap providers={providers} />
+                  <ProvidersMap providers={providers} userLocation={geo} />
                 )}
               </>
             )}
@@ -792,11 +792,26 @@ function SearchContent() {
                   onChange={(e) => setSortBy(e.target.value as SortBy)}
                   className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 >
+                  <option value="relevance">Most relevant</option>
                   <option value="rating">Highest rated</option>
                   <option value="reviews">Most reviewed</option>
-                  <option value="distance">Nearest</option>
+                  <option value="distance" disabled={!geo}>
+                    Nearest {geo ? "" : "(turn on location)"}
+                  </option>
+                  <option value="newest">Newest</option>
+                  <option value="priceLow">Price: low to high</option>
+                  <option value="priceHigh">Price: high to low</option>
                 </select>
               </FilterGroup>
+
+              <GeoRadiusGroup
+                geo={geo}
+                geoStatus={geoStatus}
+                radiusKm={radiusKm}
+                onRequest={requestGeolocation}
+                onClear={clearGeo}
+                onRadiusChange={setRadiusKm}
+              />
 
               <FilterGroup label="Minimum rating">
                 {[0, 4.5, 4.0, 3.5].map((rating) => (
@@ -826,6 +841,27 @@ function SearchContent() {
                     {opt.label}
                   </RadioRow>
                 ))}
+              </FilterGroup>
+
+              <FilterGroup label="Max hourly rate">
+                <div className="space-y-2">
+                  {[
+                    { value: null, label: "Any price" },
+                    { value: 50, label: "Up to GH₵50/hr" },
+                    { value: 100, label: "Up to GH₵100/hr" },
+                    { value: 200, label: "Up to GH₵200/hr" },
+                    { value: 500, label: "Up to GH₵500/hr" },
+                  ].map((opt) => (
+                    <RadioRow
+                      key={String(opt.value)}
+                      active={maxHourlyRate === opt.value}
+                      onClick={() => setMaxHourlyRate(opt.value)}
+                      name="m-price"
+                    >
+                      {opt.label}
+                    </RadioRow>
+                  ))}
+                </div>
               </FilterGroup>
 
               <FilterGroup label="Trust" last>
