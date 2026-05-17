@@ -7,9 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   CheckCircle,
-  MapPin,
   Clock,
-  DollarSign,
   FileText,
   ArrowRight,
   Tag,
@@ -18,12 +16,18 @@ import {
   X,
   Image as ImageIcon,
   Camera,
+  Navigation,
+  Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { Avatar } from "@/components/ui/avatar";
+import {
+  LocationPicker,
+  type PickedLocation,
+} from "@/components/onboarding/location-picker";
 import { useAuth } from "@/hooks";
 import {
   providersService,
@@ -39,15 +43,18 @@ const profileSchema = z.object({
     .string()
     .min(30, "Please write at least 30 characters about your services")
     .max(500, "Keep it under 500 characters"),
-  location: z.string().min(2, "Enter your city or neighbourhood"),
+  location: z.string().min(2, "Pick the area you operate from"),
   yearsExperience: z.coerce
     .number()
     .min(0, "Must be 0 or more")
     .max(60, "Please enter a valid number"),
-  hourlyRate: z.coerce
+  // Optional but high-value fields collected during onboarding.
+  phone: z.string().trim().max(20).optional().or(z.literal("")),
+  serviceRadiusKm: z.coerce
     .number()
-    .min(1, "Enter your hourly rate in GHS")
-    .max(10000, "Please enter a realistic rate"),
+    .min(1, "Must be at least 1 km")
+    .max(200, "Cap is 200 km")
+    .default(25),
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
@@ -95,15 +102,84 @@ export default function OnboardingPage() {
     register,
     handleSubmit,
     formState: { errors },
+    setValue,
+    watch,
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
       bio: "",
       location: "",
       yearsExperience: 1,
-      hourlyRate: 50,
+      phone: user?.phone ?? "",
+      serviceRadiusKm: 25,
     },
   });
+
+  const watchedLocation = watch("location");
+
+  // Geo coords captured by "Use my location" — submitted alongside the form
+  // so customers see the provider pinned on the map immediately.
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    null,
+  );
+  const [geoStatus, setGeoStatus] = useState<
+    "idle" | "locating" | "ready" | "denied" | "unavailable" | "timeout"
+  >("idle");
+
+  const detectLocation = async () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoStatus("unavailable");
+      return;
+    }
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      setGeoStatus("unavailable");
+      return;
+    }
+    setGeoStatus("locating");
+    setSaveError(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setCoords({ lat, lng });
+        setGeoStatus("ready");
+        // Reverse geocode via Nominatim (public, attribution-only). Pull the
+        // suburb / town / city / region so we can pre-fill the location field
+        // with something that matches what customers actually search for.
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=14&accept-language=en`,
+            { headers: { Accept: "application/json" } },
+          );
+          if (!res.ok) return;
+          const data = await res.json();
+          const a = data.address || {};
+          const place =
+            a.suburb ||
+            a.neighbourhood ||
+            a.village ||
+            a.town ||
+            a.city ||
+            a.county ||
+            null;
+          const region = a.state || a.region || null;
+          if (place) {
+            setValue("location", region ? `${place}, ${region}` : place, {
+              shouldValidate: true,
+            });
+          }
+        } catch {
+          // Reverse-geocode is best-effort — the manual picker still works.
+        }
+      },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) setGeoStatus("denied");
+        else if (err.code === err.TIMEOUT) setGeoStatus("timeout");
+        else setGeoStatus("unavailable");
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 5 * 60 * 1000 },
+    );
+  };
 
   // Redirect non-providers or unauthenticated users. The `user` guard is
   // important: during a fresh register → onboarding transition the store's
@@ -173,9 +249,7 @@ export default function OnboardingPage() {
     );
   };
 
-  const handleAvatarUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingAvatar(true);
@@ -200,11 +274,25 @@ export default function OnboardingPage() {
     setIsSaving(true);
     setSaveError(null);
     try {
+      // Phone goes on the User row, not Provider. Update it first if changed.
+      if (data.phone && data.phone !== user?.phone) {
+        try {
+          const updatedUser = await authService.updateUser({
+            phone: data.phone,
+          });
+          setUser(updatedUser);
+        } catch {
+          // Non-blocking — keep going with provider profile.
+        }
+      }
       const updated = await providersService.updateProfile({
         bio: data.bio,
         location: data.location,
         yearsExperience: data.yearsExperience,
-        hourlyRate: data.hourlyRate,
+        serviceRadiusKm: data.serviceRadiusKm,
+        // Pin the map marker if we captured GPS. Bookings on this provider
+        // will surface the route + ETA on the customer-facing detail page.
+        ...(coords && { latitude: coords.lat, longitude: coords.lng }),
       });
       setProvider(updated);
       setStep(1);
@@ -273,9 +361,7 @@ export default function OnboardingPage() {
     setSaveError(null);
     try {
       const docs =
-        kind === "id"
-          ? { idDocumentId: null }
-          : { businessLicenseId: null };
+        kind === "id" ? { idDocumentId: null } : { businessLicenseId: null };
       await providersService.setVerificationDocuments(provider.id, docs);
       if (kind === "id") setIdDoc(null);
       else setLicenseDoc(null);
@@ -371,11 +457,7 @@ export default function OnboardingPage() {
             {/* Profile photo */}
             <div className="flex items-center gap-4 rounded-xl border-2 border-gray-200 bg-white p-4">
               <div className="relative">
-                <Avatar
-                  size="xl"
-                  src={user?.profileImage}
-                  name={user?.name}
-                />
+                <Avatar size="xl" src={user?.profileImage} name={user?.name} />
                 {uploadingAvatar && (
                   <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
                     <Spinner size="sm" />
@@ -432,15 +514,53 @@ export default function OnboardingPage() {
               )}
             </div>
 
-            <Input
-              label="Your city or neighbourhood"
-              placeholder="e.g. Accra, East Legon"
-              leftIcon={<MapPin className="h-4 w-4" />}
-              error={errors.location?.message}
-              {...register("location")}
-            />
+            {/* Service area — full Ghana-wide searchable picker (Nominatim)
+                plus a "Use my location" auto-detect that drops a precise GPS
+                pin. The picker covers every town/suburb in Ghana so providers
+                outside the big cities aren't stuck. */}
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                Where do you work from?
+              </label>
+              <LocationPicker
+                value={watchedLocation}
+                onSelect={(loc: PickedLocation) => {
+                  setValue("location", loc.label, { shouldValidate: true });
+                  setCoords({ lat: loc.lat, lng: loc.lng });
+                  setGeoStatus("ready");
+                }}
+                onClear={() => {
+                  setValue("location", "", { shouldValidate: true });
+                  setCoords(null);
+                  setGeoStatus("idle");
+                }}
+                showDetect
+                onDetect={detectLocation}
+                detecting={geoStatus === "locating"}
+                error={errors.location?.message}
+                placeholder="Search any town in Ghana — e.g. Tarkwa, Kasoa, Bibiani…"
+              />
+              {geoStatus === "ready" && coords && (
+                <p className="mt-1 text-xs text-success-700">
+                  📍 Pinned on the map (lat {coords.lat.toFixed(4)}, lng{" "}
+                  {coords.lng.toFixed(4)}).
+                </p>
+              )}
+              {geoStatus === "denied" && (
+                <p className="mt-1 text-xs text-red-600">
+                  You blocked location access. Search for your area manually, or
+                  unblock the site in your browser&apos;s site settings.
+                </p>
+              )}
+              {(geoStatus === "unavailable" || geoStatus === "timeout") && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Couldn&apos;t get your location automatically — search for
+                  your area instead.
+                </p>
+              )}
+            </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="Years of experience"
                 type="number"
@@ -451,14 +571,29 @@ export default function OnboardingPage() {
                 {...register("yearsExperience")}
               />
               <Input
-                label="Hourly rate (GHS)"
+                label="Service radius (km)"
                 type="number"
                 min={1}
-                leftIcon={<DollarSign className="h-4 w-4" />}
-                error={errors.hourlyRate?.message}
-                {...register("hourlyRate")}
+                max={200}
+                leftIcon={<Navigation className="h-4 w-4" />}
+                error={errors.serviceRadiusKm?.message}
+                {...register("serviceRadiusKm")}
               />
             </div>
+
+            <Input
+              label="Phone number"
+              type="tel"
+              placeholder="+233 XX XXX XXXX"
+              leftIcon={<Phone className="h-4 w-4" />}
+              error={errors.phone?.message}
+              {...register("phone")}
+            />
+
+            <p className="text-xs text-gray-500">
+              No hourly-rate field — pricing is negotiated directly with each
+              customer per job.
+            </p>
 
             <Button
               type="submit"
@@ -556,7 +691,9 @@ export default function OnboardingPage() {
               onClick={onSubmitCategories}
               rightIcon={<ArrowRight className="h-4 w-4" />}
             >
-              {selectedCategoryIds.length > 0 ? "Save and continue" : "Continue"}
+              {selectedCategoryIds.length > 0
+                ? "Save and continue"
+                : "Continue"}
             </Button>
           </div>
         </>
@@ -629,54 +766,160 @@ export default function OnboardingPage() {
 
       {/* Step 3 — Success */}
       {step === 3 && (
-        <div className="text-center">
-          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary-50">
-            <CheckCircle className="h-10 w-10 text-primary-600" />
-          </div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
-            Profile created
-          </p>
-          <h1 className="mt-2 font-sans text-2xl font-bold tracking-tight text-gray-900">
-            You&apos;re ready to{" "}
-            <span className="italic text-primary-600">get customers.</span>
-          </h1>
-          <p className="mt-3 text-sm text-gray-600">
-            Your profile is submitted. Once an admin approves your verification
-            documents (usually 1–2 business days), customers can discover and
-            book your services.
-          </p>
+        <SuccessStep
+          provider={provider}
+          user={user}
+          idDoc={idDoc}
+          licenseDoc={licenseDoc}
+          selectedCategoryIds={selectedCategoryIds}
+          onGoDashboard={() => router.push("/dashboard")}
+        />
+      )}
+    </>
+  );
+}
 
-          <div className="mt-8 space-y-3">
-            <Card>
-              <CardContent className="p-4 text-left">
-                <ul className="space-y-2 text-sm text-gray-600">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    Profile info saved
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    {idDoc ? "ID document submitted" : "ID document pending"}
-                  </li>
-                  <li className="flex items-center gap-2 text-gray-400">
-                    <Clock className="h-4 w-4" />
-                    Verification review in progress (1–2 business days)
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
+/**
+ * Final onboarding screen. Shows a profile-completion meter + a punch list
+ * of next steps. Critically, points the user at `/services` for the gallery
+ * upload — first-time providers had no way to discover that location before.
+ */
+function SuccessStep({
+  provider,
+  user,
+  idDoc,
+  licenseDoc,
+  selectedCategoryIds,
+  onGoDashboard,
+}: {
+  provider: Provider | null;
+  user: { profileImage?: string } | null;
+  idDoc: UploadedDoc | null;
+  licenseDoc: UploadedDoc | null;
+  selectedCategoryIds: string[];
+  onGoDashboard: () => void;
+}) {
+  // Each item is one milestone toward a "complete" profile. Weighted equally
+  // so the percentage is easy to reason about.
+  const checklist: { label: string; done: boolean; nextHref?: string }[] = [
+    { label: "Profile bio + service area", done: !!provider?.bio },
+    { label: "Profile photo", done: !!user?.profileImage },
+    {
+      label: "At least one service category",
+      done: selectedCategoryIds.length > 0,
+      nextHref: "/services",
+    },
+    { label: "Government-issued ID uploaded", done: !!idDoc },
+    {
+      label: "Business license (optional, speeds verification)",
+      done: !!licenseDoc,
+    },
+    {
+      label: "Work gallery — upload 3–6 photos on /services",
+      done: (provider?.gallery?.length ?? 0) >= 3,
+      nextHref: "/services",
+    },
+  ];
+  const completed = checklist.filter((c) => c.done).length;
+  const pct = Math.round((completed / checklist.length) * 100);
 
-            <Button
-              className="w-full"
-              rightIcon={<ArrowRight className="h-4 w-4" />}
-              onClick={() => router.push("/dashboard")}
-            >
-              Go to my dashboard
-            </Button>
+  return (
+    <div>
+      <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary-50">
+        <CheckCircle className="h-10 w-10 text-primary-600" />
+      </div>
+      <p className="text-center text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
+        Profile created
+      </p>
+      <h1 className="mt-2 text-center font-sans text-2xl font-bold tracking-tight text-gray-900">
+        You&apos;re ready to{" "}
+        <span className="italic text-primary-600">get customers.</span>
+      </h1>
+      <p className="mt-3 text-center text-sm text-gray-600">
+        Your profile is submitted. Once an admin approves your verification
+        documents (usually 1–2 business days), customers can discover and book
+        your services.
+      </p>
+
+      {/* Completion meter */}
+      <div className="mt-8 rounded-2xl border-2 border-primary-100 bg-primary-50/40 p-5">
+        <div className="flex items-baseline justify-between">
+          <p className="text-sm font-bold text-gray-900">Profile completion</p>
+          <p className="text-2xl font-bold text-primary-700">{pct}%</p>
+        </div>
+        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-primary-100">
+          <div
+            className="h-full rounded-full bg-primary-600 transition-[width]"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <p className="mt-3 text-xs text-gray-600">
+          {pct === 100
+            ? "Beautiful — your profile looks great."
+            : pct >= 66
+              ? "Almost there. Finish the items below to maximise booking trust."
+              : "Profiles with gallery photos book ~3× more often."}
+        </p>
+      </div>
+
+      {/* Checklist */}
+      <Card className="mt-4">
+        <CardContent className="p-4">
+          <ul className="space-y-2 text-sm">
+            {checklist.map((item) => (
+              <li
+                key={item.label}
+                className="flex items-start gap-2 text-gray-700"
+              >
+                {item.done ? (
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                ) : (
+                  <Clock className="mt-0.5 h-4 w-4 shrink-0 text-gray-300" />
+                )}
+                <span className={cn(item.done && "text-gray-500")}>
+                  {item.label}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+
+      {/* Gallery nudge — first-time providers don't know where it lives */}
+      {(provider?.gallery?.length ?? 0) < 3 && (
+        <div className="mt-4 rounded-2xl border-2 border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <ImageIcon className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-amber-900">
+                Add your work gallery next
+              </p>
+              <p className="mt-1 text-xs text-amber-800">
+                Customers trust providers with photos of past work. Head to{" "}
+                <strong>Services</strong> in the sidebar (or the link below) and
+                use the &ldquo;Gallery&rdquo; uploader to drop 3–6 photos.
+              </p>
+              <Button
+                size="sm"
+                className="mt-3"
+                onClick={() => (window.location.href = "/services")}
+                rightIcon={<ArrowRight className="h-4 w-4" />}
+              >
+                Add gallery photos
+              </Button>
+            </div>
           </div>
         </div>
       )}
-    </>
+
+      <Button
+        className="mt-6 w-full"
+        rightIcon={<ArrowRight className="h-4 w-4" />}
+        onClick={onGoDashboard}
+      >
+        Go to my dashboard
+      </Button>
+    </div>
   );
 }
 

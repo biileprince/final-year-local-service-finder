@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Calendar,
+  Calendar as CalendarIcon,
   Clock,
   Plus,
   Trash2,
@@ -70,6 +72,8 @@ export default function AvailabilityPage() {
     loadAvailability();
   }, [currentWeekStart]);
 
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
   const loadAvailability = async () => {
     setIsLoading(true);
     try {
@@ -92,7 +96,15 @@ export default function AvailabilityPage() {
       });
       setSelectedSlots(slots);
     } catch (error) {
-      console.error("Failed to load availability:", error);
+      // New providers who haven't finished onboarding have no provider row
+      // yet — `/availability/me` returns 404. Route them to onboarding instead
+      // of bubbling the error to the Next.js error overlay.
+      const msg = error instanceof Error ? error.message.toLowerCase() : "";
+      if (msg.includes("not found") || msg.includes("404")) {
+        setNeedsOnboarding(true);
+      } else {
+        console.error("Failed to load availability:", error);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -223,6 +235,28 @@ export default function AvailabilityPage() {
       <div className="flex items-center justify-center py-20">
         <Spinner size="lg" />
       </div>
+    );
+  }
+
+  if (needsOnboarding) {
+    return (
+      <Card>
+        <CardContent className="py-16 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-100">
+            <CalendarIcon className="h-7 w-7 text-primary-600" />
+          </div>
+          <h2 className="mt-5 text-xl font-bold text-secondary-900">
+            Finish onboarding to set your hours
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-secondary-600">
+            Availability lives on your provider profile — complete onboarding
+            and we&apos;ll bring you back here to schedule.
+          </p>
+          <Button asChild className="mt-6">
+            <Link href="/onboarding">Continue onboarding</Link>
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 

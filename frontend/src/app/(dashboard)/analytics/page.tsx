@@ -39,6 +39,7 @@ export default function ProviderAnalyticsPage() {
   const [completed, setCompleted] = useState<Booking[]>([]);
   const [range, setRange] = useState<Range>("30d");
   const [loading, setLoading] = useState(true);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
     if (!user || !hasRole) return;
@@ -60,6 +61,15 @@ export default function ProviderAnalyticsPage() {
         if (cancelled) return;
         setStats(s as Record<string, number>);
         setCompleted(completedRes.data || []);
+      } catch (err) {
+        // No provider row yet — send them to finish onboarding rather than
+        // crashing on a NotFound.
+        const msg = err instanceof Error ? err.message.toLowerCase() : "";
+        if (msg.includes("not found") || msg.includes("404")) {
+          if (!cancelled) setNeedsOnboarding(true);
+        } else {
+          throw err;
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -111,7 +121,31 @@ export default function ProviderAnalyticsPage() {
     );
   }
 
-  if (!hasRole || !provider) return null;
+  if (!hasRole) return null;
+
+  if (needsOnboarding) {
+    return (
+      <Card>
+        <CardContent className="py-16 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-100">
+            <BarChart3 className="h-7 w-7 text-primary-600" />
+          </div>
+          <h2 className="mt-5 text-xl font-bold text-secondary-900">
+            Analytics will appear once your profile is live
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-secondary-600">
+            Finish provider onboarding so we can start tracking your earnings,
+            completion rate, and reputation.
+          </p>
+          <Button asChild className="mt-6">
+            <Link href="/onboarding">Continue onboarding</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!provider) return null;
 
   const total =
     (stats.pending || 0) +
