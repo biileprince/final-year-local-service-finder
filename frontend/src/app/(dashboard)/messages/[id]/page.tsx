@@ -15,6 +15,9 @@ import {
   Mic,
   Square,
   Trash2,
+  Pencil,
+  Check,
+  X as XIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
@@ -23,6 +26,8 @@ import { useAuth } from "@/hooks";
 import { messagesService, filesService } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { useMessagesSocket } from "@/lib/messages-socket";
+import { VoiceMessage } from "@/components/messages/voice-message";
+import { AutoGrowTextarea } from "@/components/messages/auto-grow-textarea";
 import type { Conversation, Message } from "@/types";
 import { formatRelativeTime, formatDate, formatTime, cn } from "@/lib/utils";
 
@@ -98,6 +103,78 @@ export default function ConversationPage() {
   const cancelRecordingRef = useRef(false);
   const MAX_RECORD_SECONDS = 120;
 
+  // Edit / delete
+  const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Close the message-actions menu when clicking outside.
+  useEffect(() => {
+    if (!openMenuFor) return;
+    const handler = () => setOpenMenuFor(null);
+    window.addEventListener("click", handler);
+    return () => window.removeEventListener("click", handler);
+  }, [openMenuFor]);
+
+  const startEdit = (m: Message) => {
+    setEditingId(m.id);
+    setEditingText(m.content);
+    setOpenMenuFor(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingText("");
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const trimmed = editingText.trim();
+    if (!trimmed) return;
+    setSavingEdit(true);
+    try {
+      const updated = await messagesService.editMessage(editingId, trimmed);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === editingId ? { ...m, ...updated } : m)),
+      );
+      cancelEdit();
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Couldn't edit",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const performDelete = async (messageId: string) => {
+    setDeletingId(messageId);
+    try {
+      await messagesService.deleteMessage(messageId);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, deletedAt: new Date().toISOString(), content: "" }
+            : m,
+        ),
+      );
+      setConfirmDeleteId(null);
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Couldn't delete",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   useEffect(() => {
     if (params.id) {
       loadConversation(params.id as string);
@@ -166,6 +243,30 @@ export default function ConversationPage() {
   const startRecording = async () => {
     if (!conversation || isRecording || sendingVoice) return;
     cancelRecordingRef.current = false;
+    // Mic access requires HTTPS (or localhost). On a desktop without a mic,
+    // or with Windows mic permission disabled, getUserMedia rejects with a
+    // specific DOMException we surface to the user.
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      toast({
+        variant: "error",
+        title: "Mic needs HTTPS",
+        description:
+          "Recording requires a secure connection. Open this site over HTTPS (or localhost) and retry.",
+      });
+      return;
+    }
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      toast({
+        variant: "error",
+        title: "Recording unsupported",
+        description:
+          "Your browser doesn't expose a microphone API. Try the latest Chrome, Edge, Safari, or Firefox.",
+      });
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mime = pickAudioMime();
@@ -237,14 +338,27 @@ export default function ConversationPage() {
         });
       }, 1000);
     } catch (err) {
-      toast({
-        variant: "error",
-        title: "Microphone unavailable",
-        description:
-          err instanceof Error
-            ? err.message
-            : "Grant mic permission to record voice notes.",
-      });
+      // getUserMedia rejects with a DOMException whose `name` tells us the
+      // specific failure mode — translate into something the user can act on.
+      const name = (err as DOMException)?.name;
+      let title = "Microphone unavailable";
+      let description = "Couldn't start the microphone. Please try again.";
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        title = "Microphone access blocked";
+        description =
+          "You denied microphone access. Click the lock icon in the address bar → Site settings → Microphone → Allow, then retry.";
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        title = "No microphone found";
+        description =
+          "No microphone is connected. On Windows, check Settings → Privacy → Microphone is on and a mic is available.";
+      } else if (name === "NotReadableError") {
+        title = "Microphone is busy";
+        description =
+          "Another app (video call, voice recorder) seems to be using the mic. Close it and retry.";
+      } else if (err instanceof Error && err.message) {
+        description = err.message;
+      }
+      toast({ variant: "error", title, description });
     }
   };
 
@@ -360,7 +474,10 @@ export default function ConversationPage() {
       : conversation.provider?.user;
 
   return (
-    <div className="flex h-[calc(100vh-10rem)] flex-col rounded-xl bg-white shadow-soft">
+    // Height: full viewport minus the dashboard header (4 rem) and the page
+    // padding (the layout adds p-4/sm:p-6/lg:p-8 + bottom-nav pb-24 on mobile).
+    // `dvh` accounts for the mobile URL bar collapse so we don't get clipped.
+    <div className="flex h-[calc(100dvh-9rem)] flex-col rounded-xl bg-white shadow-soft sm:h-[calc(100dvh-10rem)] lg:h-[calc(100dvh-10rem)]">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-3">
@@ -453,11 +570,18 @@ export default function ConversationPage() {
                 !isOwn &&
                 (index === 0 ||
                   messages[index - 1]?.senderId !== message.senderId);
+              const isDeleted = !!message.deletedAt;
+              const isEditing = editingId === message.id;
+              const canManage =
+                isOwn && !isDeleted && message.messageType !== "voice" && !message.file;
 
               return (
                 <div
                   key={message.id}
-                  className={cn("flex gap-3", isOwn && "flex-row-reverse")}
+                  className={cn(
+                    "group flex gap-3",
+                    isOwn && "flex-row-reverse",
+                  )}
                 >
                   {showAvatar ? (
                     <Avatar
@@ -470,18 +594,70 @@ export default function ConversationPage() {
                   )}
                   <div
                     className={cn(
-                      "max-w-[70%] rounded-2xl px-4 py-2",
-                      isOwn
-                        ? "rounded-tr-sm bg-primary-600 text-white"
-                        : "rounded-tl-sm bg-secondary-100 text-secondary-900",
+                      "relative max-w-[75%] rounded-2xl px-4 py-2",
+                      isDeleted
+                        ? "border border-dashed border-secondary-300 bg-transparent italic text-secondary-500"
+                        : isOwn
+                          ? "rounded-tr-sm bg-primary-600 text-white"
+                          : "rounded-tl-sm bg-secondary-100 text-secondary-900",
                     )}
                   >
-                    {message.file && message.messageType === "voice" ? (
-                      <audio
-                        controls
-                        src={message.file.url}
-                        className="h-10 w-full max-w-[220px]"
-                      />
+                    {isDeleted ? (
+                      <p className="text-sm">This message was deleted</p>
+                    ) : isEditing ? (
+                      <div className="flex w-full min-w-[200px] flex-col gap-2">
+                        <AutoGrowTextarea
+                          value={editingText}
+                          onValueChange={setEditingText}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              void saveEdit();
+                            } else if (e.key === "Escape") {
+                              cancelEdit();
+                            }
+                          }}
+                          autoFocus
+                          maxHeight={200}
+                          className={cn(
+                            "w-full rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2",
+                            isOwn
+                              ? "bg-white/20 text-white placeholder:text-white/60 focus:ring-white/40"
+                              : "bg-white text-secondary-900 focus:ring-primary-500/40",
+                          )}
+                        />
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            className={cn(
+                              "rounded-md p-1.5 transition-colors",
+                              isOwn
+                                ? "hover:bg-white/20"
+                                : "hover:bg-secondary-200",
+                            )}
+                            aria-label="Cancel edit"
+                          >
+                            <XIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void saveEdit()}
+                            disabled={savingEdit || !editingText.trim()}
+                            className={cn(
+                              "rounded-md p-1.5 transition-colors disabled:opacity-50",
+                              isOwn
+                                ? "hover:bg-white/20"
+                                : "hover:bg-secondary-200",
+                            )}
+                            aria-label="Save edit"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : message.file && message.messageType === "voice" ? (
+                      <VoiceMessage url={message.file.url} isOwn={isOwn} />
                     ) : message.file ? (
                       message.file.thumbnailUrl ||
                       /\.(png|jpe?g|gif|webp)$/i.test(message.file.fileName) ? (
@@ -513,16 +689,80 @@ export default function ConversationPage() {
                         </a>
                       )
                     ) : (
-                      <p className="text-sm">{message.content}</p>
+                      <p className="whitespace-pre-wrap break-words text-sm">
+                        {message.content}
+                      </p>
                     )}
-                    <p
-                      className={cn(
-                        "mt-1 text-xs",
-                        isOwn ? "text-primary-200" : "text-secondary-400",
-                      )}
-                    >
-                      {formatRelativeTime(message.createdAt)}
-                    </p>
+                    {!isEditing && !isDeleted && (
+                      <p
+                        className={cn(
+                          "mt-1 text-xs",
+                          isOwn ? "text-primary-200" : "text-secondary-400",
+                        )}
+                      >
+                        {formatRelativeTime(message.createdAt)}
+                        {message.editedAt && (
+                          <span className="ml-1 italic">(edited)</span>
+                        )}
+                      </p>
+                    )}
+
+                    {canManage && !isEditing && (
+                      <div
+                        className={cn(
+                          "absolute -top-2 z-10",
+                          isOwn ? "-left-2" : "-right-2",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuFor(
+                              openMenuFor === message.id ? null : message.id,
+                            );
+                          }}
+                          aria-label="Message actions"
+                          className={cn(
+                            "flex h-7 w-7 items-center justify-center rounded-full border bg-white text-secondary-600 shadow-sm transition-opacity hover:bg-secondary-50 focus-visible:opacity-100 group-hover:opacity-100",
+                            openMenuFor === message.id
+                              ? "opacity-100"
+                              : "opacity-0",
+                          )}
+                        >
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </button>
+                        {openMenuFor === message.id && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className={cn(
+                              "absolute z-20 mt-1 w-32 overflow-hidden rounded-lg border border-secondary-200 bg-white shadow-lg",
+                              isOwn ? "left-0" : "right-0",
+                            )}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => startEdit(message)}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-secondary-700 hover:bg-secondary-50"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuFor(null);
+                                setConfirmDeleteId(message.id);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-error-600 hover:bg-error-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -590,7 +830,7 @@ export default function ConversationPage() {
       ) : (
         <form
           onSubmit={handleSendMessage}
-          className="flex items-center gap-3 border-t px-4 py-3"
+          className="flex items-end gap-3 border-t px-4 py-3"
         >
           <input
             ref={fileInputRef}
@@ -605,25 +845,39 @@ export default function ConversationPage() {
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadingFile || sendingVoice}
             aria-label="Attach file"
+            className="shrink-0"
           >
             <Paperclip className="h-5 w-5" />
           </Button>
-          <input
-            type="text"
+          <AutoGrowTextarea
             value={messageText}
-            onChange={(e) => handleTypingChange(e.target.value)}
+            onValueChange={handleTypingChange}
+            onKeyDown={(e) => {
+              // Enter sends; Shift+Enter inserts a newline. Same on desktop +
+              // mobile — mobile keyboards expose Shift via long-press on most
+              // platforms, and many users prefer Enter-to-send.
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void handleSendMessage(
+                  e as unknown as React.FormEvent<HTMLFormElement>,
+                );
+              }
+            }}
             placeholder={
-              sendingVoice ? "Sending voice note…" : "Type a message..."
+              sendingVoice
+                ? "Sending voice note…"
+                : "Type a message... (Shift+Enter for new line)"
             }
             disabled={sendingVoice}
-            className="flex-1 rounded-full border border-secondary-300 bg-secondary-50 px-4 py-2 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-60"
+            maxHeight={140}
+            className="flex-1 rounded-2xl border border-secondary-300 bg-secondary-50 px-4 py-2 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-60"
           />
           {messageText.trim() ? (
             <Button
               type="submit"
               size="icon"
               disabled={isSending}
-              className="rounded-full"
+              className="shrink-0 rounded-full"
             >
               <Send className="h-5 w-5" />
             </Button>
@@ -634,12 +888,49 @@ export default function ConversationPage() {
               onClick={startRecording}
               disabled={sendingVoice || uploadingFile}
               aria-label="Record voice note"
-              className="rounded-full"
+              className="shrink-0 rounded-full"
             >
               <Mic className="h-5 w-5" />
             </Button>
           )}
         </form>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDeleteId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setConfirmDeleteId(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <h3 className="text-lg font-semibold text-secondary-900">
+              Delete this message?
+            </h3>
+            <p className="mt-2 text-sm text-secondary-600">
+              The other person will see &ldquo;This message was deleted.&rdquo;
+              You can&apos;t undo this.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setConfirmDeleteId(null)}
+                disabled={deletingId === confirmDeleteId}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void performDelete(confirmDeleteId)}
+                isLoading={deletingId === confirmDeleteId}
+                className="bg-error-600 hover:bg-error-700"
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

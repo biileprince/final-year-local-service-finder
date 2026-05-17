@@ -206,64 +206,71 @@ function BookingCard({
   const otherUser = isProvider ? booking.customer : booking.provider?.user;
   const status = statusConfig[booking.status];
 
+  // Whole card is no longer a Link — we render an explicit "View details"
+  // button so the action is obvious. The card itself stays inert, which
+  // also lets people select text / tap phone numbers without navigating
+  // away by accident.
   return (
-    <Link href={`/bookings/${booking.id}`}>
-      <Card className="transition-all hover:-translate-y-0.5 hover:shadow-soft-lg">
-        <CardContent className="p-4 sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <Avatar
-                size="lg"
-                src={otherUser?.profileImage}
-                name={otherUser?.name}
-              />
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-secondary-900">
-                    {otherUser?.name}
-                  </h3>
-                  <Badge variant={status.variant}>{status.label}</Badge>
-                </div>
-                <p className="mt-1 text-sm text-secondary-500">
-                  Booking #{booking.bookingNumber}
-                </p>
+    <Card className="transition-shadow hover:shadow-soft-lg">
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-center gap-4">
+            <Avatar
+              size="lg"
+              src={otherUser?.profileImage}
+              name={otherUser?.name}
+            />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-semibold text-secondary-900">
+                  {otherUser?.name}
+                </h3>
+                <Badge variant={status.variant}>{status.label}</Badge>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {booking.finalAmount || booking.estimatedAmount ? (
-                <span className="text-lg font-bold text-primary-600">
-                  {formatCurrency(
-                    Number(booking.finalAmount || booking.estimatedAmount),
-                  )}
-                </span>
-              ) : null}
-              <ChevronRight className="h-5 w-5 text-secondary-400" />
+              <p className="mt-1 text-sm text-secondary-500">
+                Booking #{booking.bookingNumber}
+              </p>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-4 text-sm text-secondary-600">
-            <div className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4" />
-              <span>{formatDate(booking.scheduledDate)}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4" />
-              <span>{formatTime(booking.scheduledStartTime)}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <MapPin className="h-4 w-4" />
-              <span className="truncate">{booking.serviceAddress}</span>
-            </div>
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            {(booking.finalAmount || booking.estimatedAmount) && (
+              <span className="text-lg font-bold text-primary-600">
+                {formatCurrency(
+                  Number(booking.finalAmount || booking.estimatedAmount),
+                )}
+              </span>
+            )}
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/bookings/${booking.id}`}>
+                View details
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
+        </div>
 
-          {booking.problemDescription && (
-            <p className="mt-3 line-clamp-2 text-sm text-secondary-600">
-              {booking.problemDescription}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-    </Link>
+        <div className="mt-4 flex flex-wrap gap-4 text-sm text-secondary-600">
+          <div className="flex items-center gap-1.5">
+            <Calendar className="h-4 w-4" />
+            <span>{formatDate(booking.scheduledDate)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-4 w-4" />
+            <span>{formatTime(booking.scheduledStartTime)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-4 w-4" />
+            <span className="truncate">{booking.serviceAddress}</span>
+          </div>
+        </div>
+
+        {booking.problemDescription && (
+          <p className="mt-3 line-clamp-2 text-sm text-secondary-600">
+            {booking.problemDescription}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
