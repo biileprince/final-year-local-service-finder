@@ -193,7 +193,7 @@ export class VerificationService {
     });
 
     try {
-      await this.emailService.send({
+      const delivered = await this.emailService.send({
         to: user.email,
         subject: "Verify your email",
         template: "email-verification",
@@ -203,7 +203,21 @@ export class VerificationService {
           ttlMinutes: VERIFY_EMAIL_CODE_TTL_MIN,
         },
       });
+      // `send` returns false when RESEND_API_KEY isn't configured. We don't
+      // want users clicking "Resend" and seeing a silent 202 while nothing
+      // hits their inbox, so surface a clear error from the controller.
+      if (!delivered) {
+        this.logger.warn(
+          `Verification email for ${user.email} skipped — RESEND_API_KEY is not configured.`,
+        );
+        throw new DomainError(
+          ErrorCode.INTERNAL_ERROR,
+          "Email delivery is not configured on this server. Set RESEND_API_KEY in the backend env to enable verification emails.",
+        );
+      }
     } catch (err) {
+      // Re-throw our domain errors as-is.
+      if (err instanceof DomainError) throw err;
       this.logger.error(
         `Failed to send verification email to ${user.email}`,
         err as Error,

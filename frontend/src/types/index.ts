@@ -202,6 +202,8 @@ export interface Message {
   isRead: boolean;
   readAt?: string;
   createdAt: string;
+  editedAt?: string;
+  deletedAt?: string;
 }
 
 // Notification types

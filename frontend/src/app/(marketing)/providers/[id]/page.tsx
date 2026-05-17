@@ -736,18 +736,25 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
     null,
   );
   const [geoStatus, setGeoStatus] = useState<
-    "idle" | "locating" | "ready" | "denied" | "unsupported"
+    | "idle"
+    | "locating"
+    | "ready"
+    | "denied"
+    | "unavailable"
+    | "timeout"
+    | "unsupported"
   >("idle");
 
-  if (
-    typeof provider.latitude !== "number" ||
-    typeof provider.longitude !== "number"
-  ) {
-    return null;
-  }
+  const hasCoords =
+    typeof provider.latitude === "number" &&
+    typeof provider.longitude === "number";
 
   const requestLocation = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoStatus("unsupported");
+      return;
+    }
+    if (typeof window !== "undefined" && !window.isSecureContext) {
       setGeoStatus("unsupported");
       return;
     }
@@ -757,10 +764,44 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
         setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setGeoStatus("ready");
       },
-      () => setGeoStatus("denied"),
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) setGeoStatus("denied");
+        else if (err.code === err.TIMEOUT) setGeoStatus("timeout");
+        else setGeoStatus("unavailable");
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 5 * 60 * 1000 },
     );
   };
+
+  // Render an explanatory placeholder when the provider's profile has no
+  // lat/lng yet (most seed data does not). Keeps the card discoverable.
+  if (!hasCoords) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <MapPin className="h-5 w-5 text-primary-600" />
+            Location & directions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-xl border-2 border-dashed border-secondary-200 bg-secondary-50 p-6 text-center">
+            <MapPin className="mx-auto h-8 w-8 text-secondary-300" />
+            <p className="mt-3 text-sm font-semibold text-secondary-700">
+              No map pin set yet
+            </p>
+            <p className="mt-1 text-xs text-secondary-500">
+              This provider hasn&apos;t shared exact coordinates. They&apos;re
+              based in <strong>{provider.location || "their listed area"}</strong>
+              {provider.serviceRadiusKm
+                ? ` and serve up to ${provider.serviceRadiusKm} km.`
+                : "."}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -802,13 +843,31 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
               disabled={geoStatus === "unsupported"}
             >
               {geoStatus === "denied"
-                ? "Permission denied — retry"
-                : geoStatus === "unsupported"
-                  ? "Geolocation unsupported"
-                  : "Get directions"}
+                ? "Permission blocked — retry"
+                : geoStatus === "timeout"
+                  ? "Took too long — retry"
+                  : geoStatus === "unavailable"
+                    ? "No location signal — retry"
+                    : geoStatus === "unsupported"
+                      ? "Geolocation unsupported"
+                      : "Get directions"}
             </Button>
           )}
         </div>
+        {(geoStatus === "denied" ||
+          geoStatus === "unavailable" ||
+          geoStatus === "timeout" ||
+          geoStatus === "unsupported") && (
+          <p className="text-xs text-secondary-500">
+            {geoStatus === "denied"
+              ? "You blocked location access. Click the lock icon in the address bar → Site settings → Location → Allow, then retry."
+              : geoStatus === "unavailable"
+                ? "Your device couldn't determine its location. On Windows make sure Settings → Privacy → Location is on; desktops without GPS often need Wi-Fi for a rough fix."
+                : geoStatus === "timeout"
+                  ? "The lookup timed out. Check your network and try again."
+                  : "This page must be served over HTTPS for geolocation to work."}
+          </p>
+        )}
         {userLoc && (
           <a
             href={`https://www.openstreetmap.org/directions?from=${userLoc.lat},${userLoc.lng}&to=${provider.latitude},${provider.longitude}&route=car`}

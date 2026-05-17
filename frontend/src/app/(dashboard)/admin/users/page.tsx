@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { useRequireRole } from "@/hooks";
 import { adminService, type AdminUser } from "@/lib/api/admin";
+import { cn } from "@/lib/utils";
 
 type Role = "CUSTOMER" | "PROVIDER" | "ADMIN" | "ALL";
 
@@ -164,86 +165,127 @@ export default function AdminUsersPage() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {users.map((u) => (
-            <Card key={u.id}>
-              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-secondary-900">{u.name}</p>
-                    <Badge>{u.role}</Badge>
-                    {u.provider?.verificationStatus === "VERIFIED" && (
-                      <Badge variant="success">Verified</Badge>
-                    )}
-                    {u.provider?.verificationStatus === "PENDING" && (
-                      <Badge variant="warning">Pending</Badge>
+          {users.map((u) => {
+            const isSuspended = !!u.deletedAt;
+            return (
+              <Card
+                key={u.id}
+                className={cn(isSuspended && "opacity-70 ring-1 ring-error-200")}
+              >
+                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-secondary-900">{u.name}</p>
+                      <Badge>{u.role}</Badge>
+                      {isSuspended && (
+                        <Badge variant="error">Suspended</Badge>
+                      )}
+                      {u.provider?.verificationStatus === "VERIFIED" && (
+                        <Badge variant="success">Verified</Badge>
+                      )}
+                      {u.provider?.verificationStatus === "PENDING" && (
+                        <Badge variant="warning">Pending</Badge>
+                      )}
+                    </div>
+                    <p className="truncate text-sm text-secondary-500">{u.email}</p>
+                    <p className="text-xs text-secondary-400">
+                      Joined {new Date(u.createdAt).toLocaleDateString()}
+                      {u.lastLoginAt && ` · last login ${new Date(u.lastLoginAt).toLocaleDateString()}`}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRoleEditTarget(u)}
+                      disabled={busy === u.id}
+                    >
+                      <UserCog className="mr-1 h-4 w-4" />
+                      Change role
+                    </Button>
+                    {isSuspended ? (
+                      <Button
+                        size="sm"
+                        onClick={() => setReactivateTarget(u)}
+                        disabled={busy === u.id}
+                        className="bg-success-600 hover:bg-success-700"
+                      >
+                        <Shield className="mr-1 h-4 w-4" />
+                        Reactivate
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSuspendTarget(u)}
+                        disabled={busy === u.id}
+                        className="border-error-300 text-error-700 hover:bg-error-50"
+                      >
+                        <ShieldOff className="mr-1 h-4 w-4" />
+                        Suspend
+                      </Button>
                     )}
                   </div>
-                  <p className="truncate text-sm text-secondary-500">{u.email}</p>
-                  <p className="text-xs text-secondary-400">
-                    Joined {new Date(u.createdAt).toLocaleDateString()}
-                    {u.lastLoginAt && ` · last login ${new Date(u.lastLoginAt).toLocaleDateString()}`}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRoleEditTarget(u)}
-                    disabled={busy === u.id}
-                  >
-                    <UserCog className="mr-1 h-4 w-4" />
-                    Role
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSuspendTarget(u)}
-                    disabled={busy === u.id}
-                  >
-                    <ShieldOff className="mr-1 h-4 w-4" />
-                    Suspend
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setReactivateTarget(u)}
-                    disabled={busy === u.id}
-                  >
-                    <Shield className="mr-1 h-4 w-4" />
-                    Reactivate
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      {/* Suspend dialog */}
-      <ConfirmDialog
-        open={!!suspendTarget}
-        onOpenChange={(o) => {
-          if (!o) {
-            setSuspendTarget(null);
-            setReason("");
-          }
-        }}
-        title={`Suspend ${suspendTarget?.name || "user"}?`}
-        description="Suspended users can't log in until reactivated."
-        confirmLabel="Suspend"
-        destructive
-        isLoading={busy === suspendTarget?.id}
-        onConfirm={handleSuspend}
-      />
+      {/* Suspend dialog — inline modal with reason field */}
       {suspendTarget && (
-        <div className="fixed inset-x-0 bottom-24 z-[60] mx-auto max-w-md px-4">
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason (internal note)…"
-            rows={3}
-            className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2 text-sm shadow-lg focus:border-primary-500 focus:outline-none"
-          />
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => {
+            if (busy !== suspendTarget.id) {
+              setSuspendTarget(null);
+              setReason("");
+            }
+          }}
+        >
+          <Card
+            className="w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardContent className="space-y-4 p-6">
+              <div>
+                <h3 className="text-lg font-semibold text-secondary-900">
+                  Suspend {suspendTarget.name}?
+                </h3>
+                <p className="mt-1 text-sm text-secondary-500">
+                  Suspended users can&apos;t log in until reactivated. The
+                  reason is recorded for internal auditing.
+                </p>
+              </div>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason (internal note)…"
+                rows={3}
+                className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSuspendTarget(null);
+                    setReason("");
+                  }}
+                  disabled={busy === suspendTarget.id}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleSuspend}
+                  isLoading={busy === suspendTarget.id}
+                >
+                  Suspend
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 

@@ -104,7 +104,7 @@ function SearchContent() {
   // Geo-radius: only active once the user grants location permission.
   const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
   const [geoStatus, setGeoStatus] = useState<
-    "idle" | "locating" | "ready" | "denied" | "unsupported"
+    "idle" | "locating" | "ready" | "denied" | "unavailable" | "timeout" | "unsupported"
   >("idle");
   const [radiusKm, setRadiusKm] = useState<number>(25);
 
@@ -119,6 +119,12 @@ function SearchContent() {
       setGeoStatus("unsupported");
       return;
     }
+    // Geolocation requires a secure context. On localhost it works over http,
+    // but anywhere else the browser silently returns POSITION_UNAVAILABLE.
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      setGeoStatus("unsupported");
+      return;
+    }
     setGeoStatus("locating");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -128,8 +134,18 @@ function SearchContent() {
         // on the default).
         setSortBy((s) => (s === "relevance" || s === "rating" ? "distance" : s));
       },
-      () => setGeoStatus("denied"),
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 },
+      (err) => {
+        // Distinguish the three GeolocationPositionError codes so we can give
+        // actionable messages: PERMISSION_DENIED (1), POSITION_UNAVAILABLE (2)
+        // — laptops with no GPS and Windows location services off land here —
+        // and TIMEOUT (3).
+        if (err.code === err.PERMISSION_DENIED) setGeoStatus("denied");
+        else if (err.code === err.TIMEOUT) setGeoStatus("timeout");
+        else setGeoStatus("unavailable");
+      },
+      // Bump timeout — laptops without GPS fall back to WiFi/IP lookups which
+      // can take longer than 8 s on the first request.
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 5 * 60 * 1000 },
     );
   }, []);
 
@@ -1169,7 +1185,14 @@ function GeoRadiusGroup({
   onRadiusChange,
 }: {
   geo: { lat: number; lng: number } | null;
-  geoStatus: "idle" | "locating" | "ready" | "denied" | "unsupported";
+  geoStatus:
+    | "idle"
+    | "locating"
+    | "ready"
+    | "denied"
+    | "unavailable"
+    | "timeout"
+    | "unsupported";
   radiusKm: number;
   onRequest: () => void;
   onClear: () => void;
@@ -1216,21 +1239,41 @@ function GeoRadiusGroup({
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={onRequest}
-          disabled={geoStatus === "locating" || geoStatus === "unsupported"}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <MapPin className="h-4 w-4" />
-          {geoStatus === "locating"
-            ? "Locating…"
-            : geoStatus === "denied"
-              ? "Location denied — try again"
-              : geoStatus === "unsupported"
-                ? "Location unavailable"
-                : "Use my location"}
-        </button>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={onRequest}
+            disabled={geoStatus === "locating" || geoStatus === "unsupported"}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <MapPin className="h-4 w-4" />
+            {geoStatus === "locating"
+              ? "Locating…"
+              : geoStatus === "denied"
+                ? "Permission blocked — retry"
+                : geoStatus === "timeout"
+                  ? "Took too long — retry"
+                  : geoStatus === "unavailable"
+                    ? "No location signal — retry"
+                    : geoStatus === "unsupported"
+                      ? "Location unavailable"
+                      : "Use my location"}
+          </button>
+          {(geoStatus === "denied" ||
+            geoStatus === "unavailable" ||
+            geoStatus === "timeout" ||
+            geoStatus === "unsupported") && (
+            <p className="text-[11px] leading-snug text-gray-500">
+              {geoStatus === "denied"
+                ? "You blocked location access for this site. In the browser's address bar, click the lock icon → Site settings → Location → Allow, then retry."
+                : geoStatus === "unavailable"
+                  ? "Your device couldn't determine its location. On Windows make sure Settings → Privacy → Location is on; on a desktop without GPS, try a phone or connect to Wi-Fi for a rough fix."
+                  : geoStatus === "timeout"
+                    ? "The lookup timed out. Check your network and try again."
+                    : "This page must be on HTTPS for geolocation to work."}
+            </p>
+          )}
+        </div>
       )}
     </FilterGroup>
   );

@@ -261,7 +261,11 @@ export class AdminService {
       sortOrder = "desc",
     } = params;
 
-    const where: any = { deletedAt: null };
+    // Don't filter on deletedAt here — the admin list should include suspended
+    // users (suspension is modelled as a soft-delete on User) so they can be
+    // reactivated. We expose `deletedAt` to the client and let the UI render
+    // a "Suspended" badge for soft-deleted rows.
+    const where: any = {};
 
     if (role) {
       where.role = role;
@@ -290,6 +294,7 @@ export class AdminService {
           lastLoginAt: true,
           loginCount: true,
           createdAt: true,
+          deletedAt: true,
           provider: {
             select: {
               id: true,

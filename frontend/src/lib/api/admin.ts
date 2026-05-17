@@ -45,6 +45,8 @@ export interface AdminUser extends User {
   lastLoginAt?: string;
   loginCount?: number;
   emailVerifiedAt?: string;
+  /** Set when the user has been suspended (soft-deleted). */
+  deletedAt?: string | null;
   provider?: { id: string; verificationStatus: string; rating: number } | null;
 }
 
