@@ -278,6 +278,25 @@ export class VerificationService {
     ]);
 
     this.logger.log(`Email verified for user ${userId}`);
+
+    // Fire the welcome email now that verification is confirmed. We moved it
+    // off of registration because two transactional emails landing at the same
+    // time made the verification code easy to miss.
+    void this.emailService
+      .send({
+        to: user.email,
+        template: "welcome",
+        data: {
+          name: user.name,
+          role: (user.role as "CUSTOMER" | "PROVIDER") ?? "CUSTOMER",
+        },
+      })
+      .catch((err) =>
+        this.logger.warn(
+          `Welcome email after verification failed for ${user.email}: ${(err as Error).message}`,
+        ),
+      );
+
     return { userId };
   }
 

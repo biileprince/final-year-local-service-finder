@@ -71,7 +71,7 @@ export class EmailService {
     }
 
     try {
-      const { error } = await this.resend.emails.send({
+      const { data, error } = await this.resend.emails.send({
         from: `${this.fromName} <${options.from ?? this.fromEmail}>`,
         to: options.to,
         subject,
@@ -84,7 +84,13 @@ export class EmailService {
         throw new Error(`Resend API error: ${error.name} - ${error.message}`);
       }
 
-      this.logger.log(`Email sent: "${subject}" → ${options.to}`);
+      // Log the Resend message ID so we can trace deliveries in the Resend
+      // dashboard when a user reports "I never got the email". Most often
+      // the email did send and is sitting in spam, but until the ID is in
+      // the logs we can't prove that.
+      this.logger.log(
+        `Email sent: "${subject}" → ${options.to} (resend id: ${data?.id ?? "unknown"})`,
+      );
       return true;
     } catch (err) {
       this.logger.error(

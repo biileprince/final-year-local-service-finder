@@ -65,15 +65,10 @@ export class AuthService {
 
     this.logger.log(`New user registered: ${email}`);
 
-    // Fire-and-forget welcome + verification emails. Failures are logged but
-    // don't block registration — a user with no email pipe is still better than
-    // a 500 on signup.
-    void this.notificationsService.sendWelcomeEmail(
-      user.id,
-      user.name,
-      (user.role as "CUSTOMER" | "PROVIDER") ?? "CUSTOMER",
-      user.email,
-    );
+    // Fire only the verification email at signup. The welcome email gets
+    // delivered AFTER they verify (see verification.service `verifyEmailByCode`)
+    // — otherwise two transactional emails land in the inbox at the same time
+    // and users read the welcome first, missing the 6-digit code.
     void this.verificationService
       .sendEmailVerification(user.id)
       .catch((err) =>

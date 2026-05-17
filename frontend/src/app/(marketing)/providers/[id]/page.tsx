@@ -35,6 +35,7 @@ import { formatRelativeTime, formatTime, cn } from "@/lib/utils";
 import { useAuth } from "@/hooks";
 import { ReviewCard } from "@/components/reviews/review-card";
 import { ProvidersMap } from "@/components/providers/providers-map";
+import { queryPermission } from "@/lib/permissions";
 
 // ─── Availability Section ────────────────────────────────────────────────────
 
@@ -749,13 +750,21 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
     typeof provider.latitude === "number" &&
     typeof provider.longitude === "number";
 
-  const requestLocation = () => {
+  const requestLocation = async () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoStatus("unsupported");
       return;
     }
     if (typeof window !== "undefined" && !window.isSecureContext) {
       setGeoStatus("unsupported");
+      return;
+    }
+    // If the user already denied this site in the past, calling
+    // getCurrentPosition rejects instantly with no prompt — short-circuit to
+    // the guidance state instead.
+    const perm = await queryPermission("geolocation");
+    if (perm === "denied") {
+      setGeoStatus("denied");
       return;
     }
     setGeoStatus("locating");

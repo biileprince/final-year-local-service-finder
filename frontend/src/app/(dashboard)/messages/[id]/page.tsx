@@ -28,6 +28,7 @@ import { useToast } from "@/components/ui/toast";
 import { useMessagesSocket } from "@/lib/messages-socket";
 import { VoiceMessage } from "@/components/messages/voice-message";
 import { AutoGrowTextarea } from "@/components/messages/auto-grow-textarea";
+import { queryPermission } from "@/lib/permissions";
 import type { Conversation, Message } from "@/types";
 import { formatRelativeTime, formatDate, formatTime, cn } from "@/lib/utils";
 
@@ -264,6 +265,20 @@ export default function ConversationPage() {
         title: "Recording unsupported",
         description:
           "Your browser doesn't expose a microphone API. Try the latest Chrome, Edge, Safari, or Firefox.",
+      });
+      return;
+    }
+    // If the user previously denied this site, getUserMedia will reject
+    // instantly without ever showing a prompt — give them the unblock
+    // instructions immediately instead of the misleading "couldn't start"
+    // error.
+    const perm = await queryPermission("microphone");
+    if (perm === "denied") {
+      toast({
+        variant: "error",
+        title: "Microphone access blocked",
+        description:
+          "Your browser has microphone access disabled for this site. Click the lock icon in the address bar → Site settings → Microphone → Allow, then retry.",
       });
       return;
     }

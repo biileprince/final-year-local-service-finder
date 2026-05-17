@@ -22,6 +22,7 @@ import {
   Map as MapIcon,
 } from "lucide-react";
 import { ProvidersMap } from "@/components/providers/providers-map";
+import { queryPermission } from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -114,7 +115,7 @@ function SearchContent() {
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [totalResults, setTotalResults] = useState(0);
 
-  const requestGeolocation = useCallback(() => {
+  const requestGeolocation = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoStatus("unsupported");
       return;
@@ -123,6 +124,14 @@ function SearchContent() {
     // but anywhere else the browser silently returns POSITION_UNAVAILABLE.
     if (typeof window !== "undefined" && !window.isSecureContext) {
       setGeoStatus("unsupported");
+      return;
+    }
+    // Check the Permissions API first: if the user already denied this site,
+    // calling getCurrentPosition will reject instantly without ever showing
+    // a prompt — which feels broken. Short-circuit to the guidance state.
+    const perm = await queryPermission("geolocation");
+    if (perm === "denied") {
+      setGeoStatus("denied");
       return;
     }
     setGeoStatus("locating");

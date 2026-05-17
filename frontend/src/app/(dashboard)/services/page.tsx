@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Briefcase,
   Plus,
@@ -12,6 +13,7 @@ import {
   Trash2,
   FileText,
   ShieldCheck,
+  ArrowRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +38,10 @@ export default function ProviderServicesPage() {
   const [yearsExperience, setYearsExperience] = useState<string>("");
   const [location, setLocation] = useState("");
   const [loading, setLoading] = useState(true);
+  // Distinguish "no provider profile yet" (new user, needs onboarding) from a
+  // real failure so we can route them to the right next step instead of
+  // crashing on a NotFound exception.
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState<"id" | "license" | null>(
@@ -53,21 +59,31 @@ export default function ProviderServicesPage() {
     (async () => {
       setLoading(true);
       try {
-        const [me, cats] = await Promise.all([
-          providersService.getMyProfile(),
-          categoriesService.getAll(),
-        ]);
+        const cats = await categoriesService.getAll();
         if (cancelled) return;
-        setProvider(me);
         setCategories(cats);
-        setSelectedCategoryIds(
-          new Set((me.categories || []).map((pc) => pc.category.id)),
-        );
-        setSpecialties((me.specialties || []).map((s) => s.specialty));
-        setBio(me.bio || "");
-        setHourlyRate(String(me.hourlyRate ?? ""));
-        setYearsExperience(String(me.yearsExperience ?? ""));
-        setLocation(me.location || "");
+        try {
+          const me = await providersService.getMyProfile();
+          if (cancelled) return;
+          setProvider(me);
+          setSelectedCategoryIds(
+            new Set((me.categories || []).map((pc) => pc.category.id)),
+          );
+          setSpecialties((me.specialties || []).map((s) => s.specialty));
+          setBio(me.bio || "");
+          setHourlyRate(String(me.hourlyRate ?? ""));
+          setYearsExperience(String(me.yearsExperience ?? ""));
+          setLocation(me.location || "");
+        } catch (err) {
+          // 404 / "not found" means the provider row was never created during
+          // onboarding — route them through that flow instead of error-pageing.
+          const msg = err instanceof Error ? err.message.toLowerCase() : "";
+          if (msg.includes("not found") || msg.includes("404")) {
+            setNeedsOnboarding(true);
+          } else {
+            throw err;
+          }
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -76,6 +92,10 @@ export default function ProviderServicesPage() {
       cancelled = true;
     };
   }, [hasRole]);
+
+  if (!authLoading && hasRole && needsOnboarding) {
+    return <ProviderProfileMissingCard />;
+  }
 
   const toggleCategory = (id: string) => {
     setSelectedCategoryIds((prev) => {
@@ -567,5 +587,33 @@ export default function ProviderServicesPage() {
         </Button>
       </div>
     </div>
+  );
+}
+
+// Reusable empty state shown when a provider visits provider-only pages
+// before completing onboarding.
+function ProviderProfileMissingCard() {
+  return (
+    <Card>
+      <CardContent className="py-16 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-100">
+          <Briefcase className="h-7 w-7 text-primary-600" />
+        </div>
+        <h2 className="mt-5 text-xl font-bold text-secondary-900">
+          Set up your provider profile first
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-secondary-600">
+          You haven&apos;t finished provider onboarding yet. Add your service
+          bio, location, and verification documents — then you can start
+          managing services here.
+        </p>
+        <Button asChild className="mt-6">
+          <Link href="/onboarding">
+            Continue onboarding
+            <ArrowRight className="ml-1 h-4 w-4" />
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

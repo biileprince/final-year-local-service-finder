@@ -34,10 +34,17 @@ const envSchema = z.object({
 
   // --- Frontend / CORS ---
   FRONTEND_URL: z.url().default("http://localhost:3000"),
+  // Public origin of *this* backend. Used to derive the Google OAuth callback
+  // URL when GOOGLE_CALLBACK_URL isn't pinned explicitly. On Heroku set to
+  // e.g. https://your-app.herokuapp.com (no trailing slash).
+  BACKEND_URL: z.url().default("http://localhost:3001"),
 
   // --- Google OAuth (optional; when set, "Continue with Google" is enabled) ---
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  // Full URL Google should redirect back to after the consent screen. If left
+  // unset, defaults to `${BACKEND_URL}/api/auth/google/callback`. Must be
+  // listed under "Authorized redirect URIs" in the Google Cloud Console.
   GOOGLE_CALLBACK_URL: z.string().optional(),
 
   // --- Cookies / CSRF ---
