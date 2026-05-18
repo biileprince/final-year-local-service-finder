@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { VerificationPurpose } from "@prisma/client";
 import { randomBytes, createHash } from "crypto";
 import * as bcrypt from "bcrypt";
@@ -12,7 +11,7 @@ import {
   UnprocessableDomainError,
 } from "../../common/errors";
 
-const RESET_TOKEN_TTL_MIN = 60;
+const RESET_CODE_TTL_MIN = 15;
 const VERIFY_EMAIL_CODE_TTL_MIN = 15;
 
 /**
@@ -28,17 +27,12 @@ const VERIFY_EMAIL_CODE_TTL_MIN = 15;
 @Injectable()
 export class VerificationService {
   private readonly logger = new Logger(VerificationService.name);
-  private readonly frontendUrl: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly emailService: EmailService,
-    private readonly configService: ConfigService,
-  ) {
-    this.frontendUrl =
-      this.configService.get<string>("FRONTEND_URL") ?? "http://localhost:3000";
-  }
+  ) {}
 
   // -- Password reset ---------------------------------------------------------
 
@@ -49,16 +43,16 @@ export class VerificationService {
     const user = await this.usersService.findByEmail(email);
 
     // Important: never reveal whether the email exists. Always return success
-    // shape; only actually issue + email a token if the user exists.
+    // shape; only actually issue + email a code if the user exists.
     if (!user) {
       this.logger.debug(
-        `Password reset requested for unknown email (no token issued)`,
+        `Password reset requested for unknown email (no code issued)`,
       );
       return;
     }
 
-    // Invalidate any outstanding reset tokens for this user so an attacker
-    // who has briefly captured an old token can't use it after a new request.
+    // Invalidate any outstanding reset codes for this user so an attacker
+    // who has briefly captured an old code can't use it after a new request.
     await this.prisma.verificationToken.updateMany({
       where: {
         userId: user.id,
@@ -68,9 +62,9 @@ export class VerificationService {
       data: { usedAt: new Date() },
     });
 
-    const { rawToken, tokenHash, expiresAt } = this.mintToken(
-      RESET_TOKEN_TTL_MIN * 60 * 1000,
-    );
+    const code = this.generateNumericCode(6);
+    const tokenHash = this.hashCode(user.id, code);
+    const expiresAt = new Date(Date.now() + RESET_CODE_TTL_MIN * 60 * 1000);
 
     await this.prisma.verificationToken.create({
       data: {
@@ -83,19 +77,15 @@ export class VerificationService {
       },
     });
 
-    const resetUrl = `${this.frontendUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
-
     try {
       await this.emailService.send({
         to: user.email,
         subject: "Reset your password",
         template: "password-reset",
         data: {
-          title: "Reset your password",
           name: user.name,
-          resetUrl,
-          ttlMinutes: RESET_TOKEN_TTL_MIN,
-          message: `You (or someone using your email) requested a password reset. Click the link below to choose a new password. This link expires in ${RESET_TOKEN_TTL_MIN} minutes.`,
+          code,
+          ttlMinutes: RESET_CODE_TTL_MIN,
         },
       });
     } catch (err) {
@@ -108,21 +98,39 @@ export class VerificationService {
     }
   }
 
-  async resetPassword(rawToken: string, newPassword: string): Promise<void> {
-    const tokenHash = this.hashToken(rawToken);
-    const record = await this.prisma.verificationToken.findUnique({
-      where: { tokenHash },
-    });
+  async resetPassword(
+    email: string,
+    code: string,
+    newPassword: string,
+  ): Promise<void> {
+    const trimmed = code.replace(/\s+/g, "");
+    if (!/^\d{6}$/.test(trimmed)) {
+      throw new UnprocessableDomainError(
+        ErrorCode.PASSWORD_RESET_TOKEN_INVALID,
+        "Enter the 6-digit code from your email.",
+      );
+    }
+
+    // Look up user by email. To avoid account enumeration we return the same
+    // generic error whether the user doesn't exist or the code is wrong.
+    const user = await this.usersService.findByEmail(email);
+    const record = user
+      ? await this.prisma.verificationToken.findUnique({
+          where: { tokenHash: this.hashCode(user.id, trimmed) },
+        })
+      : null;
 
     if (
+      !user ||
       !record ||
+      record.userId !== user.id ||
       record.purpose !== VerificationPurpose.PASSWORD_RESET ||
       record.usedAt ||
       record.expiresAt < new Date()
     ) {
       throw new UnprocessableDomainError(
         ErrorCode.PASSWORD_RESET_TOKEN_INVALID,
-        "This password reset link is invalid or has expired. Request a new one.",
+        "That code is invalid or has expired. Request a new one.",
       );
     }
 
@@ -301,17 +309,6 @@ export class VerificationService {
   }
 
   // -- Helpers ----------------------------------------------------------------
-
-  private mintToken(ttlMs: number) {
-    const rawToken = randomBytes(32).toString("base64url");
-    const tokenHash = this.hashToken(rawToken);
-    const expiresAt = new Date(Date.now() + ttlMs);
-    return { rawToken, tokenHash, expiresAt };
-  }
-
-  private hashToken(raw: string): string {
-    return createHash("sha256").update(raw).digest("hex");
-  }
 
   /** Per-user hash so two users with the same code never collide. */
   private hashCode(userId: string, code: string): string {

@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProviderCard } from "@/components/providers/provider-card";
+import { SearchTrigger } from "@/components/search/search-trigger";
 import { searchService, categoriesService, type ProviderSortBy } from "@/lib/api";
 import type { Provider, Category } from "@/types";
 import { cn } from "@/lib/utils";
@@ -288,7 +289,18 @@ function SearchContent() {
               className="flex flex-col gap-4 lg:flex-row"
             >
               <div className="flex flex-1 flex-col gap-3 sm:flex-row">
-                <div className="flex flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20">
+                {/* Mobile: open the robust typeahead overlay. */}
+                <SearchTrigger
+                  className="flex-1 px-3 py-3 sm:hidden"
+                  placeholder={
+                    searchQuery
+                      ? searchQuery
+                      : "Search services or service providers..."
+                  }
+                  showShortcut={false}
+                />
+                {/* Tablet+ : inline input for quick filter tweaks. */}
+                <div className="hidden flex-1 items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 transition-all focus-within:border-primary-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-primary-500/20 sm:flex">
                   <Search className="h-5 w-5 shrink-0 text-gray-400" />
                   <input
                     type="text"

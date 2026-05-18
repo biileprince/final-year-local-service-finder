@@ -43,8 +43,9 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   // Full URL Google should redirect back to after the consent screen. If left
-  // unset, defaults to `${BACKEND_URL}/api/auth/google/callback`. Must be
-  // listed under "Authorized redirect URIs" in the Google Cloud Console.
+  // unset, defaults to `${BACKEND_URL}/auth/google/callback` (excluded from
+  // the global `/api` prefix in main.ts). Must be listed under "Authorized
+  // redirect URIs" in the Google Cloud Console.
   GOOGLE_CALLBACK_URL: z.string().optional(),
 
   // --- Cookies / CSRF ---

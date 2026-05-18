@@ -24,9 +24,18 @@ async function bootstrap() {
   });
 
   // Global prefix — /metrics stays unprefixed so Prometheus's default
-  // scrape path works without per-job overrides.
+  // scrape path works without per-job overrides. The Google OAuth
+  // callback is also exposed without the prefix so the redirect URI
+  // registered in Google Cloud Console can be the bare
+  // `/auth/google/callback` (some deployments registered the URL
+  // without the `/api` prefix; the frontend still hits the prefixed
+  // `/api/auth/google` to start the flow, so we only drop the prefix
+  // for the inbound bounce from Google).
   app.setGlobalPrefix("api", {
-    exclude: [{ path: "metrics", method: RequestMethod.GET }],
+    exclude: [
+      { path: "metrics", method: RequestMethod.GET },
+      { path: "auth/google/callback", method: RequestMethod.GET },
+    ],
   });
 
   // Prometheus HTTP metrics for every request

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   Facebook,
@@ -6,7 +7,6 @@ import {
   Mail,
   Phone,
   MapPin,
-  Search,
   ArrowRight,
   type LucideIcon,
 } from "lucide-react";
@@ -15,7 +15,6 @@ const footerLinks = {
   services: [
     { label: "Browse service providers", href: "/search" },
     { label: "All categories", href: "/search#categories" },
-    { label: "How it works", href: "/#how-it-works" },
     { label: "For service providers", href: "/register?role=provider" },
   ],
   company: [
@@ -53,11 +52,15 @@ export function Footer() {
             <Link
               href="/"
               className="group inline-flex items-center gap-2.5"
-              aria-label="Home"
+              aria-label="Local Service Finder home"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary-500/30">
-                <Search className="h-5 w-5 text-white" strokeWidth={2.5} />
-              </span>
+              <Image
+                src="/images/local-service-finder-icon.png"
+                alt=""
+                width={40}
+                height={40}
+                className="h-10 w-10 shrink-0 rounded-xl object-contain"
+              />
               <span className="flex flex-col leading-tight">
                 <span className="font-sans text-base font-bold tracking-tight text-secondary-900">
                   Local Service

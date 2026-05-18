@@ -159,7 +159,7 @@ export class AuthController {
     });
     return {
       message:
-        "If an account exists for that email, a password reset link has been sent.",
+        "If an account exists for that email, a 6-digit reset code has been sent.",
     };
   }
 
@@ -167,11 +167,17 @@ export class AuthController {
   @Public()
   @Throttle({ long: { limit: 5, ttl: 900_000 } }) // 5/15min per IP
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Reset password using a token from the email link" })
+  @ApiOperation({
+    summary: "Reset password using the 6-digit code emailed to the user",
+  })
   @ApiResponse({ status: 200, description: "Password reset successfully" })
-  @ApiResponse({ status: 422, description: "Token invalid or expired" })
+  @ApiResponse({ status: 422, description: "Code invalid or expired" })
   async resetPassword(@Body() dto: ResetPasswordDto) {
-    await this.verificationService.resetPassword(dto.token, dto.newPassword);
+    await this.verificationService.resetPassword(
+      dto.email,
+      dto.code,
+      dto.newPassword,
+    );
     return {
       message: "Password updated. You can now log in with your new password.",
     };

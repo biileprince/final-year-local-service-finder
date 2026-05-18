@@ -118,8 +118,8 @@ export class EmailService {
       case "password-reset":
         return this.templates.passwordReset({
           name: d.name,
-          resetUrl: d.resetUrl,
-          ttlMinutes: d.ttlMinutes ?? 60,
+          code: d.code,
+          ttlMinutes: d.ttlMinutes ?? 15,
         });
       case "booking-confirmed":
         return this.templates.bookingConfirmed({
