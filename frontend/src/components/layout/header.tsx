@@ -1,18 +1,19 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import {
   Menu,
   X,
-  Search,
   Bell,
   User,
   LogOut,
   Calendar,
   Settings,
   ChevronDown,
+  ChevronRight,
   Wrench,
   Zap,
   Sparkles,
@@ -23,6 +24,12 @@ import {
   Shield,
   Star,
   Clock,
+  Scissors,
+  Trees,
+  Car,
+  Bug,
+  Truck,
+  Wifi,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -81,9 +88,47 @@ const servicesSecondary: ServiceItem[] = [
   },
 ];
 
+const servicesExtended: ServiceItem[] = [
+  {
+    name: "Beauty & Grooming",
+    icon: Scissors,
+    href: "/search?category=beauty",
+    description: "Hair, nails, makeup and barbering at home.",
+  },
+  {
+    name: "Landscaping",
+    icon: Trees,
+    href: "/search?category=landscaping",
+    description: "Lawn care, gardening and outdoor maintenance.",
+  },
+  {
+    name: "Auto Services",
+    icon: Car,
+    href: "/search?category=auto",
+    description: "Mobile mechanics, detailing and tyre service.",
+  },
+  {
+    name: "Pest Control",
+    icon: Bug,
+    href: "/search?category=pest-control",
+    description: "Inspections, treatment and prevention.",
+  },
+  {
+    name: "Moving & Hauling",
+    icon: Truck,
+    href: "/search?category=moving",
+    description: "Local moves, packing and delivery.",
+  },
+  {
+    name: "IT & Tech Support",
+    icon: Wifi,
+    href: "/search?category=tech",
+    description: "Devices, Wi-Fi, installations and repairs.",
+  },
+];
+
 const directLinks = [
   { name: "Browse Services", href: "/search" },
-  { name: "How it works", href: "/#how-it-works" },
   { name: "For providers", href: "/register?role=provider" },
 ];
 
@@ -95,6 +140,7 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [mobileServicesOpen, setMobileServicesOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   const servicesRef = useRef<HTMLDivElement>(null);
@@ -174,13 +220,14 @@ export function Header() {
           className="group flex shrink-0 items-center gap-2.5"
           aria-label="Local Service Finder home"
         >
-          <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary-500 to-primary-600 shadow-md transition-all group-hover:shadow-lg group-hover:shadow-primary-500/30">
-            <Search className="h-5 w-5 text-white" strokeWidth={2.5} />
-            <span
-              aria-hidden
-              className="absolute -inset-px rounded-xl ring-1 ring-inset ring-white/30"
-            />
-          </span>
+          <Image
+            src="/images/local-service-finder-icon.png"
+            alt=""
+            width={40}
+            height={40}
+            priority
+            className="h-10 w-10 shrink-0 rounded-xl object-contain transition-transform group-hover:scale-105"
+          />
           <span className="flex flex-col leading-tight">
             <span className="font-sans text-sm font-bold tracking-tight text-gray-900 sm:text-base">
               Local Service
@@ -239,7 +286,7 @@ export function Header() {
               onMouseEnter={openServices}
               onMouseLeave={queueCloseServices}
               className={cn(
-                "absolute left-1/2 top-full z-50 mt-3 w-[min(840px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-gray-200/80 bg-white/95 p-2 shadow-2xl backdrop-blur-xl transition-all duration-200",
+                "absolute left-0 top-full z-50 mt-3 w-[min(840px,calc(100vw-2rem))] rounded-2xl border border-gray-200/80 bg-white/95 p-2 shadow-2xl backdrop-blur-xl transition-all duration-200",
                 servicesOpen
                   ? "translate-y-0 opacity-100"
                   : "pointer-events-none translate-y-1 opacity-0",
@@ -247,7 +294,7 @@ export function Header() {
             >
               <div
                 aria-hidden
-                className="absolute -top-2 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-tl-sm border-l border-t border-gray-200/80 bg-white"
+                className="absolute -top-2 left-8 h-3 w-3 rotate-45 rounded-tl-sm border-l border-t border-gray-200/80 bg-white"
               />
 
               <div className="grid grid-cols-1 gap-1 md:grid-cols-[1fr_1fr_280px]">
@@ -467,11 +514,52 @@ export function Header() {
           <div className="space-y-6 px-4 py-5">
             <SearchTrigger className="w-full px-4 py-3" placeholder="Search services…" showShortcut={false} />
 
-            <nav className="space-y-1">
+            {/* Authenticated user — relevant links shown first */}
+            {isAuthenticated && user && (
+              <div className="space-y-2">
+                <div className="rounded-xl bg-linear-to-br from-primary-50 to-amber-50 p-4">
+                  <p className="truncate text-sm font-bold text-gray-900">
+                    {user.name}
+                  </p>
+                  <p className="truncate text-xs text-gray-600">
+                    {user.email}
+                  </p>
+                </div>
+                <MobileLink
+                  href="/notifications"
+                  icon={Bell}
+                  label={
+                    unreadCount > 0
+                      ? `Notifications (${unreadCount > 9 ? "9+" : unreadCount})`
+                      : "Notifications"
+                  }
+                />
+                <MobileLink
+                  href="/bookings"
+                  icon={Calendar}
+                  label="My bookings"
+                />
+                {user.role === "PROVIDER" && (
+                  <MobileLink
+                    href="/dashboard"
+                    icon={Settings}
+                    label="Provider dashboard"
+                  />
+                )}
+                <MobileLink href="/profile" icon={User} label="Profile" />
+                <MobileLink
+                  href="/settings"
+                  icon={Settings}
+                  label="Settings"
+                />
+              </div>
+            )}
+
+            <nav className={cn("space-y-1", isAuthenticated && "border-t border-gray-100 pt-5")}>
               <Link
                 href="/"
                 className={cn(
-                  "block rounded-xl px-4 py-4 text-base font-semibold transition-all min-h-[48px] flex items-center font-sans",
+                  "flex min-h-12 items-center rounded-xl px-4 py-4 font-sans text-base font-semibold transition-all",
                   isActiveLink("/")
                     ? "bg-primary-50 text-primary-600"
                     : "text-gray-700 hover:bg-gray-50",
@@ -484,7 +572,7 @@ export function Header() {
                   key={link.name}
                   href={link.href}
                   className={cn(
-                    "block rounded-xl px-4 py-4 text-base font-semibold transition-all min-h-[48px] flex items-center font-sans",
+                    "flex min-h-12 items-center rounded-xl px-4 py-4 font-sans text-base font-semibold transition-all",
                     isActiveLink(link.href)
                       ? "bg-primary-50 text-primary-600"
                       : "text-gray-700 hover:bg-gray-50",
@@ -495,66 +583,62 @@ export function Header() {
               ))}
             </nav>
 
+            {/* Services — collapsible, with full category list */}
             <div className="border-t border-gray-100 pt-5">
-              <p className="mb-3 px-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">
-                Services
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {[...servicesPrimary, ...servicesSecondary].map((s) => (
-                  <Link
-                    key={s.name}
-                    href={s.href}
-                    className="flex items-center gap-2 rounded-xl border-2 border-transparent bg-gray-50 px-4 py-4 transition-all hover:border-primary-200 hover:bg-primary-50 min-h-[48px]"
-                  >
-                    <s.icon
-                      className="h-5 w-5 text-primary-500"
-                      strokeWidth={2}
-                    />
-                    <span className="text-sm font-semibold text-gray-900">
-                      {s.name}
-                    </span>
-                  </Link>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => setMobileServicesOpen((v) => !v)}
+                aria-expanded={mobileServicesOpen}
+                aria-controls="mobile-services-list"
+                className="flex w-full items-center justify-between rounded-xl px-2 py-2 text-left transition-colors hover:bg-gray-50"
+              >
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">
+                  Services
+                </span>
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 text-gray-500 transition-transform",
+                    mobileServicesOpen && "rotate-90",
+                  )}
+                />
+              </button>
+              {mobileServicesOpen && (
+                <div
+                  id="mobile-services-list"
+                  className="mt-3 grid grid-cols-2 gap-2"
+                >
+                  {[
+                    ...servicesPrimary,
+                    ...servicesSecondary,
+                    ...servicesExtended,
+                  ].map((s) => (
+                    <Link
+                      key={s.name}
+                      href={s.href}
+                      className="flex min-h-12 items-center gap-2 rounded-xl border-2 border-transparent bg-gray-50 px-4 py-4 transition-all hover:border-primary-200 hover:bg-primary-50"
+                    >
+                      <s.icon
+                        className="h-5 w-5 shrink-0 text-primary-500"
+                        strokeWidth={2}
+                      />
+                      <span className="text-sm font-semibold text-gray-900">
+                        {s.name}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="border-t border-gray-100 pt-5">
               {isAuthenticated && user ? (
-                <div className="space-y-2">
-                  <div className="rounded-xl bg-linear-to-br from-primary-50 to-amber-50 p-4">
-                    <p className="truncate text-sm font-bold text-gray-900">
-                      {user.name}
-                    </p>
-                    <p className="truncate text-xs text-gray-600">
-                      {user.email}
-                    </p>
-                  </div>
-                  <MobileLink
-                    href="/bookings"
-                    icon={Calendar}
-                    label="My bookings"
-                  />
-                  {user.role === "PROVIDER" && (
-                    <MobileLink
-                      href="/dashboard"
-                      icon={Settings}
-                      label="Provider dashboard"
-                    />
-                  )}
-                  <MobileLink href="/profile" icon={User} label="Profile" />
-                  <MobileLink
-                    href="/settings"
-                    icon={Settings}
-                    label="Settings"
-                  />
-                  <button
-                    onClick={handleLogout}
-                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3 font-semibold text-red-600 transition-colors hover:bg-red-50"
-                  >
-                    <LogOut className="h-5 w-5" />
-                    Logout
-                  </button>
-                </div>
+                <button
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 font-semibold text-red-600 transition-colors hover:bg-red-50"
+                >
+                  <LogOut className="h-5 w-5" />
+                  Logout
+                </button>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
                   <Button variant="outline" asChild className="w-full">

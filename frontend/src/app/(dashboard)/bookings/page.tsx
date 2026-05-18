@@ -51,6 +51,7 @@ export default function BookingsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [providerId, setProviderId] = useState<string | null>(null);
+  const [missingProviderProfile, setMissingProviderProfile] = useState(false);
 
   useEffect(() => {
     loadBookings();
@@ -61,28 +62,47 @@ export default function BookingsPage() {
 
     setIsLoading(true);
     try {
-      const getProviderId = async () => {
-        if (providerId) return providerId;
-        const provider = await providersService.getMyProfile();
-        setProviderId(provider.id);
-        return provider.id;
-      };
-
-      const result =
-        user.role === "PROVIDER"
-          ? await bookingsService.getProviderBookings(await getProviderId(), {
-              status: (activeTab as BookingStatus) || undefined,
-              page,
-              limit: 10,
-            })
-          : await bookingsService.getCustomerBookings({
-              status: (activeTab as BookingStatus) || undefined,
-              page,
-              limit: 10,
-            });
-
-      setBookings(result.data || []);
-      setTotalPages(result.pagination?.totalPages || 1);
+      if (user.role === "PROVIDER") {
+        // A provider who hasn't completed onboarding has no Provider row yet.
+        // Surface a friendly empty state instead of crashing the page.
+        let resolvedProviderId = providerId;
+        if (!resolvedProviderId) {
+          try {
+            const provider = await providersService.getMyProfile();
+            resolvedProviderId = provider.id;
+            setProviderId(provider.id);
+            setMissingProviderProfile(false);
+          } catch (err) {
+            const message =
+              err instanceof Error ? err.message.toLowerCase() : "";
+            if (message.includes("provider profile not found")) {
+              setMissingProviderProfile(true);
+              setBookings([]);
+              setTotalPages(1);
+              return;
+            }
+            throw err;
+          }
+        }
+        const result = await bookingsService.getProviderBookings(
+          resolvedProviderId!,
+          {
+            status: (activeTab as BookingStatus) || undefined,
+            page,
+            limit: 10,
+          },
+        );
+        setBookings(result.data || []);
+        setTotalPages(result.pagination?.totalPages || 1);
+      } else {
+        const result = await bookingsService.getCustomerBookings({
+          status: (activeTab as BookingStatus) || undefined,
+          page,
+          limit: 10,
+        });
+        setBookings(result.data || []);
+        setTotalPages(result.pagination?.totalPages || 1);
+      }
     } catch (error) {
       console.error("Failed to load bookings:", error);
     } finally {
@@ -137,6 +157,22 @@ export default function BookingsPage() {
         <div className="flex items-center justify-center py-20">
           <Spinner size="lg" />
         </div>
+      ) : missingProviderProfile ? (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <Calendar className="mx-auto h-16 w-16 text-secondary-300" />
+            <h3 className="mt-4 text-lg font-medium text-secondary-900">
+              Finish setting up your provider profile
+            </h3>
+            <p className="mt-2 text-secondary-500">
+              You need to complete your provider profile before customers can
+              book you and bookings can appear here.
+            </p>
+            <Button asChild className="mt-6">
+              <Link href="/onboarding">Complete provider profile</Link>
+            </Button>
+          </CardContent>
+        </Card>
       ) : bookings.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">

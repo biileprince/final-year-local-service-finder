@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,6 +17,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 export default function ForgotPasswordPage() {
+  const router = useRouter();
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export default function ForgotPasswordPage() {
         <p className="mt-3 text-gray-600">
           If an account exists for{" "}
           <span className="font-bold text-gray-900">{submittedEmail}</span>,
-          we&apos;ve sent a password reset link. The link expires in 1 hour.
+          we&apos;ve sent a 6-digit reset code. It expires in 15 minutes.
         </p>
 
         <div className="mt-8 rounded-2xl border-2 border-gray-100 bg-gray-50 p-5 text-sm text-gray-600">
@@ -68,10 +70,20 @@ export default function ForgotPasswordPage() {
         </div>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
+          <Button
+            onClick={() =>
+              router.push(
+                `/reset-password?email=${encodeURIComponent(submittedEmail)}`,
+              )
+            }
+          >
+            Enter reset code
+            <ArrowRight className="h-4 w-4" />
+          </Button>
           <Button variant="outline" onClick={() => setSubmittedEmail(null)}>
             Try another email
           </Button>
-          <Button asChild>
+          <Button variant="ghost" asChild>
             <Link href="/login">Back to login</Link>
           </Button>
         </div>

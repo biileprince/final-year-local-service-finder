@@ -127,23 +127,31 @@ export class EmailTemplatesService {
 
   passwordReset(opts: {
     name: string;
-    resetUrl: string;
+    code: string;
     ttlMinutes: number;
   }): RenderedEmail {
-    const subject = "Reset your password";
+    const subject = `Your password reset code is ${opts.code}`;
+    const codeDisplay = `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:24px 0">
+        <tr>
+          <td align="center">
+            <div style="display:inline-block;font-family:'Courier New',Courier,monospace;font-size:36px;font-weight:bold;letter-spacing:12px;color:${this.brand.textColor};background:${this.brand.bgColor};border:2px dashed ${this.brand.borderColor};border-radius:12px;padding:18px 28px">${escape(opts.code)}</div>
+          </td>
+        </tr>
+      </table>
+    `;
     const body = `
       <p style="${P}">Hi ${escape(opts.name.split(" ")[0])},</p>
-      <p style="${P}">We received a request to reset your password. Click the button below to choose a new one — this link expires in <strong>${opts.ttlMinutes} minutes</strong>.</p>
-      ${this.button("Reset password", opts.resetUrl)}
-      <p style="${SMALL}">If the button doesn't work, copy and paste this URL into your browser:<br><a href="${opts.resetUrl}" style="color:${this.brand.brandColor};word-break:break-all">${opts.resetUrl}</a></p>
+      <p style="${P}">We received a request to reset your password. Use the 6-digit code below on the reset screen — it expires in <strong>${opts.ttlMinutes} minutes</strong>.</p>
+      ${codeDisplay}
       <p style="${SMALL}">If you didn't request a password reset, your account is still safe — just ignore this email.</p>
     `;
     return this.wrap({
       subject,
-      preheader: `Reset your password. Link expires in ${opts.ttlMinutes} minutes.`,
+      preheader: `Your password reset code is ${opts.code} — expires in ${opts.ttlMinutes} minutes.`,
       title: "Reset your password",
       body,
-      textIntro: `Hi ${opts.name},\n\nReset your password by visiting:\n${opts.resetUrl}\n\nThis link expires in ${opts.ttlMinutes} minutes.\n\nDidn't request this? Ignore the email.`,
+      textIntro: `Hi ${opts.name},\n\nYour password reset code is: ${opts.code}\n\nIt expires in ${opts.ttlMinutes} minutes. Enter it on the reset screen to choose a new password.\n\nDidn't request this? Ignore the email.`,
     });
   }
 

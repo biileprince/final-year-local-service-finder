@@ -13,8 +13,11 @@ import { ConfigService } from "@nestjs/config";
  *
  * Callback URL resolution order:
  *   1. `GOOGLE_CALLBACK_URL` (explicit override — set this in production)
- *   2. `BACKEND_URL` + "/api/auth/google/callback"
- *   3. "http://localhost:3001/api/auth/google/callback" (dev default)
+ *   2. `BACKEND_URL` + "/auth/google/callback"
+ *   3. "http://localhost:3001/auth/google/callback" (dev default)
+ *
+ * The callback route is excluded from the global `/api` prefix in
+ * `main.ts`, so the bare `/auth/google/callback` is the canonical path.
  *
  * IMPORTANT: the URL set here must exactly match an entry under "Authorized
  * redirect URIs" in the Google Cloud Console for the OAuth client.
@@ -27,7 +30,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, "google") {
     const explicit = configService.get<string>("GOOGLE_CALLBACK_URL");
     const backendBase =
       configService.get<string>("BACKEND_URL") ?? "http://localhost:3001";
-    const callbackURL = explicit ?? `${backendBase}/api/auth/google/callback`;
+    const callbackURL = explicit ?? `${backendBase}/auth/google/callback`;
 
     super({
       clientID:
