@@ -9,10 +9,14 @@ import {
   UpdateUserData,
 } from "./users.repository";
 import * as bcrypt from "bcrypt";
+import { PasswordSecurityService } from "../../common/security/password-security.service";
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly usersRepository: UsersRepository) {}
+  constructor(
+    private readonly usersRepository: UsersRepository,
+    private readonly passwordSecurityService: PasswordSecurityService,
+  ) {}
 
   async create(data: CreateUserData) {
     return this.usersRepository.create(data);
@@ -56,6 +60,9 @@ export class UsersService {
     if (!isPasswordValid) {
       throw new ConflictException("Current password is incorrect");
     }
+
+    // Reject passwords that appear in known breach corpora.
+    await this.passwordSecurityService.assertNotBreached(newPassword);
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.usersRepository.updatePassword(id, hashedPassword);

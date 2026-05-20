@@ -439,6 +439,41 @@ select:focus-visible {
 }
 
 /* ==========================================================================
+   Third-party overrides — Mapbox GL JS
+   Mapbox ships a light-only popup chrome. Repaint the popup surface + tip in
+   dark mode so the marker tooltips don't render as a white blob over the
+   dark-v11 basemap. Selectors are Mapbox's stable class names.
+   ========================================================================== */
+
+.dark .mapboxgl-popup-content {
+  background-color: var(--color-white);
+  color: var(--color-secondary-900);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+.dark .mapboxgl-popup-tip {
+  /* The popup arrow is rendered via a coloured border; only the side facing
+     the content needs to match the new surface, so target each anchor. */
+  border-top-color: var(--color-white);
+  border-bottom-color: var(--color-white);
+  border-left-color: var(--color-white);
+  border-right-color: var(--color-white);
+}
+
+.dark .mapboxgl-popup-close-button {
+  color: var(--color-secondary-500);
+}
+
+.dark .mapboxgl-ctrl-attrib {
+  background-color: rgba(30, 41, 59, 0.85);
+  color: var(--color-secondary-600);
+}
+
+.dark .mapboxgl-ctrl-attrib a {
+  color: var(--color-secondary-700);
+}
+
+/* ==========================================================================
    Keyframes
    ========================================================================== */
 

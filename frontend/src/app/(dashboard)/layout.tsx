@@ -22,6 +22,7 @@ import {
   Folder,
   History,
   MailWarning,
+  Heart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
@@ -35,6 +36,7 @@ import { useMessagesSocket } from "@/lib/messages-socket";
 const customerNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/bookings", label: "My Bookings", icon: Calendar },
+  { href: "/favorites", label: "Favorites", icon: Heart },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/profile", label: "Profile", icon: User },
@@ -156,6 +158,12 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-secondary-50">
+      <a
+        href="#dashboard-main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-primary-600 focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-white focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
+      >
+        Skip to main content
+      </a>
       {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
         <div
@@ -183,8 +191,10 @@ export default function DashboardLayout({
               </span>
             </Link>
             <button
+              type="button"
               onClick={() => setSidebarOpen(false)}
               className="rounded-lg p-1 hover:bg-secondary-100 lg:hidden"
+              aria-label="Close navigation"
             >
               <X className="h-5 w-5" />
             </button>
@@ -254,8 +264,10 @@ export default function DashboardLayout({
         {/* Top Header */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-white px-4 sm:px-6">
           <button
+            type="button"
             onClick={() => setSidebarOpen(true)}
             className="rounded-lg p-2 hover:bg-secondary-100 lg:hidden"
+            aria-label="Open navigation"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -318,7 +330,9 @@ export default function DashboardLayout({
         )}
 
         {/* Page Content */}
-        <main className="p-4 pb-24 sm:p-6 lg:p-8 lg:pb-8">{children}</main>
+        <main id="dashboard-main" className="p-4 pb-24 sm:p-6 lg:p-8 lg:pb-8">
+          {children}
+        </main>
       </div>
 
       {/* Mobile bottom navigation */}

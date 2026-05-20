@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Briefcase,
   Plus,
@@ -481,11 +482,13 @@ export default function ProviderServicesPage() {
                   {file ? (
                     <div className="mt-2 space-y-2">
                       {isImg ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <Image
                           src={file.url}
                           alt={label}
-                          className="max-h-40 rounded-lg object-cover"
+                          width={320}
+                          height={160}
+                          sizes="(max-width: 768px) 100vw, 320px"
+                          className="max-h-40 w-auto rounded-lg object-cover"
                         />
                       ) : (
                         <a
@@ -559,11 +562,12 @@ export default function ProviderServicesPage() {
                   key={item.id}
                   className="group relative aspect-square overflow-hidden rounded-xl border border-gray-200"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <Image
                     src={item.file.thumbnailUrl || item.file.url}
                     alt={item.title || "Gallery image"}
-                    className="h-full w-full object-cover"
+                    fill
+                    sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+                    className="object-cover"
                   />
                   <button
                     type="button"

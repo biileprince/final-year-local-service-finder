@@ -160,6 +160,7 @@ model User {
   applicationLogs         ApplicationLog[]
   apiRequestLogs          ApiRequestLog[]
   providersVerified       Provider[]              @relation("VerifiedProviders")
+  favorites               Favorite[]
 
   @@index([email])
   @@index([role])
@@ -241,12 +242,28 @@ model Provider {
   bookings                Booking[]
   reviews                 Review[]
   conversationsAsProvider Conversation[]
+  favoritedBy             Favorite[]
 
   @@index([userId])
   @@index([verificationStatus])
   @@index([featured])
   @@index([rating(sort: Desc)])
   @@map("providers")
+}
+
+model Favorite {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  providerId String   @map("provider_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, providerId])
+  @@index([userId])
+  @@index([providerId])
+  @@map("favorites")
 }
 
 model ProviderCategory {

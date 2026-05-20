@@ -8,6 +8,7 @@ import { validateEnv } from "./config/env.validation";
 import { loggerConfig } from "./config/logger.config";
 import { AuditContextMiddleware } from "./common/audit/audit.middleware";
 import { CsrfGuard } from "./common/security/csrf.guard";
+import { SecurityModule } from "./common/security/security.module";
 
 // Core modules
 import { DatabaseModule } from "./database/database.module";
@@ -28,6 +29,7 @@ import { FilesModule } from "./modules/files/files.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { SearchModule } from "./modules/search/search.module";
+import { FavoritesModule } from "./modules/favorites/favorites.module";
 
 @Module({
   imports: [
@@ -66,6 +68,7 @@ import { SearchModule } from "./modules/search/search.module";
     DatabaseModule,
     CacheModule,
     MonitoringModule,
+    SecurityModule,
 
     // Feature modules
     AuthModule,
@@ -81,6 +84,7 @@ import { SearchModule } from "./modules/search/search.module";
     NotificationsModule,
     AdminModule,
     SearchModule,
+    FavoritesModule,
   ],
   providers: [
     {

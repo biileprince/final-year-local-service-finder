@@ -34,25 +34,38 @@ interface LocationPickerProps {
   placeholder?: string;
 }
 
-interface NominatimResult {
-  place_id: number;
-  display_name: string;
-  lat: string;
-  lon: string;
-  type: string;
-  class: string;
-  address?: Record<string, string | undefined>;
+/**
+ * Mapbox Geocoding API v6 feature shape — narrowed to the fields we read.
+ * See https://docs.mapbox.com/api/search/geocoding/#geocoding-response-object
+ */
+interface MapboxFeature {
+  id: string;
+  type: "Feature";
+  geometry: { type: "Point"; coordinates: [number, number] };
+  properties: {
+    name?: string;
+    name_preferred?: string;
+    full_address?: string;
+    place_formatted?: string;
+    feature_type?: string;
+    context?: Record<
+      string,
+      { name?: string; region?: string; country_code?: string } | undefined
+    >;
+  };
 }
 
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+
 /**
- * Searchable, Ghana-wide location picker backed by OpenStreetMap Nominatim.
+ * Searchable, Ghana-wide location picker backed by the Mapbox Geocoding API.
  *
- * - Debounced (350 ms) live search restricted to `countrycodes=gh` so we
- *   don't surface "Accra, Indonesia" by mistake.
+ * - Debounced (350 ms) live search restricted to `country=gh` so we don't
+ *   surface "Accra, Indonesia" by mistake.
  * - Returns a clean display label + lat/lng so we can pin the provider on
  *   the customer-facing map and run radius search.
- * - Falls back gracefully when Nominatim is rate-limited (1 req/sec free
- *   tier) — debounce + AbortController keep the load low.
+ * - Gracefully degrades to a freeform text input when NEXT_PUBLIC_MAPBOX_TOKEN
+ *   is missing — picker still works for typed labels, just without suggestions.
  */
 export function LocationPicker({
   value,
@@ -66,7 +79,7 @@ export function LocationPicker({
 }: LocationPickerProps) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [results, setResults] = useState<NominatimResult[]>([]);
+  const [results, setResults] = useState<MapboxFeature[]>([]);
   const [loading, setLoading] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -81,8 +94,10 @@ export function LocationPicker({
     return () => window.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Debounced Nominatim search. Polite UA per their usage policy.
+  // Debounced Mapbox forward-geocode. The `proximity=ip` bias surfaces nearer
+  // matches first; `country=gh` hard-restricts the result set.
   useEffect(() => {
+    if (!MAPBOX_TOKEN) return;
     const trimmed = query.trim();
     if (trimmed.length < 2) {
       setResults([]);
@@ -96,17 +111,17 @@ export function LocationPicker({
     const t = setTimeout(async () => {
       try {
         const url =
-          `https://nominatim.openstreetmap.org/search?` +
+          `https://api.mapbox.com/search/geocode/v6/forward?` +
           `q=${encodeURIComponent(trimmed)}` +
-          `&format=json&addressdetails=1&limit=8&countrycodes=gh` +
-          `&accept-language=en`;
+          `&country=gh&proximity=ip&limit=8&language=en` +
+          `&access_token=${MAPBOX_TOKEN}`;
         const res = await fetch(url, {
           signal: ctrl.signal,
           headers: { Accept: "application/json" },
         });
-        if (!res.ok) throw new Error(`Nominatim ${res.status}`);
-        const data: NominatimResult[] = await res.json();
-        setResults(data);
+        if (!res.ok) throw new Error(`Mapbox ${res.status}`);
+        const data: { features?: MapboxFeature[] } = await res.json();
+        setResults(data.features ?? []);
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           setResults([]);
@@ -121,26 +136,29 @@ export function LocationPicker({
     };
   }, [query]);
 
-  // Build a tidy label from Nominatim's address pieces. Falls back to the
-  // full display_name when no neat suburb/town/region is available.
-  const labelFor = (r: NominatimResult): string => {
-    const a = r.address || {};
+  // Build a tidy label from Mapbox's context pieces. Prefers locality/region
+  // when present; falls back to the full address.
+  const labelFor = (f: MapboxFeature): string => {
+    const p = f.properties;
+    const ctx = p.context || {};
     const place =
-      a.suburb ||
-      a.neighbourhood ||
-      a.village ||
-      a.town ||
-      a.city ||
-      a.county ||
+      p.name ||
+      p.name_preferred ||
+      ctx.neighborhood?.name ||
+      ctx.locality?.name ||
+      ctx.place?.name ||
       null;
-    const region = a.state || a.region || null;
-    if (place && region) return `${place}, ${region}`;
+    const region = ctx.region?.name || null;
+    if (place && region && place !== region) return `${place}, ${region}`;
     if (place) return place;
-    return r.display_name;
+    return p.full_address || p.place_formatted || "Unnamed location";
   };
 
-  // Hide repeats — Nominatim often returns 3-4 rows with the same human label
-  // (street vs. neighbourhood vs. suburb-level pins).
+  const sublabelFor = (f: MapboxFeature): string =>
+    f.properties.full_address || f.properties.place_formatted || "";
+
+  // Hide repeats — Mapbox can return overlapping street/neighbourhood pins
+  // with the same human label.
   const uniqueResults = useMemo(() => {
     const seen = new Set<string>();
     return results.filter((r) => {
@@ -151,11 +169,10 @@ export function LocationPicker({
     });
   }, [results]);
 
-  const handlePick = (r: NominatimResult) => {
-    const label = labelFor(r);
-    const lat = parseFloat(r.lat);
-    const lng = parseFloat(r.lon);
-    if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+  const handlePick = (f: MapboxFeature) => {
+    const label = labelFor(f);
+    const [lng, lat] = f.geometry.coordinates;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     onSelect({ label, lat, lng });
     setOpen(false);
     setQuery("");
@@ -241,7 +258,15 @@ export function LocationPicker({
       {/* Suggestions dropdown */}
       {open && !value && (
         <div className="absolute left-0 right-0 z-20 mt-1 max-h-64 overflow-y-auto rounded-xl border-2 border-gray-200 bg-white shadow-lg">
-          {query.trim().length < 2 ? (
+          {!MAPBOX_TOKEN ? (
+            <p className="px-4 py-3 text-xs text-amber-700 dark:text-amber-200">
+              Mapbox token missing — suggestions disabled. Set{" "}
+              <code className="rounded bg-amber-50 px-1 dark:bg-amber-900/40">
+                NEXT_PUBLIC_MAPBOX_TOKEN
+              </code>{" "}
+              to enable.
+            </p>
+          ) : query.trim().length < 2 ? (
             <p className="px-4 py-3 text-xs text-gray-500">
               Type at least 2 characters — e.g. &ldquo;Tarkwa&rdquo;,
               &ldquo;Kasoa&rdquo;, &ldquo;Kumasi&rdquo;.
@@ -257,7 +282,7 @@ export function LocationPicker({
           ) : (
             <ul>
               {uniqueResults.map((r) => (
-                <li key={r.place_id}>
+                <li key={r.id}>
                   <button
                     type="button"
                     onClick={() => handlePick(r)}
@@ -269,7 +294,7 @@ export function LocationPicker({
                         {labelFor(r)}
                       </p>
                       <p className="truncate text-xs text-gray-500">
-                        {r.display_name}
+                        {sublabelFor(r)}
                       </p>
                     </div>
                   </button>
@@ -280,12 +305,12 @@ export function LocationPicker({
           <p className="border-t border-gray-100 px-4 py-2 text-[10px] text-gray-400">
             Results from{" "}
             <a
-              href="https://nominatim.openstreetmap.org/"
+              href="https://www.mapbox.com/about/maps/"
               target="_blank"
               rel="noopener noreferrer"
               className="underline"
             >
-              OpenStreetMap Nominatim
+              Mapbox
             </a>
           </p>
         </div>

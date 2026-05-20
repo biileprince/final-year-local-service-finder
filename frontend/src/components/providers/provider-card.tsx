@@ -4,6 +4,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FavoriteButton } from "./favorite-button";
 import type { Provider } from "@/types";
 import { cn, getInitials } from "@/lib/utils";
 
@@ -40,6 +41,11 @@ export function ProviderCard({
             FEATURED
           </Badge>
         )}
+
+        <FavoriteButton
+          providerId={provider.id}
+          className="absolute right-4 top-4 z-10"
+        />
 
         <div className="flex flex-col gap-6 p-6 md:flex-row">
           <div className="relative shrink-0 self-center md:self-start">
@@ -150,6 +156,11 @@ export function ProviderCard({
           FEATURED
         </Badge>
       )}
+
+      <FavoriteButton
+        providerId={provider.id}
+        className="absolute right-4 top-4 z-10"
+      />
 
       <div className="bg-linear-to-br from-primary-50 via-white to-amber-50 p-6 pb-4">
         <div className="flex items-center gap-4">

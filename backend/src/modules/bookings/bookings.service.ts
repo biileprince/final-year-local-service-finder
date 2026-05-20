@@ -21,6 +21,8 @@ import { BookingStatus } from "@prisma/client";
 @Injectable()
 export class BookingsService {
   private readonly logger = new Logger(BookingsService.name);
+  /** Time string used to mark "customer didn't pick a slot" bookings. */
+  private static readonly FLEXIBLE_TIME = "00:00:00";
 
   constructor(
     private readonly prisma: PrismaService,
@@ -31,15 +33,53 @@ export class BookingsService {
   ) {}
 
   /**
+   * Throws ConflictException if another non-cancelled booking already occupies
+   * (providerId, scheduledDate, scheduledStartTime). Pass `excludeBookingId`
+   * when rescheduling so the booking being moved doesn't collide with itself.
+   * No-op for flexible-time bookings since the sentinel "00:00:00" is shared
+   * by design.
+   *
+   * The `client` parameter is typed `any` because callers pass either the
+   * top-level extended PrismaService or a `$transaction` tx client — Prisma's
+   * generated types treat those as structurally incompatible despite both
+   * exposing `booking.findFirst`. The shape is enforced by the call below.
+   */
+  private async assertSlotAvailable(
+    client: any,
+    providerId: string,
+    scheduledDate: Date,
+    scheduledStartTime: string,
+    excludeBookingId?: string,
+  ): Promise<void> {
+    if (scheduledStartTime === BookingsService.FLEXIBLE_TIME) return;
+
+    const conflict = await client.booking.findFirst({
+      where: {
+        providerId,
+        scheduledDate,
+        scheduledStartTime: new Date(`1970-01-01T${scheduledStartTime}`),
+        status: { notIn: ["CANCELLED"] },
+        deletedAt: null,
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (conflict) {
+      throw new ConflictException("This time slot is already booked");
+    }
+  }
+
+  /**
    * Create a booking with atomic transaction
    * This ensures slot locking and booking creation happen together
    */
   async create(data: CreateBookingData) {
     // Sentinel "00:00:00" represents a flexible-time booking — the customer
     // didn't pick a slot and the provider will confirm the time via messaging.
-    const FLEXIBLE_TIME = "00:00:00";
     const isFlexibleTime = !data.scheduledStartTime;
-    const scheduledStartTime = data.scheduledStartTime ?? FLEXIBLE_TIME;
+    const scheduledStartTime =
+      data.scheduledStartTime ?? BookingsService.FLEXIBLE_TIME;
 
     const booking = await this.prisma.executeInTransaction(async (tx) => {
       // 1. Verify provider exists and is active
@@ -64,21 +104,12 @@ export class BookingsService {
       // 2. Conflict detection only applies to fixed-time bookings.
       //    Flexible bookings won't collide on the sentinel time.
       if (!isFlexibleTime) {
-        const existingBooking = await tx.booking.findFirst({
-          where: {
-            providerId: data.providerId,
-            scheduledDate: data.scheduledDate,
-            scheduledStartTime: new Date(`1970-01-01T${scheduledStartTime}`),
-            status: {
-              notIn: ["CANCELLED"],
-            },
-            deletedAt: null,
-          },
-        });
-
-        if (existingBooking) {
-          throw new ConflictException("This time slot is already booked");
-        }
+        await this.assertSlotAvailable(
+          tx,
+          data.providerId,
+          data.scheduledDate,
+          scheduledStartTime,
+        );
       }
 
       // 3. Check availability if it exists
@@ -450,6 +481,23 @@ export class BookingsService {
     if (!["PENDING", "CONFIRMED"].includes(booking.status)) {
       throw new BadRequestException(
         "Only pending or confirmed bookings can be rescheduled",
+      );
+    }
+
+    // Guard against double-booking: previously `create` checked this but
+    // `reschedule` didn't, so a provider could be moved into a slot another
+    // booking already owned. We exclude the current booking from the check
+    // since it's the one being moved.
+    if (
+      data.scheduledStartTime &&
+      data.scheduledStartTime !== BookingsService.FLEXIBLE_TIME
+    ) {
+      await this.assertSlotAvailable(
+        this.prisma,
+        booking.providerId,
+        new Date(data.scheduledDate),
+        data.scheduledStartTime,
+        id,
       );
     }
 

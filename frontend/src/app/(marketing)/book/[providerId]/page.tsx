@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Calendar,
   Clock,
@@ -518,11 +519,12 @@ export default function BookProviderPage() {
                             className="relative h-24 w-24 overflow-hidden rounded-lg border border-secondary-200 bg-secondary-50"
                           >
                             {isImage ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
+                              <Image
                                 src={a.url}
                                 alt={a.fileName}
-                                className="h-full w-full object-cover"
+                                fill
+                                sizes="96px"
+                                className="object-cover"
                               />
                             ) : (
                               <div className="flex h-full w-full flex-col items-center justify-center px-1 text-center">

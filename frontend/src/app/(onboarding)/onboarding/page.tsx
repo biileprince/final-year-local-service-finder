@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -143,30 +144,34 @@ export default function OnboardingPage() {
         const lng = pos.coords.longitude;
         setCoords({ lat, lng });
         setGeoStatus("ready");
-        // Reverse geocode via Nominatim (public, attribution-only). Pull the
-        // suburb / town / city / region so we can pre-fill the location field
+        // Reverse geocode via Mapbox so we can pre-fill the location field
         // with something that matches what customers actually search for.
+        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+        if (!token) return;
         try {
           const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=14&accept-language=en`,
+            `https://api.mapbox.com/search/geocode/v6/reverse?longitude=${lng}&latitude=${lat}&language=en&access_token=${token}`,
             { headers: { Accept: "application/json" } },
           );
           if (!res.ok) return;
           const data = await res.json();
-          const a = data.address || {};
+          const feature = data?.features?.[0];
+          const props = feature?.properties ?? {};
+          const ctx = props.context ?? {};
           const place =
-            a.suburb ||
-            a.neighbourhood ||
-            a.village ||
-            a.town ||
-            a.city ||
-            a.county ||
+            props.name ||
+            ctx.neighborhood?.name ||
+            ctx.locality?.name ||
+            ctx.place?.name ||
+            ctx.district?.name ||
             null;
-          const region = a.state || a.region || null;
+          const region = ctx.region?.name || null;
           if (place) {
-            setValue("location", region ? `${place}, ${region}` : place, {
-              shouldValidate: true,
-            });
+            setValue(
+              "location",
+              region && region !== place ? `${place}, ${region}` : place,
+              { shouldValidate: true },
+            );
           }
         } catch {
           // Reverse-geocode is best-effort — the manual picker still works.
@@ -514,10 +519,10 @@ export default function OnboardingPage() {
               )}
             </div>
 
-            {/* Service area — full Ghana-wide searchable picker (Nominatim)
-                plus a "Use my location" auto-detect that drops a precise GPS
-                pin. The picker covers every town/suburb in Ghana so providers
-                outside the big cities aren't stuck. */}
+            {/* Service area — full Ghana-wide searchable picker (Mapbox
+                Geocoding) plus a "Use my location" auto-detect that drops a
+                precise GPS pin. The picker covers every town/suburb in Ghana
+                so providers outside the big cities aren't stuck. */}
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-gray-700">
                 Where do you work from?
@@ -970,10 +975,12 @@ function DocumentUploader({
         {doc ? (
           <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
             {isImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={doc.url}
                 alt={label}
+                width={64}
+                height={64}
+                sizes="64px"
                 className="h-16 w-16 rounded-lg object-cover"
               />
             ) : (

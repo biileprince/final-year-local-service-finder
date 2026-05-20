@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Calendar,
   Clock,
@@ -469,10 +470,12 @@ export default function BookingDetailPage() {
                           className="block"
                         >
                           {isImage ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
+                            <Image
                               src={a.file.thumbnailUrl || a.file.url}
                               alt={a.file.fileName}
+                              width={128}
+                              height={112}
+                              sizes="128px"
                               className="h-28 w-32 object-cover"
                             />
                           ) : (
@@ -733,11 +736,12 @@ export default function BookingDetailPage() {
                             key={img.id}
                             className="relative h-20 w-20 overflow-hidden rounded-lg border border-secondary-200"
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
+                            <Image
                               src={img.url}
                               alt="Review attachment"
-                              className="h-full w-full object-cover"
+                              fill
+                              sizes="80px"
+                              className="object-cover"
                             />
                             <button
                               type="button"
@@ -839,11 +843,13 @@ export default function BookingDetailPage() {
                 {booking.review.images && booking.review.images.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {booking.review.images.map((img) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <Image
                         key={img.id}
                         src={img.file.thumbnailUrl || img.file.url}
                         alt="Review photo"
+                        width={80}
+                        height={80}
+                        sizes="80px"
                         className="h-20 w-20 rounded-lg object-cover"
                       />
                     ))}

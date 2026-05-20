@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  MapContainer,
+import { useEffect, useMemo, useRef, useState } from "react";
+import Map, {
   Marker,
   Popup,
-  TileLayer,
-  Polyline,
-  useMap,
-} from "react-leaflet";
-import L, { type LatLngExpression, type LatLngBoundsExpression } from "leaflet";
-import "leaflet/dist/leaflet.css";
+  NavigationControl,
+  Source,
+  Layer,
+  type MapRef,
+  type LngLatBoundsLike,
+} from "react-map-gl/mapbox";
+import "mapbox-gl/dist/mapbox-gl.css";
 import Link from "next/link";
-import { Star } from "lucide-react";
+import { MapPin, Star } from "lucide-react";
+import { useTheme } from "@/components/theme/theme-provider";
 
 export interface MapProvider {
   id: string;
@@ -28,7 +29,7 @@ interface InteractiveMapProps {
   providers: MapProvider[];
   /** User's current location (origin for routing). */
   userLocation?: { lat: number; lng: number } | null;
-  /** When true and userLocation+single provider is set, request a route from OSRM. */
+  /** When true and userLocation+single provider is set, request a route from Mapbox Directions. */
   enableRouting?: boolean;
   height?: string;
   /** Render provider name as a link to /providers/:id. Off in dashboards. */
@@ -36,49 +37,18 @@ interface InteractiveMapProps {
 }
 
 interface RouteInfo {
-  coords: [number, number][];
+  /** GeoJSON LineString coords ([lng, lat] pairs). */
+  geometry: GeoJSON.LineString;
   distanceKm: number;
   durationMin: number;
 }
 
-// Leaflet's default icon URLs are broken in bundlers (they reference relative
-// paths from the CSS). Re-point them to the CDN so markers actually render.
-const DEFAULT_ICON = L.icon({
-  iconUrl:
-    "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl:
-    "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl:
-    "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-
-const USER_ICON = L.divIcon({
-  className: "lsf-user-marker",
-  html: `<div style="
-    width:18px;height:18px;border-radius:9999px;
-    background:#2563eb;border:3px solid #fff;
-    box-shadow:0 0 0 2px #2563eb55, 0 2px 6px rgba(0,0,0,.25);
-  "></div>`,
-  iconSize: [18, 18],
-  iconAnchor: [9, 9],
-});
-
-function FitBounds({
-  bounds,
-}: {
-  bounds: LatLngBoundsExpression | null;
-}) {
-  const map = useMap();
-  useEffect(() => {
-    if (!bounds) return;
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-  }, [bounds, map]);
-  return null;
-}
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+const MAP_STYLE_LIGHT = "mapbox://styles/mapbox/streets-v12";
+const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11";
+// Falls back to Accra so the initial viewport isn't (0,0) when neither
+// providers nor a user location are available yet.
+const FALLBACK_CENTER = { latitude: 5.6037, longitude: -0.187 };
 
 export default function InteractiveMap({
   providers,
@@ -87,6 +57,15 @@ export default function InteractiveMap({
   height = "480px",
   linkProviderProfile = true,
 }: InteractiveMapProps) {
+  const mapRef = useRef<MapRef | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // react-map-gl swaps Mapbox styles on the fly when `mapStyle` changes, so
+  // toggling the dashboard theme repaints the tiles without remounting the
+  // component (which would lose viewport + selected pin).
+  const { resolvedTheme } = useTheme();
+  const mapStyle =
+    resolvedTheme === "dark" ? MAP_STYLE_DARK : MAP_STYLE_LIGHT;
+
   const points = useMemo(
     () =>
       providers.filter(
@@ -99,33 +78,72 @@ export default function InteractiveMap({
     [providers],
   );
 
-  const bounds = useMemo<LatLngBoundsExpression | null>(() => {
-    const coords: [number, number][] = points.map((p) => [
-      p.latitude,
-      p.longitude,
-    ]);
-    if (userLocation) coords.push([userLocation.lat, userLocation.lng]);
-    if (coords.length === 0) return null;
-    if (coords.length === 1) {
-      const [lat, lng] = coords[0]!;
-      // Pad a single point into a small bounding box so fitBounds doesn't
-      // zoom to max.
-      return [
-        [lat - 0.01, lng - 0.01],
-        [lat + 0.01, lng + 0.01],
-      ];
+  const initialView = useMemo(() => {
+    if (userLocation) {
+      return {
+        latitude: userLocation.lat,
+        longitude: userLocation.lng,
+        zoom: 12,
+      };
     }
-    return coords as LatLngExpression[] as LatLngBoundsExpression;
+    if (points[0]) {
+      return {
+        latitude: points[0].latitude,
+        longitude: points[0].longitude,
+        zoom: 12,
+      };
+    }
+    return { ...FALLBACK_CENTER, zoom: 7 };
+  }, [userLocation, points]);
+
+  // Fit bounds when the set of plotted points changes. We compute bounds
+  // imperatively rather than via initialViewState so re-filtering on /search
+  // re-frames the map without remounting.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const coords: [number, number][] = points.map((p) => [
+      p.longitude,
+      p.latitude,
+    ]);
+    if (userLocation) coords.push([userLocation.lng, userLocation.lat]);
+    if (coords.length === 0) return;
+    if (coords.length === 1) {
+      const [lng, lat] = coords[0]!;
+      map.flyTo({ center: [lng, lat], zoom: 13, duration: 600 });
+      return;
+    }
+    let minLng = coords[0]![0];
+    let minLat = coords[0]![1];
+    let maxLng = coords[0]![0];
+    let maxLat = coords[0]![1];
+    for (const [lng, lat] of coords) {
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+    const bounds: LngLatBoundsLike = [
+      [minLng, minLat],
+      [maxLng, maxLat],
+    ];
+    map.fitBounds(bounds, {
+      padding: 60,
+      maxZoom: 14,
+      duration: 600,
+    });
   }, [points, userLocation]);
 
-  // Routing — only when there is a single target and we have a user location.
+  // Driving directions — only when there is a single target and we have a
+  // user location. Mapbox Directions API returns GeoJSON we can hand straight
+  // to a <Source>/<Layer>.
   const [route, setRoute] = useState<RouteInfo | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const target = points.length === 1 ? points[0]! : null;
 
   useEffect(() => {
-    if (!enableRouting || !userLocation || !target) {
+    if (!enableRouting || !userLocation || !target || !MAPBOX_TOKEN) {
       setRoute(null);
       return;
     }
@@ -133,24 +151,21 @@ export default function InteractiveMap({
     setRouteLoading(true);
     setRouteError(null);
     const url =
-      `https://router.project-osrm.org/route/v1/driving/` +
+      `https://api.mapbox.com/directions/v5/mapbox/driving/` +
       `${userLocation.lng},${userLocation.lat};${target.longitude},${target.latitude}` +
-      `?overview=full&geometries=geojson`;
+      `?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
     fetch(url)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
         const r = data?.routes?.[0];
-        if (!r) {
+        if (!r?.geometry) {
           setRouteError("No route found");
           setRoute(null);
           return;
         }
-        const coords: [number, number][] = (
-          r.geometry?.coordinates as [number, number][] | undefined
-        )?.map(([lng, lat]) => [lat, lng]) ?? [];
         setRoute({
-          coords,
+          geometry: r.geometry,
           distanceKm: r.distance / 1000,
           durationMin: r.duration / 60,
         });
@@ -168,6 +183,27 @@ export default function InteractiveMap({
     };
   }, [enableRouting, userLocation, target]);
 
+  if (!MAPBOX_TOKEN) {
+    // Mid-tone foreground utilities (amber-700/-900) aren't remapped in dark
+    // mode — only the -50 surface flips. Without an explicit dark override
+    // here the heading is dark amber on a dark amber surface, unreadable.
+    return (
+      <div
+        className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50 p-12 text-center dark:border-amber-900/40"
+        style={{ height }}
+      >
+        <MapPin className="h-6 w-6 text-amber-500" />
+        <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+          Map unavailable — Mapbox token not configured.
+        </p>
+        <p className="max-w-md text-xs text-amber-700 dark:text-amber-200">
+          Set <code className="rounded bg-white/60 px-1 dark:bg-white/10">NEXT_PUBLIC_MAPBOX_TOKEN</code> in
+          your environment to enable the interactive map.
+        </p>
+      </div>
+    );
+  }
+
   if (points.length === 0 && !userLocation) {
     return (
       <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-12 text-center">
@@ -178,80 +214,123 @@ export default function InteractiveMap({
     );
   }
 
-  const center: LatLngExpression = userLocation
-    ? [userLocation.lat, userLocation.lng]
-    : [points[0]!.latitude, points[0]!.longitude];
+  const selected = points.find((p) => p.id === selectedId) ?? null;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border-2 border-gray-100 shadow-sm">
-      <MapContainer
-        center={center}
-        zoom={13}
-        scrollWheelZoom
-        style={{ height, width: "100%" }}
+    <div
+      className="relative overflow-hidden rounded-2xl border-2 border-gray-100 shadow-sm"
+      style={{ height }}
+    >
+      <Map
+        ref={mapRef}
+        mapboxAccessToken={MAPBOX_TOKEN}
+        mapStyle={mapStyle}
+        initialViewState={initialView}
+        style={{ width: "100%", height: "100%" }}
+        attributionControl={true}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        <FitBounds bounds={bounds} />
+        <NavigationControl position="top-right" showCompass={false} />
 
         {userLocation && (
           <Marker
-            position={[userLocation.lat, userLocation.lng]}
-            icon={USER_ICON}
+            longitude={userLocation.lng}
+            latitude={userLocation.lat}
+            anchor="center"
           >
-            <Popup>You are here</Popup>
+            <div
+              aria-label="You are here"
+              className="h-[18px] w-[18px] rounded-full border-[3px] border-white bg-primary-600 shadow-[0_0_0_2px_rgba(37,99,235,.33),0_2px_6px_rgba(0,0,0,.25)]"
+            />
           </Marker>
         )}
 
         {points.map((p) => (
           <Marker
             key={p.id}
-            position={[p.latitude, p.longitude]}
-            icon={DEFAULT_ICON}
+            longitude={p.longitude}
+            latitude={p.latitude}
+            anchor="bottom"
+            onClick={(e) => {
+              // Stop the click bubbling to the map so it doesn't immediately
+              // close the popup we're about to open.
+              e.originalEvent.stopPropagation();
+              setSelectedId(p.id);
+            }}
           >
-            <Popup>
-              <div className="min-w-[160px]">
-                {linkProviderProfile ? (
-                  <Link
-                    href={`/providers/${p.id}`}
-                    className="text-sm font-semibold text-primary-700 hover:underline"
-                  >
-                    {p.name}
-                  </Link>
-                ) : (
-                  <p className="text-sm font-semibold text-secondary-900">
-                    {p.name}
-                  </p>
-                )}
-                {p.location && (
-                  <p className="mt-0.5 text-xs text-secondary-500">
-                    {p.location}
-                  </p>
-                )}
-                {typeof p.rating === "number" && p.rating > 0 && (
-                  <p className="mt-1 flex items-center gap-1 text-xs text-amber-600">
-                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                    {p.rating.toFixed(1)}
-                  </p>
-                )}
-              </div>
-            </Popup>
+            <button
+              type="button"
+              aria-label={`View ${p.name}`}
+              className="-translate-y-1 transition-transform hover:scale-110"
+            >
+              <MapPin className="h-7 w-7 fill-primary-600 text-primary-700 drop-shadow-md" />
+            </button>
           </Marker>
         ))}
 
-        {route && (
-          <Polyline
-            positions={route.coords}
-            pathOptions={{ color: "#2563eb", weight: 5, opacity: 0.85 }}
-          />
+        {selected && (
+          <Popup
+            longitude={selected.longitude}
+            latitude={selected.latitude}
+            anchor="top"
+            offset={20}
+            closeOnClick={false}
+            onClose={() => setSelectedId(null)}
+            className="lsf-mapbox-popup"
+          >
+            <div className="min-w-[160px] p-1">
+              {linkProviderProfile ? (
+                <Link
+                  href={`/providers/${selected.id}`}
+                  className="text-sm font-semibold text-primary-700 hover:underline"
+                >
+                  {selected.name}
+                </Link>
+              ) : (
+                <p className="text-sm font-semibold text-secondary-900">
+                  {selected.name}
+                </p>
+              )}
+              {selected.location && (
+                <p className="mt-0.5 text-xs text-secondary-500">
+                  {selected.location}
+                </p>
+              )}
+              {typeof selected.rating === "number" && selected.rating > 0 && (
+                <p className="mt-1 flex items-center gap-1 text-xs text-amber-600">
+                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                  {selected.rating.toFixed(1)}
+                </p>
+              )}
+            </div>
+          </Popup>
         )}
-      </MapContainer>
+
+        {route && (
+          <Source
+            id="lsf-route"
+            type="geojson"
+            data={{
+              type: "Feature",
+              properties: {},
+              geometry: route.geometry,
+            }}
+          >
+            <Layer
+              id="lsf-route-line"
+              type="line"
+              layout={{ "line-cap": "round", "line-join": "round" }}
+              paint={{
+                "line-color": "#2563eb",
+                "line-width": 5,
+                "line-opacity": 0.85,
+              }}
+            />
+          </Source>
+        )}
+      </Map>
 
       {(route || routeLoading || routeError) && (
-        <div className="absolute left-3 top-3 z-[1000] rounded-xl bg-white/95 px-3 py-2 text-xs shadow-md backdrop-blur">
+        <div className="absolute left-3 top-3 z-10 rounded-xl bg-white/95 px-3 py-2 text-xs shadow-md backdrop-blur">
           {routeLoading && (
             <span className="font-medium text-secondary-600">
               Finding route…

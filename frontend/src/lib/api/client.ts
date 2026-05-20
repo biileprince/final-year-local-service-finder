@@ -4,6 +4,27 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 type RequestMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+const CSRF_COOKIE_NAME = "lsf_csrf_token";
+const MUTATING_METHODS: ReadonlySet<RequestMethod> = new Set([
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+]);
+
+/**
+ * Reads the double-submit CSRF cookie set by the backend on login/refresh.
+ * The value is echoed in the `x-csrf-token` header on mutating requests; the
+ * backend's CsrfGuard validates the two match when CSRF_ENABLED is on.
+ */
+function readCsrfCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(
+    new RegExp(`(?:^|;\\s*)${CSRF_COOKIE_NAME}=([^;]+)`),
+  );
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
 interface RequestOptions {
   method?: RequestMethod;
   body?: any;
@@ -128,12 +149,23 @@ class ApiClient {
       }
     }
 
+    // Echo the double-submit CSRF token on mutating requests so the backend
+    // CsrfGuard can validate it when CSRF_ENABLED is on. No-op when the cookie
+    // isn't present (e.g., before login, in tests).
+    if (MUTATING_METHODS.has(method)) {
+      const csrfToken = readCsrfCookie();
+      if (csrfToken) {
+        requestHeaders["x-csrf-token"] = csrfToken;
+      }
+    }
+
     const fetchOptions: RequestInit = {
       method,
       headers: requestHeaders,
       cache,
       next,
       signal,
+      credentials: "include",
     };
 
     if (body && method !== "GET") {
@@ -202,10 +234,15 @@ class ApiClient {
       const formData = new FormData();
       formData.append("file", file);
       if (context) formData.append("context", context);
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const csrfToken = readCsrfCookie();
+      if (csrfToken) headers["x-csrf-token"] = csrfToken;
       return fetch(`${this.baseUrl}${endpoint}`, {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers,
         body: formData,
+        credentials: "include",
       });
     };
 
