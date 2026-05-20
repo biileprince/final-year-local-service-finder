@@ -13,6 +13,7 @@ export { availabilityService } from "./availability";
 export { filesService, type FileContext, type UploadedFile } from "./files";
 export { adminService } from "./admin";
 export { searchService } from "./search";
+export { favoritesService, type FavoriteListItem } from "./favorites";
 
 // Re-export types from services
 export type {

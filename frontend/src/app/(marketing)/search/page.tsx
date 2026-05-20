@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Search,
   MapPin,
@@ -61,6 +62,16 @@ function SearchContent() {
   const categoryParam = searchParams.get("category");
   const queryParam = searchParams.get("q") ?? "";
 
+  // Initial filter state seeded from the URL — every change writes back via
+  // router.replace so /search?radiusKm=10&minRating=4.5 round-trips, making
+  // result pages bookmarkable and shareable.
+  const parseNumberParam = (key: string): number | null => {
+    const raw = searchParams.get(key);
+    if (raw === null) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+
   const [searchQuery, setSearchQuery] = useState(queryParam);
   const [locationQuery, setLocationQuery] = useState(
     searchParams.get("location") ?? "",
@@ -95,20 +106,51 @@ function SearchContent() {
   const [selectedCategory, setSelectedCategory] = useState<string>(
     categoryParam ?? "all",
   );
-  const [minRating, setMinRating] = useState<number>(0);
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [minRating, setMinRating] = useState<number>(
+    parseNumberParam("minRating") ?? 0,
+  );
+  const [verifiedOnly, setVerifiedOnly] = useState(
+    searchParams.get("verified") === "true",
+  );
   const [availabilityFilter, setAvailabilityFilter] = useState<string | null>(
     null,
   );
-  const [sortBy, setSortBy] = useState<SortBy>("relevance");
-  const [maxHourlyRate, setMaxHourlyRate] = useState<number | null>(null);
+  const VALID_SORTS: SortBy[] = [
+    "relevance",
+    "rating",
+    "reviews",
+    "distance",
+    "newest",
+    "priceLow",
+    "priceHigh",
+  ];
+  const [sortBy, setSortBy] = useState<SortBy>(() => {
+    const raw = searchParams.get("sortBy");
+    return raw && (VALID_SORTS as string[]).includes(raw)
+      ? (raw as SortBy)
+      : "relevance";
+  });
+  const [maxHourlyRate, setMaxHourlyRate] = useState<number | null>(
+    parseNumberParam("maxHourlyRate"),
+  );
 
-  // Geo-radius: only active once the user grants location permission.
-  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
+  // Geo-radius: only active once the user grants location permission. If lat
+  // + lng are in the URL we seed them so a shared link reconstructs the geo
+  // filter without re-prompting; status stays "ready" because we trust the
+  // caller already had permission when they generated the link.
+  const initialLat = parseNumberParam("lat");
+  const initialLng = parseNumberParam("lng");
+  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(
+    initialLat !== null && initialLng !== null
+      ? { lat: initialLat, lng: initialLng }
+      : null,
+  );
   const [geoStatus, setGeoStatus] = useState<
     "idle" | "locating" | "ready" | "denied" | "unavailable" | "timeout" | "unsupported"
-  >("idle");
-  const [radiusKm, setRadiusKm] = useState<number>(25);
+  >(initialLat !== null && initialLng !== null ? "ready" : "idle");
+  const [radiusKm, setRadiusKm] = useState<number>(
+    parseNumberParam("radiusKm") ?? 25,
+  );
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [providers, setProviders] = useState<ProviderWithDistance[]>([]);
@@ -248,14 +290,45 @@ function SearchContent() {
 
   const handleCategoryChange = (slug: string) => {
     setSelectedCategory(slug);
-    const params = new URLSearchParams(searchParams.toString());
-    if (slug === "all") {
-      params.delete("category");
-    } else {
-      params.set("category", slug);
-    }
-    router.push(`/search${params.toString() ? `?${params.toString()}` : ""}`);
   };
+
+  // Mirror filter state into the URL so /search?category=plumbing&radiusKm=10
+  // round-trips: state → URL, and a reload / shared link → state. We use
+  // router.replace (not push) to keep the back button useful — otherwise every
+  // slider tick would create a new history entry. The page never reads from
+  // searchParams after the initial mount, so this effect can't loop.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchQuery.trim()) params.set("q", searchQuery.trim());
+    if (locationQuery.trim()) params.set("location", locationQuery.trim());
+    if (selectedCategory !== "all") params.set("category", selectedCategory);
+    if (minRating > 0) params.set("minRating", String(minRating));
+    if (maxHourlyRate !== null)
+      params.set("maxHourlyRate", String(maxHourlyRate));
+    if (verifiedOnly) params.set("verified", "true");
+    if (sortBy !== "relevance") params.set("sortBy", sortBy);
+    if (geo) {
+      params.set("lat", geo.lat.toFixed(5));
+      params.set("lng", geo.lng.toFixed(5));
+      params.set("radiusKm", String(radiusKm));
+    }
+    const next = params.toString();
+    const current = searchParams.toString();
+    if (next === current) return;
+    router.replace(`/search${next ? `?${next}` : ""}`, { scroll: false });
+  }, [
+    searchQuery,
+    locationQuery,
+    selectedCategory,
+    minRating,
+    maxHourlyRate,
+    verifiedOnly,
+    sortBy,
+    geo,
+    radiusKm,
+    router,
+    searchParams,
+  ]);
 
   const resetFilters = () => {
     setMinRating(0);
@@ -952,11 +1025,13 @@ function ProviderGridCard({ provider }: { provider: Provider }) {
       <Card className="h-full border-2 border-transparent transition-all hover:-translate-y-1 hover:border-primary-300 hover:shadow-lg">
         {/* Provider image */}
         {provider.user.profileImage && (
-          <div className="h-36 w-full overflow-hidden rounded-t-2xl bg-gray-100">
-            <img
+          <div className="relative h-36 w-full overflow-hidden rounded-t-2xl bg-gray-100">
+            <Image
               src={provider.user.profileImage}
               alt={provider.user.name}
-              className="h-full w-full object-cover"
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 300px"
+              className="object-cover"
             />
           </div>
         )}

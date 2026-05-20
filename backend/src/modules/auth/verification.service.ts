@@ -5,6 +5,7 @@ import * as bcrypt from "bcrypt";
 import { PrismaService } from "../../database/prisma.service";
 import { EmailService } from "../notifications/services/email.service";
 import { UsersService } from "../users/users.service";
+import { PasswordSecurityService } from "../../common/security/password-security.service";
 import {
   DomainError,
   ErrorCode,
@@ -32,6 +33,7 @@ export class VerificationService {
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly emailService: EmailService,
+    private readonly passwordSecurityService: PasswordSecurityService,
   ) {}
 
   // -- Password reset ---------------------------------------------------------
@@ -133,6 +135,9 @@ export class VerificationService {
         "That code is invalid or has expired. Request a new one.",
       );
     }
+
+    // Reject passwords that appear in known breach corpora.
+    await this.passwordSecurityService.assertNotBreached(newPassword);
 
     const hashed = await bcrypt.hash(newPassword, 10);
 

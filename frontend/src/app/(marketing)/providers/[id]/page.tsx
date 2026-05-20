@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Star,
   MapPin,
@@ -35,6 +36,7 @@ import { formatRelativeTime, formatTime, cn } from "@/lib/utils";
 import { useAuth } from "@/hooks";
 import { ReviewCard } from "@/components/reviews/review-card";
 import { ProvidersMap } from "@/components/providers/providers-map";
+import { FavoriteButton } from "@/components/providers/favorite-button";
 import { queryPermission } from "@/lib/permissions";
 
 // ─── Availability Section ────────────────────────────────────────────────────
@@ -416,6 +418,11 @@ export default function ProviderDetailPage() {
                     Verified
                   </Badge>
                 )}
+                <FavoriteButton
+                  providerId={provider.id}
+                  variant="inline"
+                  stopPropagation={false}
+                />
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
@@ -612,10 +619,12 @@ export default function ProviderDetailPage() {
                         rel="noreferrer"
                         className="group relative block overflow-hidden rounded-xl bg-secondary-100"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <Image
                           src={g.file.thumbnailUrl || g.file.url}
                           alt={g.title || "Gallery item"}
+                          width={400}
+                          height={400}
+                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 250px"
                           className="aspect-square w-full object-cover transition-transform group-hover:scale-105"
                         />
                         {g.title && (
@@ -879,12 +888,12 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
         )}
         {userLoc && (
           <a
-            href={`https://www.openstreetmap.org/directions?from=${userLoc.lat},${userLoc.lng}&to=${provider.latitude},${provider.longitude}&route=car`}
+            href={`https://www.google.com/maps/dir/?api=1&origin=${userLoc.lat},${userLoc.lng}&destination=${provider.latitude},${provider.longitude}&travelmode=driving`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs font-semibold text-primary-600 hover:underline"
           >
-            Open full turn-by-turn directions in OpenStreetMap →
+            Open full turn-by-turn directions in Google Maps →
           </a>
         )}
       </CardContent>

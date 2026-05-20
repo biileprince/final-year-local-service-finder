@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Star, ThumbsUp, Flag, MessageSquare } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
@@ -131,11 +132,13 @@ export function ReviewCard({ review: initial, canReply }: ReviewCardProps) {
             {review.images && review.images.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {review.images.map((img) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <Image
                     key={img.id}
                     src={img.file.thumbnailUrl || img.file.url}
                     alt={img.caption || "Review image"}
+                    width={80}
+                    height={80}
+                    sizes="80px"
                     className="h-20 w-20 rounded-lg object-cover"
                   />
                 ))}

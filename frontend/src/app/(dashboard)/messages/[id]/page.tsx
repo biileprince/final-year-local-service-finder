@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ChevronLeft,
   Send,
@@ -520,13 +521,13 @@ export default function ConversationPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="Call">
             <Phone className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="Start video call">
             <Video className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="More options">
             <MoreVertical className="h-5 w-5" />
           </Button>
         </div>
@@ -682,11 +683,13 @@ export default function ConversationPage() {
                           rel="noreferrer"
                           className="block"
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
+                          <Image
                             src={message.file.thumbnailUrl || message.file.url}
                             alt={message.file.fileName}
-                            className="max-h-48 rounded-lg"
+                            width={320}
+                            height={192}
+                            sizes="(max-width: 768px) 70vw, 320px"
+                            className="h-auto max-h-48 w-auto rounded-lg"
                           />
                         </a>
                       ) : (
@@ -892,6 +895,7 @@ export default function ConversationPage() {
               type="submit"
               size="icon"
               disabled={isSending}
+              aria-label="Send message"
               className="shrink-0 rounded-full"
             >
               <Send className="h-5 w-5" />

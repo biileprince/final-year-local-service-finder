@@ -50,3 +50,4 @@ Thumbs.db
 # Local-only
 *.local
 session_handoff.md
+.claude/

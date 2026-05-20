@@ -50,8 +50,12 @@ const nextConfig = {
             value: "strict-origin-when-cross-origin",
           },
           {
+            // Allow same-origin to request these. `()` means "no origin may
+            // use it" — that hard-blocks the geolocation prompt and voice
+            // recording, so callers must explicitly opt in. `(self)` keeps
+            // third-party iframes locked out but lets the user-prompt fire.
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=()",
+            value: "camera=(self), microphone=(self), geolocation=(self)",
           },
         ],
       },

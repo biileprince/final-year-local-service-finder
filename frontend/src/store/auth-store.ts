@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { User } from "@/types";
 import { authService, apiClient, type LoginDto, type RegisterDto } from "@/lib/api";
+import { useFavoritesStore } from "./favorites-store";
 
 interface AuthState {
   user: User | null;
@@ -73,6 +74,8 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             error: null,
           });
+          // Clear per-user caches that leak across accounts.
+          useFavoritesStore.getState().reset();
         }
       },
 

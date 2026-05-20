@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import type { Provider } from "@/types";
 import type { MapProvider } from "./interactive-map";
 
-// Leaflet touches `window` on import, so the actual map is client-only.
+// Mapbox GL touches `window` on import, so the actual map is client-only.
 const InteractiveMap = dynamic(() => import("./interactive-map"), {
   ssr: false,
   loading: () => (
@@ -22,9 +22,9 @@ interface ProvidersMapProps {
 }
 
 /**
- * Interactive map view. Plots providers' lat/lng on OpenStreetMap tiles via
- * react-leaflet. When `userLocation` + a single provider is supplied, also
- * draws a driving route (OSRM public demo) and shows distance + ETA.
+ * Interactive map view. Plots providers' lat/lng on Mapbox tiles via
+ * react-map-gl. When `userLocation` + a single provider is supplied, also
+ * draws a driving route (Mapbox Directions API) and shows distance + ETA.
  */
 export function ProvidersMap({
   providers,

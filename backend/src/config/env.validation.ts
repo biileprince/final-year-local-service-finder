@@ -58,6 +58,14 @@ const envSchema = z.object({
       "When 'true', the CsrfGuard rejects mutating cookie-session requests without a matching x-csrf-token header. Flip on once the frontend integrates the cookie/header echo.",
     ),
 
+  // --- Password breach check (HIBP k-anonymity) ---
+  HIBP_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .describe(
+      "When 'true', new and reset passwords are checked against the Have I Been Pwned breach corpus via k-anonymity. Set 'false' in offline test envs.",
+    ),
+
   // --- Cloudinary (required in production) ---
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),

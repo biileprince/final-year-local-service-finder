@@ -3,6 +3,7 @@ import { Roboto } from "next/font/google";
 import "@/styles/globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 import { SearchOverlayProvider } from "@/components/search/search-trigger";
+import { CookieConsent } from "@/components/layout/cookie-consent";
 import {
   ThemeProvider,
   themeNoFlashScript,
@@ -76,7 +77,10 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <ToastProvider>
-            <SearchOverlayProvider>{children}</SearchOverlayProvider>
+            <SearchOverlayProvider>
+              {children}
+              <CookieConsent />
+            </SearchOverlayProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>

@@ -14,6 +14,7 @@ import { CacheService } from "../../cache/cache.service";
 import { PrismaService } from "../../database/prisma.service";
 import { VerificationService } from "./verification.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { PasswordSecurityService } from "../../common/security/password-security.service";
 import { v4 as uuidv4 } from "uuid";
 
 export interface TokenPayload {
@@ -40,6 +41,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly verificationService: VerificationService,
     private readonly notificationsService: NotificationsService,
+    private readonly passwordSecurityService: PasswordSecurityService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthTokens> {
@@ -50,6 +52,9 @@ export class AuthService {
     if (existingUser) {
       throw new ConflictException("Email already registered");
     }
+
+    // Reject passwords that appear in known breach corpora (HIBP).
+    await this.passwordSecurityService.assertNotBreached(password);
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
