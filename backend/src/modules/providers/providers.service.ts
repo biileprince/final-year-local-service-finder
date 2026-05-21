@@ -14,6 +14,22 @@ import { CacheService } from "../../cache/cache.service";
 import { MetricsService } from "../../monitoring/metrics.service";
 import { PrismaService } from "../../database/prisma.service";
 
+// Prisma serializes Decimal columns as strings, which trips up frontend code
+// that checks `typeof p.latitude === "number"`. The search endpoint already
+// coerces; mirror that for direct-fetch endpoints so map pins render.
+function normalizeProvider<T extends Record<string, unknown>>(p: T): T {
+  if (!p) return p;
+  const num = (v: unknown) =>
+    v === null || v === undefined ? v : Number(v as string | number);
+  return {
+    ...p,
+    latitude: num((p as { latitude?: unknown }).latitude),
+    longitude: num((p as { longitude?: unknown }).longitude),
+    hourlyRate: num((p as { hourlyRate?: unknown }).hourlyRate),
+    rating: num((p as { rating?: unknown }).rating),
+  } as T;
+}
+
 @Injectable()
 export class ProvidersService {
   constructor(
@@ -53,10 +69,12 @@ export class ProvidersService {
       throw new NotFoundException("Provider not found");
     }
 
-    // Cache the result
-    await this.cacheService.setProviderProfile(id, provider);
+    const normalized = normalizeProvider(provider);
 
-    return provider;
+    // Cache the normalized shape so subsequent cache hits return numbers too.
+    await this.cacheService.setProviderProfile(id, normalized);
+
+    return normalized;
   }
 
   async findByUserId(userId: string) {
@@ -64,7 +82,7 @@ export class ProvidersService {
     if (!provider) {
       throw new NotFoundException("Provider profile not found");
     }
-    return provider;
+    return normalizeProvider(provider);
   }
 
   async update(id: string, userId: string, data: UpdateProviderData) {
@@ -174,7 +192,8 @@ export class ProvidersService {
   }
 
   async getFeaturedProviders(limit: number = 6) {
-    return this.providersRepository.getFeaturedProviders(limit);
+    const providers = await this.providersRepository.getFeaturedProviders(limit);
+    return providers.map((p) => normalizeProvider(p));
   }
 
   async updateRating(providerId: string) {

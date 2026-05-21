@@ -78,6 +78,9 @@ function SearchContent() {
   );
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list" | "map">("grid");
+  // Map view: which provider's pin is currently active. Drives the route
+  // overlay (when geo is on) and the highlight on the matching result card.
+  const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
 
   // Scroll visibility state
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
@@ -805,7 +808,118 @@ function SearchContent() {
                     ))}
                   </div>
                 ) : (
-                  <ProvidersMap providers={providers} userLocation={geo} />
+                  <div className="space-y-3">
+                    <ProvidersMap
+                      providers={providers}
+                      userLocation={geo}
+                      enableRouting={!!geo}
+                      numbered
+                      selectedProviderId={selectedMapId}
+                      onProviderSelect={setSelectedMapId}
+                    />
+                    {/* Numbered strip — synced 1:1 with the pins above. Click a
+                        card to fly the map there and (when geo is on) draw a
+                        driving route. */}
+                    <p className="text-xs text-secondary-500">
+                      {geo
+                        ? "Tap a card or pin — driving directions appear once selected."
+                        : "Tap a pin or card to see provider details. Enable location for routing."}
+                    </p>
+                    <div className="-mx-2 flex snap-x snap-mandatory gap-3 overflow-x-auto px-2 pb-2">
+                      {providers.map((p, i) => {
+                        const isSelected = selectedMapId === p.id;
+                        const hasPin =
+                          typeof p.latitude === "number" &&
+                          typeof p.longitude === "number";
+                        const primaryCategory =
+                          p.categories.find((c) => c.isPrimary)?.category
+                            ?.name ??
+                          p.categories[0]?.category?.name ??
+                          null;
+                        const distance = (p as ProviderWithDistance).distanceKm;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setSelectedMapId(p.id)}
+                            disabled={!hasPin}
+                            aria-pressed={isSelected}
+                            className={cn(
+                              "group flex w-64 shrink-0 snap-start flex-col gap-2 rounded-xl border-2 bg-white p-3 text-left transition-shadow",
+                              "disabled:cursor-not-allowed disabled:opacity-60",
+                              isSelected
+                                ? "border-amber-400 shadow-md ring-2 ring-amber-200"
+                                : "border-secondary-200 hover:border-primary-300 hover:shadow-sm",
+                            )}
+                          >
+                            <div className="flex items-start gap-2">
+                              <span
+                                className={cn(
+                                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                                  isSelected
+                                    ? "bg-amber-500 text-white"
+                                    : "bg-primary-600 text-white",
+                                )}
+                              >
+                                {i + 1}
+                              </span>
+                              {p.user?.profileImage ? (
+                                <Image
+                                  src={p.user.profileImage}
+                                  alt={p.user.name ?? "Provider"}
+                                  width={40}
+                                  height={40}
+                                  className="h-10 w-10 shrink-0 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary-100 text-secondary-500">
+                                  <MapPin className="h-4 w-4" />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-secondary-900">
+                                  {p.user?.name ?? "Provider"}
+                                </p>
+                                {primaryCategory && (
+                                  <p className="truncate text-xs text-secondary-500">
+                                    {primaryCategory}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="flex items-center gap-1 font-medium text-amber-600">
+                                <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                                {p.rating > 0 ? p.rating.toFixed(1) : "New"}
+                                {p.reviewCount > 0 && (
+                                  <span className="text-secondary-400">
+                                    ({p.reviewCount})
+                                  </span>
+                                )}
+                              </span>
+                              {typeof distance === "number" && (
+                                <span className="text-secondary-500">
+                                  {distance.toFixed(1)} km
+                                </span>
+                              )}
+                            </div>
+                            {!hasPin && (
+                              <p className="text-[10px] italic text-secondary-400">
+                                No exact pin
+                              </p>
+                            )}
+                            <Link
+                              href={`/providers/${p.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-auto text-xs font-semibold text-primary-600 hover:underline"
+                            >
+                              View profile →
+                            </Link>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </>
             )}
