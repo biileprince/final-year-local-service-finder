@@ -59,7 +59,11 @@ export class ProvidersService {
     const cached = await this.cacheService.getProviderProfile(id);
     if (cached) {
       this.metricsService.cacheHits.inc({ cache_type: "provider" });
-      return cached;
+      // Normalize on the way out: old cache entries written before the
+      // Decimal-coercion change still hold strings, and the frontend's
+      // `typeof === "number"` check rejects them. Coercing here is cheap and
+      // makes the rollout safe without forcing a cache flush.
+      return normalizeProvider(cached as Record<string, unknown>);
     }
 
     this.metricsService.cacheMisses.inc({ cache_type: "provider" });

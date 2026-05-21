@@ -23,6 +23,10 @@ import { Badge } from "@/components/ui/badge";
 import { useRequireRole } from "@/hooks";
 import { providersService, categoriesService, filesService } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
+import {
+  LocationPicker,
+  type PickedLocation,
+} from "@/components/onboarding/location-picker";
 import type { Provider, Category } from "@/types";
 
 export default function ProviderServicesPage() {
@@ -38,6 +42,14 @@ export default function ProviderServicesPage() {
   const [hourlyRate, setHourlyRate] = useState<string>("");
   const [yearsExperience, setYearsExperience] = useState<string>("");
   const [location, setLocation] = useState("");
+  // Coords captured by the Mapbox-backed picker. We track whether the user has
+  // actively re-picked their location in this session so we only ship new
+  // lat/lng to the server when the label was changed — typing a different city
+  // without picking from the dropdown shouldn't keep the old (now stale) pin.
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    null,
+  );
+  const [locationTouched, setLocationTouched] = useState(false);
   const [loading, setLoading] = useState(true);
   // Distinguish "no provider profile yet" (new user, needs onboarding) from a
   // real failure so we can route them to the right next step instead of
@@ -75,6 +87,13 @@ export default function ProviderServicesPage() {
           setHourlyRate(String(me.hourlyRate ?? ""));
           setYearsExperience(String(me.yearsExperience ?? ""));
           setLocation(me.location || "");
+          if (
+            typeof me.latitude === "number" &&
+            typeof me.longitude === "number"
+          ) {
+            setCoords({ lat: me.latitude, lng: me.longitude });
+          }
+          setLocationTouched(false);
         } catch (err) {
           // 404 / "not found" means the provider row was never created during
           // onboarding — route them through that flow instead of error-pageing.
@@ -247,11 +266,24 @@ export default function ProviderServicesPage() {
         hourlyRate: rateNum,
         yearsExperience: yearsNum,
         location: location.trim(),
+        // Only ship coords when the user picked a new location this session —
+        // avoids accidentally re-sending stale lat/lng if they only edited the
+        // text by hand, in which case the server should keep what it has.
+        ...(locationTouched && coords
+          ? { latitude: coords.lat, longitude: coords.lng }
+          : {}),
       });
       await providersService.setCategories(Array.from(selectedCategoryIds));
       await providersService.setSpecialties(specialties);
       const updated = await providersService.getMyProfile();
       setProvider(updated);
+      if (
+        typeof updated.latitude === "number" &&
+        typeof updated.longitude === "number"
+      ) {
+        setCoords({ lat: updated.latitude, lng: updated.longitude });
+      }
+      setLocationTouched(false);
       setMessage({ kind: "success", text: "Services saved successfully." });
     } catch (err) {
       setMessage({
@@ -347,13 +379,37 @@ export default function ProviderServicesPage() {
               <label className="mb-1.5 block text-sm font-medium text-secondary-700">
                 Location
               </label>
-              <input
-                type="text"
+              <LocationPicker
                 value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g. Accra, East Legon"
-                className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                onSelect={(loc: PickedLocation) => {
+                  setLocation(loc.label);
+                  setCoords({ lat: loc.lat, lng: loc.lng });
+                  setLocationTouched(true);
+                }}
+                onClear={() => {
+                  setLocation("");
+                  setCoords(null);
+                  setLocationTouched(true);
+                }}
+                placeholder="Search any town in Ghana — e.g. Accra, Tarkwa…"
               />
+              {coords && !locationTouched && (
+                <p className="mt-1 text-xs text-secondary-500">
+                  Pinned on the map (lat {coords.lat.toFixed(4)}, lng{" "}
+                  {coords.lng.toFixed(4)}). Pick a new location to update.
+                </p>
+              )}
+              {locationTouched && coords && (
+                <p className="mt-1 text-xs text-success-700">
+                  New pin captured — save to update your map location.
+                </p>
+              )}
+              {locationTouched && !coords && (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-200">
+                  Pick a location from the suggestions to set a new map pin —
+                  saving without a pick leaves the existing pin unchanged.
+                </p>
+              )}
             </div>
           </div>
         </CardContent>
