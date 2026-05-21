@@ -19,6 +19,12 @@ interface ProvidersMapProps {
   enableRouting?: boolean;
   height?: string;
   linkProviderProfile?: boolean;
+  /** Controlled selection — synced with an external list of result cards. */
+  selectedProviderId?: string | null;
+  onProviderSelect?: (id: string | null) => void;
+  /** When true, each marker shows its 1-based index from `providers` so the map
+   *  pins can be cross-referenced with a numbered result list. */
+  numbered?: boolean;
 }
 
 /**
@@ -32,24 +38,37 @@ export function ProvidersMap({
   enableRouting,
   height,
   linkProviderProfile,
+  selectedProviderId,
+  onProviderSelect,
+  numbered,
 }: ProvidersMapProps) {
   const points: MapProvider[] = useMemo(
-    () =>
-      providers
+    () => {
+      const filtered = providers
+        .map((p, originalIdx) => ({ p, originalIdx }))
         .filter(
-          (p): p is Provider & { latitude: number; longitude: number } =>
-            typeof p.latitude === "number" && typeof p.longitude === "number",
-        )
-        .map((p) => ({
-          id: p.id,
-          name: p.user?.name ?? "Provider",
-          latitude: p.latitude,
-          longitude: p.longitude,
-          profileImage: p.user?.profileImage,
-          rating: p.rating,
-          location: p.location,
-        })),
-    [providers],
+          (
+            x,
+          ): x is {
+            p: Provider & { latitude: number; longitude: number };
+            originalIdx: number;
+          } =>
+            typeof x.p.latitude === "number" &&
+            typeof x.p.longitude === "number",
+        );
+      return filtered.map(({ p, originalIdx }) => ({
+        id: p.id,
+        name: p.user?.name ?? "Provider",
+        latitude: p.latitude,
+        longitude: p.longitude,
+        profileImage: p.user?.profileImage,
+        rating: p.rating,
+        location: p.location,
+        // 1-based to match the visible card list.
+        index: numbered ? originalIdx + 1 : undefined,
+      }));
+    },
+    [providers, numbered],
   );
 
   return (
@@ -59,6 +78,8 @@ export function ProvidersMap({
       enableRouting={enableRouting}
       height={height}
       linkProviderProfile={linkProviderProfile}
+      selectedProviderId={selectedProviderId}
+      onProviderSelect={onProviderSelect}
     />
   );
 }

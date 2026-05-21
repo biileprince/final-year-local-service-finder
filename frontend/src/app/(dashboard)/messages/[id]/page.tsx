@@ -19,6 +19,8 @@ import {
   Pencil,
   Check,
   X as XIcon,
+  FileText,
+  UploadCloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
@@ -32,6 +34,35 @@ import { AutoGrowTextarea } from "@/components/messages/auto-grow-textarea";
 import { queryPermission } from "@/lib/permissions";
 import type { Conversation, Message } from "@/types";
 import { formatRelativeTime, formatDate, formatTime, cn } from "@/lib/utils";
+
+// Mirrors backend `FilesService.maxFileSize` / `allowedMimeTypes` so we can fail
+// fast in the UI instead of round-tripping to a 400.
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_MESSAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+const FILE_ACCEPT_ATTR =
+  "image/jpeg,image/png,image/gif,image/webp,application/pdf,.doc,.docx";
+
+interface PendingAttachment {
+  id: string;
+  file: File;
+  previewUrl: string | null;
+  caption: string;
+  isImage: boolean;
+}
+
+const formatBytes = (b: number): string => {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${Math.round(b / 1024)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
+};
 
 const statusBadge: Record<string, string> = {
   PENDING: "bg-warning-50 text-warning-700",
@@ -50,32 +81,169 @@ export default function ConversationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const handleFileAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !conversation) return;
-    setUploadingFile(true);
-    try {
-      const uploaded = await filesService.upload(file, "MESSAGE");
-      const newMessage = await messagesService.sendMessage(conversation.id, {
-        content: file.name,
-        messageType: "FILE",
-        fileId: uploaded.id,
+  // Files queued in the preview tray, not yet uploaded. Each entry holds an
+  // object URL for image previews — revoked on remove / clear / unmount.
+  const [pendingAttachments, setPendingAttachments] = useState<
+    PendingAttachment[]
+  >([]);
+  const [sendingAttachments, setSendingAttachments] = useState(false);
+  const pendingRef = useRef<PendingAttachment[]>([]);
+  useEffect(() => {
+    pendingRef.current = pendingAttachments;
+  }, [pendingAttachments]);
+  useEffect(
+    () => () => {
+      pendingRef.current.forEach((p) => {
+        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
       });
-      setMessages((prev) => [...prev, newMessage]);
+    },
+    [],
+  );
+
+  // Drag & drop
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const addFiles = (files: FileList | File[]) => {
+    const arr = Array.from(files);
+    if (arr.length === 0) return;
+    const rejected: string[] = [];
+    const accepted: PendingAttachment[] = [];
+    for (const f of arr) {
+      if (f.size > MAX_FILE_SIZE_BYTES) {
+        rejected.push(`${f.name} is over 10 MB`);
+        continue;
+      }
+      // Some OSes leave .doc/.docx with an empty MIME type — accept by extension.
+      const mt = f.type || "";
+      const okByExt = /\.(docx?|pdf)$/i.test(f.name);
+      if (mt && !ALLOWED_MESSAGE_MIME_TYPES.has(mt) && !okByExt) {
+        rejected.push(`${f.name} (${mt || "unknown type"}) is not allowed`);
+        continue;
+      }
+      const isImage = mt.startsWith("image/");
+      accepted.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        file: f,
+        previewUrl: isImage ? URL.createObjectURL(f) : null,
+        caption: "",
+        isImage,
+      });
+    }
+    if (rejected.length) {
+      toast({
+        variant: "error",
+        title: "Some files were skipped",
+        description: rejected.join("; "),
+      });
+    }
+    if (accepted.length) {
+      setPendingAttachments((prev) => [...prev, ...accepted]);
+    }
+  };
+
+  const removePendingAttachment = (id: string) => {
+    setPendingAttachments((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((p) => p.id !== id);
+    });
+  };
+
+  const clearPendingAttachments = () => {
+    setPendingAttachments((prev) => {
+      prev.forEach((p) => {
+        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      });
+      return [];
+    });
+  };
+
+  const updateCaption = (id: string, caption: string) => {
+    setPendingAttachments((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, caption } : p)),
+    );
+  };
+
+  const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) addFiles(e.target.files);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const sendPendingAttachments = async () => {
+    if (
+      !conversation ||
+      pendingAttachments.length === 0 ||
+      sendingAttachments
+    ) {
+      return;
+    }
+    setSendingAttachments(true);
+    // Snapshot ids so we know which to drop from the queue after a successful
+    // round; the user may have added more files while sending.
+    const snapshot = pendingAttachments;
+    const sentIds: string[] = [];
+    try {
+      for (const item of snapshot) {
+        const uploaded = await filesService.upload(item.file, "MESSAGE");
+        const newMessage = await messagesService.sendMessage(conversation.id, {
+          content: item.caption.trim() || item.file.name,
+          messageType: "FILE",
+          fileId: uploaded.id,
+        });
+        setMessages((prev) =>
+          prev.some((m) => m.id === newMessage.id)
+            ? prev
+            : [...prev, newMessage],
+        );
+        sentIds.push(item.id);
+      }
     } catch (err) {
       toast({
         variant: "error",
-        title: "Couldn't attach file",
+        title: "Couldn't send attachment",
         description: err instanceof Error ? err.message : "Try again.",
       });
     } finally {
-      setUploadingFile(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      // Drop just the ones that succeeded so the user can retry the rest.
+      setPendingAttachments((prev) =>
+        prev.filter((p) => {
+          if (!sentIds.includes(p.id)) return true;
+          if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+          return false;
+        }),
+      );
+      setSendingAttachments(false);
     }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    setIsDraggingFiles(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) setIsDraggingFiles(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDraggingFiles(false);
+    if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
   };
 
   const {
@@ -493,7 +661,13 @@ export default function ConversationPage() {
     // Height: full viewport minus the dashboard header (4 rem) and the page
     // padding (the layout adds p-4/sm:p-6/lg:p-8 + bottom-nav pb-24 on mobile).
     // `dvh` accounts for the mobile URL bar collapse so we don't get clipped.
-    <div className="flex h-[calc(100dvh-9rem)] flex-col rounded-xl bg-white shadow-soft sm:h-[calc(100dvh-10rem)] lg:h-[calc(100dvh-10rem)]">
+    <div
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className="relative flex h-[calc(100dvh-9rem)] flex-col rounded-xl bg-white shadow-soft sm:h-[calc(100dvh-10rem)] lg:h-[calc(100dvh-10rem)]"
+    >
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-3">
@@ -815,6 +989,97 @@ export default function ConversationPage() {
         </div>
       </div>
 
+      {/* Pending attachments tray */}
+      {pendingAttachments.length > 0 && (
+        <div className="border-t bg-secondary-50 px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-medium text-secondary-700">
+              {pendingAttachments.length}{" "}
+              {pendingAttachments.length === 1 ? "file" : "files"} ready
+            </p>
+            <button
+              type="button"
+              onClick={clearPendingAttachments}
+              disabled={sendingAttachments}
+              className="text-xs text-secondary-500 hover:text-secondary-700 disabled:opacity-50"
+            >
+              Cancel all
+            </button>
+          </div>
+          <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+            {pendingAttachments.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-start gap-3 rounded-lg border border-secondary-200 bg-white p-2"
+              >
+                {item.isImage && item.previewUrl ? (
+                  <Image
+                    src={item.previewUrl}
+                    alt={item.file.name}
+                    width={56}
+                    height={56}
+                    unoptimized
+                    className="h-14 w-14 shrink-0 rounded-md object-cover"
+                  />
+                ) : (
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-secondary-100 text-secondary-500">
+                    <FileText className="h-6 w-6" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <p className="truncate text-sm font-medium text-secondary-900">
+                      {item.file.name}
+                    </p>
+                    <p className="shrink-0 text-xs text-secondary-500">
+                      {formatBytes(item.file.size)}
+                    </p>
+                  </div>
+                  <input
+                    type="text"
+                    value={item.caption}
+                    onChange={(e) => updateCaption(item.id, e.target.value)}
+                    placeholder="Add a caption (optional)"
+                    disabled={sendingAttachments}
+                    maxLength={500}
+                    className="mt-1 w-full rounded-md border border-secondary-200 bg-secondary-50 px-2 py-1 text-sm text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-60"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removePendingAttachment(item.id)}
+                  disabled={sendingAttachments}
+                  aria-label={`Remove ${item.file.name}`}
+                  className="shrink-0 rounded-md p-1 text-secondary-400 hover:bg-secondary-100 hover:text-secondary-700 disabled:opacity-50"
+                >
+                  <XIcon className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sendingAttachments}
+            >
+              <Paperclip className="mr-2 h-4 w-4" />
+              Add more
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void sendPendingAttachments()}
+              isLoading={sendingAttachments}
+              disabled={sendingAttachments}
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Send {pendingAttachments.length === 1 ? "file" : "all"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       {isRecording ? (
         <div className="flex items-center gap-3 border-t px-4 py-3">
@@ -853,6 +1118,8 @@ export default function ConversationPage() {
           <input
             ref={fileInputRef}
             type="file"
+            multiple
+            accept={FILE_ACCEPT_ATTR}
             onChange={handleFileAttach}
             className="hidden"
           />
@@ -861,7 +1128,7 @@ export default function ConversationPage() {
             variant="ghost"
             size="icon"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploadingFile || sendingVoice}
+            disabled={sendingAttachments || sendingVoice}
             aria-label="Attach file"
             className="shrink-0"
           >
@@ -905,7 +1172,7 @@ export default function ConversationPage() {
               type="button"
               size="icon"
               onClick={startRecording}
-              disabled={sendingVoice || uploadingFile}
+              disabled={sendingVoice || sendingAttachments}
               aria-label="Record voice note"
               className="shrink-0 rounded-full"
             >
@@ -913,6 +1180,19 @@ export default function ConversationPage() {
             </Button>
           )}
         </form>
+      )}
+
+      {/* Drop overlay — pointer-events-none so the parent's drop handler still fires */}
+      {isDraggingFiles && (
+        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-primary-500 bg-primary-500/10 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 text-primary-700">
+            <UploadCloud className="h-10 w-10" />
+            <p className="text-sm font-medium">Drop to attach</p>
+            <p className="text-xs text-primary-600/80">
+              Images, PDF, or Word · up to 10 MB each
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Delete confirmation */}

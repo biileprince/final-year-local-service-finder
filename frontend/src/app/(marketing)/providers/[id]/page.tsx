@@ -759,6 +759,53 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
     typeof provider.latitude === "number" &&
     typeof provider.longitude === "number";
 
+  // Fallback geocode: when the provider didn't set an exact pin, look up the
+  // text in `provider.location` via Mapbox so we can still render a rough-area
+  // map instead of the dead-end "no pin yet" placeholder. We never persist
+  // these coords — they're a per-render approximation only.
+  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  const [geocoded, setGeocoded] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  const [geocoding, setGeocoding] = useState(false);
+  useEffect(() => {
+    if (hasCoords || !provider.location || !mapboxToken) return;
+    let cancelled = false;
+    setGeocoding(true);
+    const url =
+      `https://api.mapbox.com/search/geocode/v6/forward?` +
+      `q=${encodeURIComponent(provider.location)}` +
+      `&country=gh&limit=1&language=en&access_token=${mapboxToken}`;
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))))
+      .then((data: { features?: Array<{ geometry?: { coordinates?: [number, number] } }> }) => {
+        if (cancelled) return;
+        const coords = data.features?.[0]?.geometry?.coordinates;
+        if (coords && Number.isFinite(coords[0]) && Number.isFinite(coords[1])) {
+          setGeocoded({ lat: coords[1], lng: coords[0] });
+        }
+      })
+      .catch(() => {
+        /* Silent — fall back to the placeholder UI */
+      })
+      .finally(() => {
+        if (!cancelled) setGeocoding(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasCoords, provider.location, mapboxToken]);
+
+  // Effective coords for rendering — prefer the provider's exact pin if set,
+  // otherwise the geocoded approximation.
+  const renderProvider: Provider | null = hasCoords
+    ? provider
+    : geocoded
+      ? { ...provider, latitude: geocoded.lat, longitude: geocoded.lng }
+      : null;
+  const isApproximate = !hasCoords && !!renderProvider;
+
   const requestLocation = async () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoStatus("unsupported");
@@ -791,9 +838,10 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
     );
   };
 
-  // Render an explanatory placeholder when the provider's profile has no
-  // lat/lng yet (most seed data does not). Keeps the card discoverable.
-  if (!hasCoords) {
+  // Only fall back to the static placeholder when (a) the provider has no
+  // exact pin AND (b) the geocoding fallback also returned nothing (no
+  // location text, no Mapbox token, or no match).
+  if (!renderProvider) {
     return (
       <Card>
         <CardHeader>
@@ -806,7 +854,7 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
           <div className="rounded-xl border-2 border-dashed border-secondary-200 bg-secondary-50 p-6 text-center">
             <MapPin className="mx-auto h-8 w-8 text-secondary-300" />
             <p className="mt-3 text-sm font-semibold text-secondary-700">
-              No map pin set yet
+              {geocoding ? "Looking up area…" : "No map pin set yet"}
             </p>
             <p className="mt-1 text-xs text-secondary-500">
               This provider hasn&apos;t shared exact coordinates. They&apos;re
@@ -831,12 +879,19 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <ProvidersMap
-          providers={[provider]}
+          providers={[renderProvider]}
           userLocation={userLoc}
           enableRouting={!!userLoc}
           height="320px"
           linkProviderProfile={false}
         />
+        {isApproximate && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
+            Approximate area only — this provider hasn&apos;t shared an exact
+            pin. Driving directions are estimated to{" "}
+            <strong>{provider.location}</strong>.
+          </p>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-secondary-500">
             Click <strong>Get directions</strong> to share your location and
@@ -888,7 +943,7 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
         )}
         {userLoc && (
           <a
-            href={`https://www.google.com/maps/dir/?api=1&origin=${userLoc.lat},${userLoc.lng}&destination=${provider.latitude},${provider.longitude}&travelmode=driving`}
+            href={`https://www.google.com/maps/dir/?api=1&origin=${userLoc.lat},${userLoc.lng}&destination=${renderProvider.latitude},${renderProvider.longitude}&travelmode=driving`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs font-semibold text-primary-600 hover:underline"

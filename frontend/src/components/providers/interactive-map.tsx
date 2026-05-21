@@ -23,17 +23,25 @@ export interface MapProvider {
   profileImage?: string;
   rating?: number;
   location?: string;
+  /** 1-based label shown on the marker. Lets callers sync pins to a numbered result list. */
+  index?: number;
 }
 
 interface InteractiveMapProps {
   providers: MapProvider[];
   /** User's current location (origin for routing). */
   userLocation?: { lat: number; lng: number } | null;
-  /** When true and userLocation+single provider is set, request a route from Mapbox Directions. */
+  /** Draw a route from `userLocation` to the active target. The "active target"
+   *  is the single plotted provider, OR (when there are many) whichever pin is
+   *  currently selected via `selectedProviderId`. */
   enableRouting?: boolean;
   height?: string;
   /** Render provider name as a link to /providers/:id. Off in dashboards. */
   linkProviderProfile?: boolean;
+  /** Controlled selection — set externally to drive popup + routing. */
+  selectedProviderId?: string | null;
+  /** Called when the user clicks a marker (or closes the popup → null). */
+  onProviderSelect?: (id: string | null) => void;
 }
 
 interface RouteInfo {
@@ -56,9 +64,21 @@ export default function InteractiveMap({
   enableRouting = false,
   height = "480px",
   linkProviderProfile = true,
+  selectedProviderId,
+  onProviderSelect,
 }: InteractiveMapProps) {
   const mapRef = useRef<MapRef | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(
+    null,
+  );
+  // Controlled when `selectedProviderId` is explicitly supplied (even null);
+  // otherwise we fall back to internal state so existing call sites keep working.
+  const isControlled = selectedProviderId !== undefined;
+  const selectedId = isControlled ? selectedProviderId : internalSelectedId;
+  const setSelectedId = (id: string | null) => {
+    if (!isControlled) setInternalSelectedId(id);
+    onProviderSelect?.(id);
+  };
   // react-map-gl swaps Mapbox styles on the fly when `mapStyle` changes, so
   // toggling the dashboard theme repaints the tiles without remounting the
   // component (which would lose viewport + selected pin).
@@ -140,7 +160,25 @@ export default function InteractiveMap({
   const [route, setRoute] = useState<RouteInfo | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
-  const target = points.length === 1 ? points[0]! : null;
+  // Routing target = the only pin if there's exactly one, otherwise whichever
+  // pin the user has selected. That way the search-page multi-pin map can also
+  // show a route to a clicked provider.
+  const target =
+    points.length === 1
+      ? points[0]!
+      : (points.find((p) => p.id === selectedId) ?? null);
+
+  // Fly to the selected pin when selection changes from outside (clicking a
+  // result card). Skip the fly when the selected pin is the only one — initial
+  // viewport already centers there.
+  useEffect(() => {
+    if (!selectedId || points.length <= 1) return;
+    const p = points.find((q) => q.id === selectedId);
+    if (!p) return;
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({ center: [p.longitude, p.latitude], zoom: 13, duration: 500 });
+  }, [selectedId, points]);
 
   useEffect(() => {
     if (!enableRouting || !userLocation || !target || !MAPBOX_TOKEN) {
@@ -244,28 +282,49 @@ export default function InteractiveMap({
           </Marker>
         )}
 
-        {points.map((p) => (
-          <Marker
-            key={p.id}
-            longitude={p.longitude}
-            latitude={p.latitude}
-            anchor="bottom"
-            onClick={(e) => {
-              // Stop the click bubbling to the map so it doesn't immediately
-              // close the popup we're about to open.
-              e.originalEvent.stopPropagation();
-              setSelectedId(p.id);
-            }}
-          >
-            <button
-              type="button"
-              aria-label={`View ${p.name}`}
-              className="-translate-y-1 transition-transform hover:scale-110"
+        {points.map((p) => {
+          const isSelected = selectedId === p.id;
+          return (
+            <Marker
+              key={p.id}
+              longitude={p.longitude}
+              latitude={p.latitude}
+              anchor="bottom"
+              onClick={(e) => {
+                // Stop the click bubbling to the map so it doesn't immediately
+                // close the popup we're about to open.
+                e.originalEvent.stopPropagation();
+                setSelectedId(p.id);
+              }}
             >
-              <MapPin className="h-7 w-7 fill-primary-600 text-primary-700 drop-shadow-md" />
-            </button>
-          </Marker>
-        ))}
+              <button
+                type="button"
+                aria-label={`View ${p.name}`}
+                className={
+                  "relative -translate-y-1 transition-transform hover:scale-110 " +
+                  (isSelected ? "scale-110" : "")
+                }
+              >
+                <MapPin
+                  className={
+                    "drop-shadow-md " +
+                    (isSelected
+                      ? "h-9 w-9 fill-amber-500 text-amber-700"
+                      : "h-8 w-8 fill-primary-600 text-primary-700")
+                  }
+                />
+                {typeof p.index === "number" && (
+                  <span
+                    className="pointer-events-none absolute left-1/2 top-[35%] -translate-x-1/2 -translate-y-1/2 text-[11px] font-bold leading-none text-white"
+                    aria-hidden
+                  >
+                    {p.index}
+                  </span>
+                )}
+              </button>
+            </Marker>
+          );
+        })}
 
         {selected && (
           <Popup
