@@ -191,7 +191,8 @@ export default function ConversationPage() {
         const uploaded = await filesService.upload(item.file, "MESSAGE");
         const newMessage = await messagesService.sendMessage(conversation.id, {
           content: item.caption.trim() || item.file.name,
-          messageType: "FILE",
+          // Backend `MessageType` enum is lowercase ("image" | "file" | "voice").
+          messageType: item.isImage ? "image" : "file",
           fileId: uploaded.id,
         });
         setMessages((prev) =>
