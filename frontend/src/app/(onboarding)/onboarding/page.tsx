@@ -19,6 +19,8 @@ import {
   Camera,
   Navigation,
   Phone,
+  Plus,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,6 +87,24 @@ export default function OnboardingPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [catLoading, setCatLoading] = useState(true);
+
+  // Specialties — free-text tags the provider can add to narrow down what they
+  // do within a category ("Pipe leak repair", "AC gas refill", etc.). Searched
+  // via pg_trgm GIN index, so even partial matches surface the right provider.
+  const [specialties, setSpecialties] = useState<string[]>([]);
+  const [newSpecialty, setNewSpecialty] = useState("");
+
+  const addSpecialty = () => {
+    const trimmed = newSpecialty.trim();
+    if (!trimmed) return;
+    if (specialties.includes(trimmed)) return;
+    if (trimmed.length > 60) return;
+    setSpecialties((prev) => [...prev, trimmed]);
+    setNewSpecialty("");
+  };
+
+  const removeSpecialty = (s: string) =>
+    setSpecialties((prev) => prev.filter((x) => x !== s));
 
   // Profile photo (step 0)
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -215,6 +235,14 @@ export default function OnboardingPage() {
         if (cancelled) return;
         if (me) {
           setProvider(me);
+          // Seed previously-saved categories + specialties so a returning
+          // provider sees their progress preserved instead of an empty form.
+          if (me.categories?.length) {
+            setSelectedCategoryIds(me.categories.map((pc) => pc.category.id));
+          }
+          if (me.specialties?.length) {
+            setSpecialties(me.specialties.map((s) => s.specialty));
+          }
           if (me.idDocument) {
             setIdDoc({
               id: me.idDocument.id,
@@ -316,6 +344,14 @@ export default function OnboardingPage() {
     try {
       if (selectedCategoryIds.length > 0) {
         await providersService.setCategories(selectedCategoryIds);
+      }
+      // Specialties are independent of categories — persist them in parallel.
+      // We always send (including the empty list) so removals reach the server.
+      try {
+        await providersService.setSpecialties(specialties);
+      } catch {
+        // Non-blocking: a flaky specialty save shouldn't strand the user on
+        // step 2. They can re-edit from /services later.
       }
       setStep(2);
     } catch {
@@ -679,6 +715,75 @@ export default function OnboardingPage() {
               <p className="mt-3 text-xs text-gray-500">
                 {selectedCategoryIds.length}/3 selected
               </p>
+            )}
+          </div>
+
+          {/* Specialties — narrow the broad category down. Free-text so any
+              niche service is searchable; tag-style add/remove. Stored as
+              `provider_specialties` and indexed by pg_trgm for fuzzy match. */}
+          <div className="mt-6 rounded-2xl border-2 border-gray-200 bg-white p-4">
+            <div className="mb-1.5 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary-600" />
+              <label
+                htmlFor="onboarding-specialty"
+                className="text-sm font-semibold text-gray-900"
+              >
+                Specialties (optional)
+              </label>
+            </div>
+            <p className="mb-3 text-xs text-gray-500">
+              Add the specific jobs you do well — e.g. &ldquo;Pipe leak
+              repair&rdquo;, &ldquo;AC gas refill&rdquo;, &ldquo;Bridal
+              makeup&rdquo;. Helps customers find you for niche searches.
+            </p>
+            <div className="flex gap-2">
+              <input
+                id="onboarding-specialty"
+                value={newSpecialty}
+                onChange={(e) => setNewSpecialty(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addSpecialty();
+                  }
+                }}
+                maxLength={60}
+                placeholder="e.g. Pipe leak repair"
+                className="flex-1 rounded-xl border-2 border-gray-200 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addSpecialty}
+                disabled={!newSpecialty.trim()}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add
+              </Button>
+            </div>
+            {specialties.length === 0 ? (
+              <p className="mt-3 text-xs text-gray-400">
+                None yet — leave empty if your categories already describe you.
+              </p>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {specialties.map((s) => (
+                  <span
+                    key={s}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700"
+                  >
+                    {s}
+                    <button
+                      type="button"
+                      onClick={() => removeSpecialty(s)}
+                      className="rounded-full p-0.5 hover:bg-primary-100"
+                      aria-label={`Remove ${s}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
             )}
           </div>
 
