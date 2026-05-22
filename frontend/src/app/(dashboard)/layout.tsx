@@ -32,6 +32,8 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { useRequireAuth } from "@/hooks";
 import { notificationsService, messagesService } from "@/lib/api";
 import { useMessagesSocket } from "@/lib/messages-socket";
+import { useNotificationsSocket } from "@/lib/notifications-socket";
+import { useToast } from "@/components/ui/toast";
 
 const customerNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -147,6 +149,27 @@ export default function DashboardLayout({
     });
     return unsubscribe;
   }, [onNewMessage, pathname, user?.id]);
+
+  // In-app push: surface each new notification as a toast while the user is
+  // anywhere in the dashboard. Skip when they're already on /notifications —
+  // a toast over the same list would just be noise.
+  const { onNewNotification } = useNotificationsSocket();
+  const { toast } = useToast();
+  useEffect(() => {
+    const unsubscribe = onNewNotification((n) => {
+      setUnreadNotifications((c) => c + 1);
+      if (pathname === "/notifications") return;
+      toast({
+        variant: "info",
+        title: n.title,
+        description: n.body,
+        // Slightly longer than the default — these arrive without warning so
+        // give the user time to read past the title.
+        duration: 6000,
+      });
+    });
+    return unsubscribe;
+  }, [onNewNotification, pathname, toast]);
 
   if (isLoading) {
     return <Loading fullScreen text="Loading your dashboard..." />;
