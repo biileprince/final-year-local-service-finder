@@ -48,6 +48,9 @@ export class ProvidersService {
 
     const provider = await this.providersRepository.create(data);
 
+    // Seed default Mon-Sat 9-5 hours for new providers
+    await this.initDefaultHours(provider.id);
+
     // Invalidate search cache
     await this.cacheService.invalidateProviderSearch();
 
@@ -291,6 +294,179 @@ export class ProvidersService {
     });
 
     await this.cacheService.invalidateProviderProfile(id);
+    return { success: true };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Business hours
+  // ---------------------------------------------------------------------------
+
+  /** Default Mon-Sat 09:00-17:00, Sunday closed. */
+  static readonly DEFAULT_HOURS = Array.from({ length: 7 }, (_, day) => ({
+    dayOfWeek: day,
+    openMinutes: 540,
+    closeMinutes: 1020,
+    isClosed: day === 0, // Sunday closed
+  }));
+
+  async initDefaultHours(providerId: string): Promise<void> {
+    const existing = await this.prisma.providerHours.count({
+      where: { providerId },
+    });
+    if (existing > 0) return;
+    await this.prisma.providerHours.createMany({
+      data: ProvidersService.DEFAULT_HOURS.map((h) => ({ ...h, providerId })),
+    });
+  }
+
+  async getHours(providerId: string) {
+    return this.prisma.providerHours.findMany({
+      where: { providerId },
+      orderBy: { dayOfWeek: "asc" },
+    });
+  }
+
+  async getHoursByUserId(userId: string) {
+    const provider = await this.providersRepository.findByUserId(userId);
+    if (!provider) throw new NotFoundException("Provider profile not found");
+    return this.getHours(provider.id);
+  }
+
+  async upsertHours(
+    userId: string,
+    days: Array<{
+      dayOfWeek: number;
+      openMinutes?: number;
+      closeMinutes?: number;
+      isClosed?: boolean;
+    }>,
+  ) {
+    const provider = await this.providersRepository.findByUserId(userId);
+    if (!provider) throw new NotFoundException("Provider profile not found");
+
+    await this.prisma.$transaction(
+      days.map((d) =>
+        this.prisma.providerHours.upsert({
+          where: {
+            providerId_dayOfWeek: {
+              providerId: provider.id,
+              dayOfWeek: d.dayOfWeek,
+            },
+          },
+          create: {
+            providerId: provider.id,
+            dayOfWeek: d.dayOfWeek,
+            openMinutes: d.openMinutes ?? 540,
+            closeMinutes: d.closeMinutes ?? 1020,
+            isClosed: d.isClosed ?? false,
+          },
+          update: {
+            openMinutes: d.openMinutes ?? 540,
+            closeMinutes: d.closeMinutes ?? 1020,
+            isClosed: d.isClosed ?? false,
+          },
+        }),
+      ),
+    );
+
+    return this.getHours(provider.id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Provider services (service-level pricing)
+  // ---------------------------------------------------------------------------
+
+  async getServices(providerId: string, activeOnly = false) {
+    return this.prisma.providerService.findMany({
+      where: {
+        providerId,
+        ...(activeOnly ? { isActive: true } : {}),
+      },
+      include: { category: { select: { id: true, name: true, slug: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  async getServicesByUserId(userId: string) {
+    const provider = await this.providersRepository.findByUserId(userId);
+    if (!provider) throw new NotFoundException("Provider profile not found");
+    return this.getServices(provider.id);
+  }
+
+  async createService(
+    userId: string,
+    data: {
+      name: string;
+      basePrice: number;
+      durationMin?: number;
+      description?: string;
+      categoryId?: string;
+      isActive?: boolean;
+    },
+  ) {
+    const provider = await this.providersRepository.findByUserId(userId);
+    if (!provider) throw new NotFoundException("Provider profile not found");
+
+    return this.prisma.providerService.create({
+      data: {
+        providerId: provider.id,
+        name: data.name,
+        basePrice: data.basePrice,
+        durationMin: data.durationMin ?? 60,
+        description: data.description,
+        categoryId: data.categoryId ?? null,
+        isActive: data.isActive ?? true,
+      },
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+  }
+
+  async updateService(
+    userId: string,
+    serviceId: string,
+    data: {
+      name?: string;
+      basePrice?: number;
+      durationMin?: number;
+      description?: string;
+      categoryId?: string;
+      isActive?: boolean;
+    },
+  ) {
+    const svc = await this.prisma.providerService.findUnique({
+      where: { id: serviceId },
+      include: { provider: { select: { userId: true } } },
+    });
+    if (!svc) throw new NotFoundException("Service not found");
+    if (svc.provider.userId !== userId) {
+      throw new ForbiddenException("Not authorized to update this service");
+    }
+
+    return this.prisma.providerService.update({
+      where: { id: serviceId },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.basePrice !== undefined && { basePrice: data.basePrice }),
+        ...(data.durationMin !== undefined && { durationMin: data.durationMin }),
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
+        ...(data.isActive !== undefined && { isActive: data.isActive }),
+      },
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+  }
+
+  async deleteService(userId: string, serviceId: string) {
+    const svc = await this.prisma.providerService.findUnique({
+      where: { id: serviceId },
+      include: { provider: { select: { userId: true } } },
+    });
+    if (!svc) throw new NotFoundException("Service not found");
+    if (svc.provider.userId !== userId) {
+      throw new ForbiddenException("Not authorized to delete this service");
+    }
+
+    await this.prisma.providerService.delete({ where: { id: serviceId } });
     return { success: true };
   }
 

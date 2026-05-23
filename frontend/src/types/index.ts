@@ -74,6 +74,28 @@ export interface ProviderGalleryItem {
   description?: string;
 }
 
+export interface ProviderHours {
+  id: string;
+  providerId: string;
+  dayOfWeek: number; // 0 = Sunday … 6 = Saturday
+  openMinutes: number;
+  closeMinutes: number;
+  isClosed: boolean;
+}
+
+export interface ProviderService {
+  id: string;
+  providerId: string;
+  categoryId?: string | null;
+  category?: { id: string; name: string; slug: string } | null;
+  name: string;
+  basePrice: number;
+  durationMin: number;
+  description?: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
 // Category types
 export interface Category {
   id: string;

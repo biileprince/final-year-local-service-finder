@@ -29,7 +29,7 @@ import {
   bookingsService,
   filesService,
 } from "@/lib/api";
-import type { Provider, TimeSlot } from "@/types";
+import type { Provider, TimeSlot, ProviderService } from "@/types";
 import { formatCurrency, formatDate, formatTime, cn } from "@/lib/utils";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -70,6 +70,8 @@ export default function BookProviderPage() {
     }[]
   >([]);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [providerServices, setProviderServices] = useState<ProviderService[]>([]);
+  const [selectedServiceId, setSelectedServiceId] = useState<string>("");
 
   useEffect(() => {
     if (params.providerId) {
@@ -86,8 +88,12 @@ export default function BookProviderPage() {
   const loadProvider = async (id: string) => {
     setIsLoading(true);
     try {
-      const data = await providersService.getById(id);
+      const [data, services] = await Promise.all([
+        providersService.getById(id),
+        providersService.getProviderServices(id).catch(() => [] as ProviderService[]),
+      ]);
       setProvider(data);
+      setProviderServices(services.filter((s) => s.isActive));
     } catch (error) {
       console.error("Failed to load provider:", error);
       setError("Failed to load provider");
@@ -475,6 +481,49 @@ export default function BookProviderPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {providerServices.length > 0 && (
+                    <div>
+                      <label className="mb-2 block text-base font-semibold text-secondary-700">
+                        Select a service{" "}
+                        <span className="font-normal text-secondary-500">(optional)</span>
+                      </label>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {providerServices.map((svc) => (
+                          <button
+                            key={svc.id}
+                            type="button"
+                            onClick={() =>
+                              setSelectedServiceId((prev) =>
+                                prev === svc.id ? "" : svc.id,
+                              )
+                            }
+                            className={cn(
+                              "flex items-start justify-between rounded-xl border-2 px-4 py-3 text-left transition-colors",
+                              selectedServiceId === svc.id
+                                ? "border-primary-500 bg-primary-50"
+                                : "border-secondary-200 bg-white hover:border-primary-300",
+                            )}
+                          >
+                            <div className="min-w-0 flex-1 pr-3">
+                              <p className="font-semibold text-secondary-900">
+                                {svc.name}
+                              </p>
+                              {svc.durationMin > 0 && (
+                                <p className="mt-0.5 flex items-center gap-1 text-sm text-secondary-500">
+                                  <Clock className="h-3.5 w-3.5" />
+                                  {svc.durationMin} min
+                                </p>
+                              )}
+                            </div>
+                            <p className="shrink-0 font-bold text-secondary-900">
+                              GH₵ {Number(svc.basePrice).toFixed(2)}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="mb-2 block text-base font-semibold text-secondary-700">
                       Service Address *
@@ -494,7 +543,7 @@ export default function BookProviderPage() {
                       value={problemDescription}
                       onChange={(e) => setProblemDescription(e.target.value)}
                       rows={4}
-                      className="w-full rounded-xl border-2 border-secondary-200 bg-white px-4 py-3 text-base text-secondary-900 placeholder:text-secondary-400 transition-all hover:border-secondary-300 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                      className="w-full rounded-xl border-2 border-secondary-200 bg-white px-4 py-3 text-base text-secondary-900 placeholder:text-secondary-500 transition-all hover:border-secondary-300 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                       placeholder="Please describe what you need help with..."
                     />
                   </div>
@@ -502,7 +551,7 @@ export default function BookProviderPage() {
                   <div>
                     <label className="mb-2 block text-base font-semibold text-secondary-700">
                       Photos or documents{" "}
-                      <span className="font-normal text-secondary-400">
+                      <span className="font-normal text-secondary-500">
                         (optional, up to 10)
                       </span>
                     </label>
@@ -691,6 +740,23 @@ export default function BookProviderPage() {
                     </span>
                   </div>
                 )}
+                {selectedServiceId && (() => {
+                  const svc = providerServices.find((s) => s.id === selectedServiceId);
+                  return svc ? (
+                    <div className="flex justify-between">
+                      <span className="flex items-center gap-2 text-secondary-500">
+                        <Star className="h-5 w-5" />
+                        Service
+                      </span>
+                      <div className="text-right">
+                        <p className="font-bold text-secondary-900">{svc.name}</p>
+                        <p className="text-sm text-secondary-500">
+                          GH₵ {Number(svc.basePrice).toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
                 <p className="border-t border-secondary-200 pt-4 text-sm text-secondary-500">
                   Final amount is agreed with the provider after the job and
                   paid offline.

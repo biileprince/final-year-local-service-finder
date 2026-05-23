@@ -19,6 +19,7 @@ import {
   Briefcase,
   Award,
   ImageIcon,
+  DollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +32,7 @@ import {
   availabilityService,
   messagesService,
 } from "@/lib/api";
-import type { Provider, Review, Availability } from "@/types";
+import type { Provider, Review, Availability, ProviderService } from "@/types";
 import { formatRelativeTime, formatTime, cn } from "@/lib/utils";
 import { useAuth } from "@/hooks";
 import { ReviewCard } from "@/components/reviews/review-card";
@@ -129,7 +130,7 @@ function ProviderAvailabilitySection({ provider }: { provider: Provider }) {
               {/* Day headers */}
               <div className="mb-2 grid grid-cols-7 text-center">
                 {WEEKDAYS.map((d) => (
-                  <span key={d} className="py-2 text-sm font-semibold text-gray-400">
+                  <span key={d} className="py-2 text-sm font-semibold text-gray-500">
                     {d}
                   </span>
                 ))}
@@ -283,6 +284,7 @@ export default function ProviderDetailPage() {
   };
   const [provider, setProvider] = useState<Provider | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [providerServices, setProviderServices] = useState<ProviderService[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [suggested, setSuggested] = useState<Provider[]>([]);
 
@@ -321,12 +323,12 @@ export default function ProviderDetailPage() {
       }
 
       setProvider(providerData);
-      try {
-        const reviewsData = await providersService.getReviews(providerData.id);
-        setReviews(reviewsData.data || []);
-      } catch {
-        setReviews([]);
-      }
+      const [reviewsData, servicesData] = await Promise.allSettled([
+        providersService.getReviews(providerData.id),
+        providersService.getProviderServices(providerData.id),
+      ]);
+      setReviews(reviewsData.status === "fulfilled" ? (reviewsData.value.data ?? []) : []);
+      setProviderServices(servicesData.status === "fulfilled" ? servicesData.value : []);
     } finally {
       setIsLoading(false);
     }
@@ -563,6 +565,55 @@ export default function ProviderDetailPage() {
                       </Badge>
                     ))}
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Service offerings */}
+            {providerServices.filter((s) => s.isActive).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <DollarSign className="h-5 w-5 text-primary-600" />
+                    Services &amp; pricing
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="divide-y divide-secondary-100">
+                    {providerServices
+                      .filter((s) => s.isActive)
+                      .map((svc) => (
+                        <div key={svc.id} className="flex items-start justify-between py-3 first:pt-0 last:pb-0">
+                          <div className="min-w-0 flex-1 pr-4">
+                            <p className="font-semibold text-secondary-900">{svc.name}</p>
+                            {svc.description && (
+                              <p className="mt-0.5 text-sm text-secondary-500">{svc.description}</p>
+                            )}
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="font-bold text-secondary-900">
+                              GH₵ {Number(svc.basePrice).toFixed(2)}
+                            </p>
+                            {svc.durationMin > 0 && (
+                              <p className="mt-0.5 flex items-center justify-end gap-1 text-sm text-secondary-500">
+                                <Clock className="h-3.5 w-3.5" />
+                                {svc.durationMin} min
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                  {user?.role === "CUSTOMER" && (
+                    <div className="mt-4">
+                      <Button size="lg" asChild>
+                        <Link href={`/book/${provider.id}`}>
+                          <Calendar className="mr-2 h-5 w-5" />
+                          Book a service
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
