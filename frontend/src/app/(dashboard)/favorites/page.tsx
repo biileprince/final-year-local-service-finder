@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Heart, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { SkeletonCard } from "@/components/ui/spinner";
 import { ProviderCard } from "@/components/providers/provider-card";
 import { favoritesService, type FavoriteListItem } from "@/lib/api";
 
@@ -41,8 +41,10 @@ export default function FavoritesPage() {
       </div>
 
       {items === null && !error ? (
-        <div className="flex justify-center py-16">
-          <Spinner size="lg" />
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
       ) : error ? (
         <Card className="p-8 text-center">

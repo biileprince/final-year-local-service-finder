@@ -892,7 +892,7 @@ function SearchContent() {
                                 <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                                 {p.rating > 0 ? p.rating.toFixed(1) : "New"}
                                 {p.reviewCount > 0 && (
-                                  <span className="text-secondary-400">
+                                  <span className="text-secondary-500">
                                     ({p.reviewCount})
                                   </span>
                                 )}
@@ -904,7 +904,7 @@ function SearchContent() {
                               )}
                             </div>
                             {!hasPin && (
-                              <p className="text-[10px] italic text-secondary-400">
+                              <p className="text-[10px] italic text-secondary-500">
                                 No exact pin
                               </p>
                             )}
@@ -1192,7 +1192,7 @@ function ProviderGridCard({ provider }: { provider: Provider }) {
               <span className="font-bold text-gray-900">
                 {Number(provider.rating).toFixed(1)}
               </span>
-              <span className="text-gray-400">({provider.reviewCount})</span>
+              <span className="text-gray-500">({provider.reviewCount})</span>
             </div>
             <span className="text-gray-300">·</span>
             <div className="flex items-center gap-1">
@@ -1440,7 +1440,7 @@ function GeoRadiusGroup({
               className="mt-1.5 w-full accent-primary-500"
               aria-label="Search radius in kilometers"
             />
-            <div className="mt-1 flex justify-between text-[10px] font-semibold text-gray-400">
+            <div className="mt-1 flex justify-between text-[10px] font-semibold text-gray-500">
               <span>1km</span>
               <span>25km</span>
               <span>50km</span>

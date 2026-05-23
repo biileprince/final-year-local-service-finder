@@ -148,7 +148,7 @@ export default function HomePage() {
                         name="q"
                         type="text"
                         placeholder="Plumber, electrician, cleaning"
-                        className="w-full bg-transparent text-base font-medium text-secondary-900 outline-none placeholder:text-secondary-400"
+                        className="w-full bg-transparent text-base font-medium text-secondary-900 outline-none placeholder:text-secondary-500"
                       />
                     </div>
                   </div>
@@ -166,7 +166,7 @@ export default function HomePage() {
                         name="location"
                         type="text"
                         placeholder="Accra, Kumasi, Takoradi"
-                        className="w-full bg-transparent text-base font-medium text-secondary-900 outline-none placeholder:text-secondary-400"
+                        className="w-full bg-transparent text-base font-medium text-secondary-900 outline-none placeholder:text-secondary-500"
                       />
                     </div>
                   </div>

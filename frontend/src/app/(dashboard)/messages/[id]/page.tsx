@@ -890,7 +890,7 @@ export default function ConversationPage() {
                       <p
                         className={cn(
                           "mt-1 text-xs",
-                          isOwn ? "text-primary-200" : "text-secondary-400",
+                          isOwn ? "text-primary-200" : "text-secondary-500",
                         )}
                       >
                         {formatRelativeTime(message.createdAt)}
@@ -981,7 +981,7 @@ export default function ConversationPage() {
             if (messages[messages.length - 1]?.senderId !== user?.id)
               return null;
             return (
-              <p className="pr-2 text-right text-[11px] text-secondary-400">
+              <p className="pr-2 text-right text-[11px] text-secondary-500">
                 Read {formatRelativeTime(otherReadAt)}
               </p>
             );
@@ -1043,7 +1043,7 @@ export default function ConversationPage() {
                     placeholder="Add a caption (optional)"
                     disabled={sendingAttachments}
                     maxLength={500}
-                    className="mt-1 w-full rounded-md border border-secondary-200 bg-secondary-50 px-2 py-1 text-sm text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-60"
+                    className="mt-1 w-full rounded-md border border-secondary-200 bg-secondary-50 px-2 py-1 text-sm text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-60"
                   />
                 </div>
                 <button
@@ -1156,7 +1156,7 @@ export default function ConversationPage() {
             }
             disabled={sendingVoice}
             maxHeight={140}
-            className="flex-1 rounded-2xl border border-secondary-300 bg-secondary-50 px-4 py-2 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-60"
+            className="flex-1 rounded-2xl border border-secondary-300 bg-secondary-50 px-4 py-2 text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-60"
           />
           {messageText.trim() ? (
             <Button
