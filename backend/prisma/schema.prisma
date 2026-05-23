@@ -188,10 +188,11 @@ model Category {
   deletedAt     DateTime? @map("deleted_at")
 
   // Relations
-  image     File?              @relation("CategoryImage", fields: [imageId], references: [id], onDelete: SetNull)
-  parent    Category?          @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children  Category[]         @relation("CategoryHierarchy")
-  providers ProviderCategory[]
+  image            File?              @relation("CategoryImage", fields: [imageId], references: [id], onDelete: SetNull)
+  parent           Category?          @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children         Category[]         @relation("CategoryHierarchy")
+  providers        ProviderCategory[]
+  providerServices ProviderService[]
 
   @@index([slug])
   @@index([isActive, displayOrder])
@@ -243,6 +244,8 @@ model Provider {
   reviews                 Review[]
   conversationsAsProvider Conversation[]
   favoritedBy             Favorite[]
+  hours                   ProviderHours[]
+  services                ProviderService[]
 
   @@index([userId])
   @@index([verificationStatus])
@@ -313,6 +316,43 @@ model ProviderGallery {
   @@unique([providerId, fileId])
   @@index([providerId, displayOrder])
   @@map("provider_gallery")
+}
+
+model ProviderHours {
+  id           String   @id @default(uuid())
+  providerId   String   @map("provider_id")
+  dayOfWeek    Int      @map("day_of_week") // 0 = Sunday … 6 = Saturday
+  openMinutes  Int      @default(540) @map("open_minutes") // minutes since midnight; 540 = 09:00
+  closeMinutes Int      @default(1020) @map("close_minutes") // 1020 = 17:00
+  isClosed     Boolean  @default(false) @map("is_closed")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, dayOfWeek])
+  @@index([providerId])
+  @@map("provider_hours")
+}
+
+model ProviderService {
+  id          String   @id @default(uuid())
+  providerId  String   @map("provider_id")
+  categoryId  String?  @map("category_id")
+  name        String
+  basePrice   Decimal  @map("base_price") @db.Decimal(10, 2)
+  durationMin Int      @default(60) @map("duration_min")
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  provider Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([providerId])
+  @@index([providerId, isActive])
+  @@map("provider_services")
 }
 
 // =============================================================================

@@ -1,6 +1,8 @@
 import { apiClient, buildQueryString } from "./client";
 import type {
   Provider,
+  ProviderHours,
+  ProviderService,
   Review,
   PaginatedResponse,
   Availability,
@@ -182,5 +184,67 @@ export const providersService = {
       `/providers/${providerId}/gallery/${itemId}`,
       true,
     );
+  },
+
+  // Business hours
+  async getMyHours(): Promise<ProviderHours[]> {
+    return apiClient.get<ProviderHours[]>("/providers/me/hours", true);
+  },
+
+  async getProviderHours(providerId: string): Promise<ProviderHours[]> {
+    return apiClient.get<ProviderHours[]>(`/providers/${providerId}/hours`);
+  },
+
+  async upsertMyHours(
+    hours: Array<{
+      dayOfWeek: number;
+      openMinutes?: number;
+      closeMinutes?: number;
+      isClosed?: boolean;
+    }>,
+  ): Promise<ProviderHours[]> {
+    return apiClient.put<ProviderHours[]>("/providers/me/hours", { hours }, true);
+  },
+
+  // Service-level pricing
+  async getMyServices(): Promise<ProviderService[]> {
+    return apiClient.get<ProviderService[]>("/providers/me/services", true);
+  },
+
+  async getProviderServices(providerId: string): Promise<ProviderService[]> {
+    return apiClient.get<ProviderService[]>(`/providers/${providerId}/services`);
+  },
+
+  async createService(data: {
+    name: string;
+    basePrice: number;
+    durationMin?: number;
+    description?: string;
+    categoryId?: string;
+    isActive?: boolean;
+  }): Promise<ProviderService> {
+    return apiClient.post<ProviderService>("/providers/me/services", data, true);
+  },
+
+  async updateService(
+    serviceId: string,
+    data: Partial<{
+      name: string;
+      basePrice: number;
+      durationMin: number;
+      description: string;
+      categoryId: string;
+      isActive: boolean;
+    }>,
+  ): Promise<ProviderService> {
+    return apiClient.patch<ProviderService>(
+      `/providers/me/services/${serviceId}`,
+      data,
+      true,
+    );
+  },
+
+  async deleteService(serviceId: string): Promise<void> {
+    return apiClient.delete(`/providers/me/services/${serviceId}`, true);
   },
 };

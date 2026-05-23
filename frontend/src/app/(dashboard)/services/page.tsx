@@ -15,6 +15,9 @@ import {
   FileText,
   ShieldCheck,
   ArrowRight,
+  Clock,
+  DollarSign,
+  Edit2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +30,22 @@ import {
   LocationPicker,
   type PickedLocation,
 } from "@/components/onboarding/location-picker";
-import type { Provider, Category } from "@/types";
+import type { Provider, Category, ProviderHours, ProviderService } from "@/types";
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+function minutesToTime(mins: number): string {
+  return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+}
+
+function timeToMinutes(t: string): number {
+  const [h = "0", m = "0"] = t.split(":");
+  return parseInt(h) * 60 + parseInt(m);
+}
+
+function formatCurrencyGHS(n: number): string {
+  return `GH₵ ${Number(n).toFixed(2)}`;
+}
 
 export default function ProviderServicesPage() {
   const { isLoading: authLoading, hasRole } = useRequireRole(["PROVIDER"]);
@@ -44,7 +62,7 @@ export default function ProviderServicesPage() {
   const [location, setLocation] = useState("");
   // Coords captured by the Mapbox-backed picker. We track whether the user has
   // actively re-picked their location in this session so we only ship new
-  // lat/lng to the server when the label was changed — typing a different city
+  // lat/lng to the server when the label was changed â€” typing a different city
   // without picking from the dropdown shouldn't keep the old (now stale) pin.
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     null,
@@ -66,6 +84,24 @@ export default function ProviderServicesPage() {
     text: string;
   } | null>(null);
 
+  // Business hours
+  const [hours, setHours] = useState<ProviderHours[]>([]);
+  const [savingHours, setSavingHours] = useState(false);
+
+  // Service offerings
+  const [services, setServices] = useState<ProviderService[]>([]);
+  const [savingService, setSavingService] = useState(false);
+  const [editingService, setEditingService] = useState<ProviderService | null>(null);
+  const [showServiceForm, setShowServiceForm] = useState(false);
+  const [serviceForm, setServiceForm] = useState({
+    name: "",
+    basePrice: "",
+    durationMin: "60",
+    description: "",
+    categoryId: "",
+    isActive: true,
+  });
+
   useEffect(() => {
     if (!hasRole) return;
     let cancelled = false;
@@ -76,8 +112,14 @@ export default function ProviderServicesPage() {
         if (cancelled) return;
         setCategories(cats);
         try {
-          const me = await providersService.getMyProfile();
+          const [me, myHours, myServices] = await Promise.all([
+            providersService.getMyProfile(),
+            providersService.getMyHours().catch(() => [] as ProviderHours[]),
+            providersService.getMyServices().catch(() => [] as ProviderService[]),
+          ]);
           if (cancelled) return;
+          setHours(myHours);
+          setServices(myServices);
           setProvider(me);
           setSelectedCategoryIds(
             new Set((me.categories || []).map((pc) => pc.category.id)),
@@ -96,7 +138,7 @@ export default function ProviderServicesPage() {
           setLocationTouched(false);
         } catch (err) {
           // 404 / "not found" means the provider row was never created during
-          // onboarding — route them through that flow instead of error-pageing.
+          // onboarding â€” route them through that flow instead of error-pageing.
           const msg = err instanceof Error ? err.message.toLowerCase() : "";
           if (msg.includes("not found") || msg.includes("404")) {
             setNeedsOnboarding(true);
@@ -136,6 +178,110 @@ export default function ProviderServicesPage() {
 
   const removeSpecialty = (s: string) =>
     setSpecialties((prev) => prev.filter((x) => x !== s));
+
+  const handleSaveHours = async () => {
+    setSavingHours(true);
+    try {
+      const saved = await providersService.upsertMyHours(
+        hours.map(({ dayOfWeek, openMinutes, closeMinutes, isClosed }) => ({
+          dayOfWeek,
+          openMinutes,
+          closeMinutes,
+          isClosed,
+        })),
+      );
+      setHours(saved);
+      toast({ variant: "success", title: "Business hours saved" });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Couldn't save hours",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setSavingHours(false);
+    }
+  };
+
+  const handleOpenServiceForm = (svc?: ProviderService) => {
+    if (svc) {
+      setEditingService(svc);
+      setServiceForm({
+        name: svc.name,
+        basePrice: String(svc.basePrice),
+        durationMin: String(svc.durationMin),
+        description: svc.description ?? "",
+        categoryId: svc.categoryId ?? "",
+        isActive: svc.isActive,
+      });
+    } else {
+      setEditingService(null);
+      setServiceForm({ name: "", basePrice: "", durationMin: "60", description: "", categoryId: "", isActive: true });
+    }
+    setShowServiceForm(true);
+  };
+
+  const handleSaveService = async () => {
+    const price = Number(serviceForm.basePrice);
+    if (!serviceForm.name.trim()) {
+      toast({ variant: "error", title: "Service name is required" });
+      return;
+    }
+    if (Number.isNaN(price) || price < 0) {
+      toast({ variant: "error", title: "Enter a valid price" });
+      return;
+    }
+    setSavingService(true);
+    try {
+      if (editingService) {
+        const updated = await providersService.updateService(editingService.id, {
+          name: serviceForm.name.trim(),
+          basePrice: price,
+          durationMin: Number(serviceForm.durationMin) || 60,
+          description: serviceForm.description.trim() || undefined,
+          categoryId: serviceForm.categoryId || undefined,
+          isActive: serviceForm.isActive,
+        });
+        setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+        toast({ variant: "success", title: "Service updated" });
+      } else {
+        const created = await providersService.createService({
+          name: serviceForm.name.trim(),
+          basePrice: price,
+          durationMin: Number(serviceForm.durationMin) || 60,
+          description: serviceForm.description.trim() || undefined,
+          categoryId: serviceForm.categoryId || undefined,
+          isActive: serviceForm.isActive,
+        });
+        setServices((prev) => [...prev, created]);
+        toast({ variant: "success", title: "Service added" });
+      }
+      setShowServiceForm(false);
+      setEditingService(null);
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Couldn't save service",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setSavingService(false);
+    }
+  };
+
+  const handleDeleteService = async (id: string) => {
+    try {
+      await providersService.deleteService(id);
+      setServices((prev) => prev.filter((s) => s.id !== id));
+      toast({ variant: "success", title: "Service removed" });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Couldn't remove service",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    }
+  };
 
   const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -266,7 +412,7 @@ export default function ProviderServicesPage() {
         hourlyRate: rateNum,
         yearsExperience: yearsNum,
         location: location.trim(),
-        // Only ship coords when the user picked a new location this session —
+        // Only ship coords when the user picked a new location this session â€”
         // avoids accidentally re-sending stale lat/lng if they only edited the
         // text by hand, in which case the server should keep what it has.
         ...(locationTouched && coords
@@ -345,8 +491,8 @@ export default function ProviderServicesPage() {
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               rows={4}
-              placeholder="Describe your services, experience, and what makes you stand out…"
-              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              placeholder="Describe your services, experience, and what makes you stand outâ€¦"
+              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             />
           </div>
 
@@ -391,7 +537,7 @@ export default function ProviderServicesPage() {
                   setCoords(null);
                   setLocationTouched(true);
                 }}
-                placeholder="Search any town in Ghana — e.g. Accra, Tarkwa…"
+                placeholder="Search any town in Ghana â€” e.g. Accra, Tarkwaâ€¦"
               />
               {coords && !locationTouched && (
                 <p className="mt-1 text-xs text-secondary-500">
@@ -401,12 +547,12 @@ export default function ProviderServicesPage() {
               )}
               {locationTouched && coords && (
                 <p className="mt-1 text-xs text-success-700">
-                  New pin captured — save to update your map location.
+                  New pin captured â€” save to update your map location.
                 </p>
               )}
               {locationTouched && !coords && (
                 <p className="mt-1 text-xs text-amber-700 dark:text-amber-200">
-                  Pick a location from the suggestions to set a new map pin —
+                  Pick a location from the suggestions to set a new map pin â€”
                   saving without a pick leaves the existing pin unchanged.
                 </p>
               )}
@@ -470,7 +616,7 @@ export default function ProviderServicesPage() {
                 }
               }}
               placeholder="e.g. Pipe leak repair"
-              className="flex-1 rounded-xl border-2 border-gray-200 px-4 py-2.5 text-sm text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              className="flex-1 rounded-xl border-2 border-gray-200 px-4 py-2.5 text-sm text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             />
             <Button type="button" variant="outline" onClick={addSpecialty}>
               <Plus className="mr-1 h-4 w-4" />
@@ -479,7 +625,7 @@ export default function ProviderServicesPage() {
           </div>
           {specialties.length === 0 ? (
             <p className="text-sm text-secondary-500">
-              No specialties yet — add the specific services you offer.
+              No specialties yet â€” add the specific services you offer.
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
@@ -569,7 +715,7 @@ export default function ProviderServicesPage() {
                   ) : (
                     <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-3 py-2 text-sm font-semibold text-secondary-700 hover:border-primary-400 hover:bg-primary-50">
                       <ImagePlus className="h-4 w-4" />
-                      {uploadingDoc === kind ? "Uploading…" : "Upload"}
+                      {uploadingDoc === kind ? "Uploadingâ€¦" : "Upload"}
                       <input
                         type="file"
                         accept="image/*,application/pdf"
@@ -593,12 +739,12 @@ export default function ProviderServicesPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-secondary-600">
-            Show off past work — these images appear on your public profile.
+            Show off past work â€” these images appear on your public profile.
           </p>
 
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed border-gray-300 px-4 py-3 text-sm font-semibold text-secondary-700 hover:border-primary-400 hover:bg-primary-50">
             <ImagePlus className="h-4 w-4" />
-            {uploadingGallery ? "Uploading…" : "Upload images"}
+            {uploadingGallery ? "Uploadingâ€¦" : "Upload images"}
             <input
               type="file"
               accept="image/*"
@@ -640,6 +786,294 @@ export default function ProviderServicesPage() {
         </CardContent>
       </Card>
 
+      {/* Business hours */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary-600" />
+            Business hours
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            {DAY_NAMES.map((day, idx) => {
+              const entry = hours.find((h) => h.dayOfWeek === idx);
+              const isClosed = entry ? entry.isClosed : true;
+              const openVal = entry && !entry.isClosed ? minutesToTime(entry.openMinutes) : "09:00";
+              const closeVal = entry && !entry.isClosed ? minutesToTime(entry.closeMinutes) : "17:00";
+              return (
+                <div
+                  key={day}
+                  className="flex items-center gap-3 rounded-xl border border-secondary-100 bg-white px-4 py-2.5"
+                >
+                  <span className="w-10 shrink-0 text-sm font-semibold text-secondary-700">
+                    {day}
+                  </span>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-secondary-600">
+                    <input
+                      type="checkbox"
+                      checked={!isClosed}
+                      onChange={(e) => {
+                        const open = e.target.checked;
+                        setHours((prev) => {
+                          const existing = prev.find((h) => h.dayOfWeek === idx);
+                          if (existing) {
+                            return prev.map((h) =>
+                              h.dayOfWeek === idx ? { ...h, isClosed: !open } : h,
+                            );
+                          }
+                          return [
+                            ...prev,
+                            {
+                              id: "",
+                              providerId: provider.id,
+                              dayOfWeek: idx,
+                              openMinutes: 540,
+                              closeMinutes: 1020,
+                              isClosed: !open,
+                            },
+                          ];
+                        });
+                      }}
+                      className="h-4 w-4 rounded border-secondary-300 accent-primary-600"
+                    />
+                    Open
+                  </label>
+                  {!isClosed ? (
+                    <div className="flex flex-1 items-center gap-2">
+                      <input
+                        type="time"
+                        value={openVal}
+                        onChange={(e) => {
+                          const mins = timeToMinutes(e.target.value);
+                          setHours((prev) => {
+                            const existing = prev.find((h) => h.dayOfWeek === idx);
+                            if (existing) {
+                              return prev.map((h) =>
+                                h.dayOfWeek === idx ? { ...h, openMinutes: mins } : h,
+                              );
+                            }
+                            return [
+                              ...prev,
+                              { id: "", providerId: provider.id, dayOfWeek: idx, openMinutes: mins, closeMinutes: 1020, isClosed: false },
+                            ];
+                          });
+                        }}
+                        className="rounded-lg border border-secondary-200 px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none"
+                      />
+                      <span className="text-secondary-400">–</span>
+                      <input
+                        type="time"
+                        value={closeVal}
+                        onChange={(e) => {
+                          const mins = timeToMinutes(e.target.value);
+                          setHours((prev) => {
+                            const existing = prev.find((h) => h.dayOfWeek === idx);
+                            if (existing) {
+                              return prev.map((h) =>
+                                h.dayOfWeek === idx ? { ...h, closeMinutes: mins } : h,
+                              );
+                            }
+                            return [
+                              ...prev,
+                              { id: "", providerId: provider.id, dayOfWeek: idx, openMinutes: 540, closeMinutes: mins, isClosed: false },
+                            ];
+                          });
+                        }}
+                        className="rounded-lg border border-secondary-200 px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none"
+                      />
+                    </div>
+                  ) : (
+                    <span className="ml-2 text-sm italic text-secondary-400">Closed</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" onClick={handleSaveHours} isLoading={savingHours}>
+              <Save className="mr-2 h-4 w-4" />
+              Save hours
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Service offerings */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-primary-600" />
+            Service offerings
+          </CardTitle>
+          {!showServiceForm && (
+            <Button type="button" size="sm" onClick={() => handleOpenServiceForm()}>
+              <Plus className="mr-1 h-4 w-4" />
+              Add service
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {showServiceForm && (
+            <div className="space-y-3 rounded-xl border-2 border-primary-200 bg-primary-50 p-4">
+              <h3 className="text-sm font-semibold text-secondary-900">
+                {editingService ? "Edit service" : "New service"}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-secondary-700">
+                    Service name *
+                  </label>
+                  <input
+                    value={serviceForm.name}
+                    onChange={(e) => setServiceForm((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="e.g. Pipe leak repair"
+                    className="w-full rounded-xl border-2 border-gray-200 px-3 py-2 text-sm text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-secondary-700">
+                    Base price (GHS) *
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={serviceForm.basePrice}
+                    onChange={(e) => setServiceForm((p) => ({ ...p, basePrice: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border-2 border-gray-200 px-3 py-2 text-sm text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-secondary-700">
+                    Duration (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={serviceForm.durationMin}
+                    onChange={(e) => setServiceForm((p) => ({ ...p, durationMin: e.target.value }))}
+                    className="w-full rounded-xl border-2 border-gray-200 px-3 py-2 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-secondary-700">
+                    Category
+                  </label>
+                  <select
+                    value={serviceForm.categoryId}
+                    onChange={(e) => setServiceForm((p) => ({ ...p, categoryId: e.target.value }))}
+                    className="w-full rounded-xl border-2 border-gray-200 px-3 py-2 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none"
+                  >
+                    <option value="">— none —</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-secondary-700">
+                  Description
+                </label>
+                <textarea
+                  value={serviceForm.description}
+                  onChange={(e) => setServiceForm((p) => ({ ...p, description: e.target.value }))}
+                  rows={2}
+                  placeholder="Brief description of what's included…"
+                  className="w-full rounded-xl border-2 border-gray-200 px-3 py-2 text-sm text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none"
+                />
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-secondary-700">
+                <input
+                  type="checkbox"
+                  checked={serviceForm.isActive}
+                  onChange={(e) => setServiceForm((p) => ({ ...p, isActive: e.target.checked }))}
+                  className="h-4 w-4 rounded accent-primary-600"
+                />
+                Active (visible to customers)
+              </label>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setShowServiceForm(false); setEditingService(null); }}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" size="sm" onClick={handleSaveService} isLoading={savingService}>
+                  {editingService ? "Save changes" : "Add service"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {services.length === 0 && !showServiceForm ? (
+            <p className="text-sm text-secondary-500">
+              No services yet — add your first service offering above.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {services.map((svc) => (
+                <div
+                  key={svc.id}
+                  className={`flex items-start justify-between rounded-xl border px-4 py-3 ${
+                    svc.isActive
+                      ? "border-secondary-200 bg-white"
+                      : "border-dashed border-secondary-200 bg-gray-50 opacity-70"
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-secondary-900">{svc.name}</span>
+                      {!svc.isActive && (
+                        <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-3 text-sm text-secondary-600">
+                      <span>{formatCurrencyGHS(svc.basePrice)}</span>
+                      {svc.durationMin > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" />
+                          {svc.durationMin} min
+                        </span>
+                      )}
+                      {svc.category && (
+                        <span className="text-secondary-500">· {svc.category.name}</span>
+                      )}
+                    </div>
+                    {svc.description && (
+                      <p className="mt-1 truncate text-xs text-secondary-500">
+                        {svc.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="ml-3 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenServiceForm(svc)}
+                      className="rounded-lg p-1.5 text-secondary-500 hover:bg-secondary-100 hover:text-secondary-700"
+                      aria-label="Edit service"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteService(svc.id)}
+                      className="rounded-lg p-1.5 text-error-500 hover:bg-error-50 hover:text-error-700"
+                      aria-label="Delete service"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="flex justify-end">
         <Button onClick={handleSave} isLoading={saving}>
           <Save className="mr-2 h-4 w-4" />
@@ -664,7 +1098,7 @@ function ProviderProfileMissingCard() {
         </h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-secondary-600">
           You haven&apos;t finished provider onboarding yet. Add your service
-          bio, location, and verification documents — then you can start
+          bio, location, and verification documents â€” then you can start
           managing services here.
         </p>
         <Button asChild className="mt-6">

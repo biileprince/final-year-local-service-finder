@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -20,6 +21,11 @@ import { ProvidersService } from "./providers.service";
 import { CreateProviderDto } from "./dto/create-provider.dto";
 import { UpdateProviderDto } from "./dto/update-provider.dto";
 import { SearchProvidersDto } from "./dto/search-providers.dto";
+import { UpsertProviderHoursDto } from "./dto/upsert-provider-hours.dto";
+import {
+  CreateProviderServiceDto,
+  UpdateProviderServiceDto,
+} from "./dto/create-provider-service.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Public } from "../../common/decorators/public.decorator";
@@ -218,5 +224,88 @@ export class ProvidersController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.providersService.delete(id, user.id);
+  }
+
+  // --------------------------------------------------------------------------
+  // Business hours
+  // --------------------------------------------------------------------------
+
+  @Get("me/hours")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get current provider's business hours" })
+  async getMyHours(@CurrentUser() user: CurrentUserPayload) {
+    return this.providersService.getHoursByUserId(user.id);
+  }
+
+  @Get(":id/hours")
+  @Public()
+  @ApiOperation({ summary: "Get business hours for a provider (public)" })
+  async getProviderHours(@Param("id") id: string) {
+    return this.providersService.getHours(id);
+  }
+
+  @Put("me/hours")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Upsert business hours for the current provider" })
+  async upsertMyHours(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: UpsertProviderHoursDto,
+  ) {
+    return this.providersService.upsertHours(user.id, dto.hours);
+  }
+
+  // --------------------------------------------------------------------------
+  // Service-level pricing
+  // --------------------------------------------------------------------------
+
+  @Get("me/services")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "List the current provider's services" })
+  async getMyServices(@CurrentUser() user: CurrentUserPayload) {
+    return this.providersService.getServicesByUserId(user.id);
+  }
+
+  @Get(":id/services")
+  @Public()
+  @ApiOperation({ summary: "List active services for a provider (public)" })
+  async getProviderServices(@Param("id") id: string) {
+    return this.providersService.getServices(id, true);
+  }
+
+  @Post("me/services")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Create a new service offering" })
+  async createService(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreateProviderServiceDto,
+  ) {
+    return this.providersService.createService(user.id, dto);
+  }
+
+  @Patch("me/services/:serviceId")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Update a service offering" })
+  async updateService(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("serviceId") serviceId: string,
+    @Body() dto: UpdateProviderServiceDto,
+  ) {
+    return this.providersService.updateService(user.id, serviceId, dto);
+  }
+
+  @Delete("me/services/:serviceId")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Delete a service offering" })
+  async deleteService(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("serviceId") serviceId: string,
+  ) {
+    return this.providersService.deleteService(user.id, serviceId);
   }
 }

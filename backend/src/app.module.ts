@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
+import { ScheduleModule } from "@nestjs/schedule";
 import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard } from "@nestjs/throttler";
 import { LoggerModule } from "nestjs-pino";
@@ -63,6 +64,9 @@ import { FavoritesModule } from "./modules/favorites/favorites.module";
         limit: 1000,
       },
     ]),
+
+    // Cron scheduling
+    ScheduleModule.forRoot(),
 
     // Core infrastructure
     DatabaseModule,
