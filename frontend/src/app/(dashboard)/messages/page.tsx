@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MessageSquare, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
 import { messagesService } from "@/lib/api";
 import { useMessagesSocket } from "@/lib/messages-socket";
@@ -75,8 +75,27 @@ export default function MessagesPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-32" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <Skeleton className="h-11 w-full rounded-lg" />
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-soft"
+            >
+              <Skeleton className="h-12 w-12 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+              <Skeleton className="h-3 w-12" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -99,7 +118,7 @@ export default function MessagesPage() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search conversations..."
-          className="h-11 w-full rounded-lg border border-secondary-300 bg-white pl-10 pr-4 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+          className="h-11 w-full rounded-lg border border-secondary-300 bg-white pl-10 pr-4 text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
         />
       </div>
 

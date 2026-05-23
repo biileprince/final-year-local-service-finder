@@ -241,7 +241,7 @@ function Metric({
         <div className="min-w-0">
           <p className="text-2xl font-bold text-secondary-900">{value}</p>
           <p className="text-xs text-secondary-500">{label}</p>
-          <p className="mt-0.5 truncate text-[11px] text-secondary-400">{sub}</p>
+          <p className="mt-0.5 truncate text-[11px] text-secondary-500">{sub}</p>
         </div>
       </CardContent>
     </Card>

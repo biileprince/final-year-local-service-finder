@@ -193,8 +193,8 @@ export function SearchOverlay({ open, onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search services, providers, specialties, locations…"
-            className="w-full bg-transparent text-base font-medium outline-none placeholder:text-gray-400 sm:text-lg"
+            placeholder="Search services, providers, specialties, locationsâ€¦"
+            className="w-full bg-transparent text-base font-medium outline-none placeholder:text-gray-500 sm:text-lg"
             aria-label="Search"
             autoComplete="off"
             spellCheck={false}
@@ -248,8 +248,8 @@ export function SearchOverlay({ open, onClose }: Props) {
 
         <div className="hidden items-center justify-between border-t border-gray-100 bg-gray-50 px-5 py-2 text-[11px] font-semibold text-gray-500 sm:flex">
           <div className="flex items-center gap-4">
-            <KbdHint label="↑↓" text="Navigate" />
-            <KbdHint label="↵" text="Open" />
+            <KbdHint label="â†‘â†“" text="Navigate" />
+            <KbdHint label="â†µ" text="Open" />
             <KbdHint label="Esc" text="Close" />
           </div>
           <span>Press Enter to search for &ldquo;{query || "anything"}&rdquo;</span>
@@ -587,7 +587,7 @@ function BrowseSections({
                       {p.name}
                     </span>
                     <span className="block truncate text-xs text-gray-500">
-                      {p.primaryCategory ? `${p.primaryCategory} · ` : ""}
+                      {p.primaryCategory ? `${p.primaryCategory} Â· ` : ""}
                       {p.location}
                     </span>
                   </span>
@@ -618,7 +618,7 @@ function KbdHint({ label, text }: { label: string; text: string }) {
 }
 
 // =========================================================================
-// localStorage helpers — recent searches
+// localStorage helpers â€” recent searches
 // =========================================================================
 
 function loadRecent(): string[] {

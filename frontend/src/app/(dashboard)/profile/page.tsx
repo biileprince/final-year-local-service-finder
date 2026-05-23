@@ -142,7 +142,7 @@ function OtpModal({
 
         <button
           type="button"
-          className="mt-3 w-full text-sm text-gray-400 hover:text-gray-600"
+          className="mt-3 w-full text-sm text-gray-600 hover:text-gray-800"
           onClick={onClose}
         >
           Cancel
@@ -425,7 +425,7 @@ export default function ProfilePage() {
                 <p className="text-secondary-500">
                   {user?.role === "PROVIDER" ? "Service Provider" : "Customer"}
                 </p>
-                <p className="mt-1 text-sm text-secondary-400">
+                <p className="mt-1 text-sm text-secondary-500">
                   Member since{" "}
                   {new Date(user?.createdAt ?? "").toLocaleDateString("en-GB", {
                     month: "long",
@@ -470,7 +470,7 @@ export default function ProfilePage() {
                     <span className="flex-1 text-sm text-gray-600">
                       {user?.email}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-500">
                       Contact support to change
                     </span>
                   </div>

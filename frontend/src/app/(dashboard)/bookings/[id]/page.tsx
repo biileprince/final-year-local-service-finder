@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
-import { Spinner } from "@/components/ui/spinner";
+import { Spinner, Skeleton } from "@/components/ui/spinner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
@@ -312,8 +312,32 @@ export default function BookingDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-6 w-24 rounded-full" />
+        </div>
+        <Card>
+          <CardContent className="space-y-4 p-5">
+            <div className="flex items-start gap-4">
+              <Skeleton className="h-16 w-16 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-5 w-1/3" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-4 w-1/2" />
+            </div>
+            <div className="space-y-2 pt-2">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-5/6" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -643,7 +667,7 @@ export default function BookingDetailPage() {
                         value={paymentReference}
                         onChange={(e) => setPaymentReference(e.target.value)}
                         placeholder="e.g. RECEIPT-12345 or transaction ID"
-                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                       />
                     </div>
                     <div className="flex gap-3">
@@ -716,19 +740,19 @@ export default function BookingDetailPage() {
                     </div>
                     <div>
                       <label className="mb-2 block text-sm font-medium text-secondary-700">
-                        Comment <span className="text-secondary-400">(min 10 chars)</span>
+                        Comment <span className="text-secondary-500">(min 10 chars)</span>
                       </label>
                       <textarea
                         value={reviewComment}
                         onChange={(e) => setReviewComment(e.target.value)}
                         rows={4}
-                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                        className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                         placeholder="Share your experience…"
                       />
                     </div>
                     <div>
                       <label className="mb-2 block text-sm font-medium text-secondary-700">
-                        Photos <span className="text-secondary-400">(up to 6)</span>
+                        Photos <span className="text-secondary-500">(up to 6)</span>
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {reviewImages.map((img) => (

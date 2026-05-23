@@ -134,8 +134,8 @@ export default function AdminUsersPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && load()}
-            placeholder="Search by name or email…"
-            className="h-11 w-full rounded-lg border border-secondary-300 bg-white pl-10 pr-4 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            placeholder="Search by name or emailâ€¦"
+            className="h-11 w-full rounded-lg border border-secondary-300 bg-white pl-10 pr-4 text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
           />
         </div>
         <select
@@ -190,7 +190,7 @@ export default function AdminUsersPage() {
                     <p className="truncate text-sm text-secondary-500">{u.email}</p>
                     <p className="text-xs text-secondary-400">
                       Joined {new Date(u.createdAt).toLocaleDateString()}
-                      {u.lastLoginAt && ` · last login ${new Date(u.lastLoginAt).toLocaleDateString()}`}
+                      {u.lastLoginAt && ` Â· last login ${new Date(u.lastLoginAt).toLocaleDateString()}`}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -233,7 +233,7 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      {/* Suspend dialog — inline modal with reason field */}
+      {/* Suspend dialog â€” inline modal with reason field */}
       {suspendTarget && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
@@ -261,7 +261,7 @@ export default function AdminUsersPage() {
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Reason (internal note)…"
+                placeholder="Reason (internal note)â€¦"
                 rows={3}
                 className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               />

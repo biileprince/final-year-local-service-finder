@@ -102,7 +102,7 @@ export default function AdminAuditLogsPage() {
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <Badge>{l.action}</Badge>
                   <Badge variant="outline">{l.tableName}</Badge>
-                  <span className="text-secondary-400">{l.recordId}</span>
+                  <span className="text-secondary-500">{l.recordId}</span>
                   <span className="ml-auto text-secondary-500">
                     {new Date(l.createdAt).toLocaleString()}
                   </span>
