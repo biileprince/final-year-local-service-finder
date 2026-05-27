@@ -3,9 +3,10 @@ import { BookingsService } from "./bookings.service";
 import { BookingsController } from "./bookings.controller";
 import { BookingsRepository } from "./bookings.repository";
 import { MessagesModule } from "../messages/messages.module";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
-  imports: [MessagesModule],
+  imports: [MessagesModule, NotificationsModule],
   providers: [BookingsService, BookingsRepository],
   controllers: [BookingsController],
   exports: [BookingsService],

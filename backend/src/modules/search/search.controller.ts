@@ -32,6 +32,17 @@ export class SearchController {
     return this.searchService.trending();
   }
 
+  @Get("locations")
+  @ApiOperation({
+    summary: "Top locations by active provider count (homepage city panel)",
+  })
+  async topLocations(@Query("limit") limit?: string) {
+    const n = Number(limit);
+    return this.searchService.topLocations(
+      Number.isFinite(n) && n > 0 ? Math.min(n, 20) : 8,
+    );
+  }
+
   @Get("providers")
   @ApiOperation({
     summary:

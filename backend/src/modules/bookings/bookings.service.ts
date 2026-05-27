@@ -16,6 +16,11 @@ import {
   BookingListParams,
 } from "./bookings.repository";
 import { MessagesService } from "../messages/messages.service";
+import {
+  NotificationsService,
+  NotificationCategory,
+  NotificationPriority,
+} from "../notifications/notifications.service";
 import { BookingStatus } from "@prisma/client";
 
 @Injectable()
@@ -30,7 +35,40 @@ export class BookingsService {
     private readonly cacheService: CacheService,
     private readonly bookingsRepository: BookingsRepository,
     private readonly messagesService: MessagesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  /**
+   * Fire-and-forget notification helper. Lifecycle events (create/confirm/
+   * cancel/complete) MUST NOT fail if the notification pipeline is degraded,
+   * so we swallow + log here rather than throwing into the caller's flow.
+   * The websocket gateway pushes the new_notification event to any connected
+   * client, which surfaces the toast in the dashboard layout.
+   */
+  private async notify(
+    userId: string,
+    category: NotificationCategory,
+    title: string,
+    body: string,
+    referenceId?: string,
+    priority: NotificationPriority = NotificationPriority.NORMAL,
+  ) {
+    try {
+      await this.notificationsService.send({
+        userId,
+        category,
+        title,
+        body,
+        referenceId,
+        priority,
+        channels: ["in_app"],
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Notification (${category}) for ${userId} failed: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
 
   /**
    * Throws ConflictException if another non-cancelled booking already occupies
@@ -221,6 +259,21 @@ export class BookingsService {
       );
     }
 
+    // Notify the PROVIDER (their user record) that a new booking arrived.
+    // The notifications gateway will push this to any connected dashboard
+    // session and surface a toast via the layout-level listener.
+    if (booking.provider?.user?.id) {
+      const customerName = booking.customer?.name || "A customer";
+      await this.notify(
+        booking.provider.user.id,
+        NotificationCategory.BOOKING_CONFIRMED,
+        "New booking request",
+        `${customerName} just requested a booking (#${booking.bookingNumber}). Open it to confirm a time.`,
+        booking.id,
+        NotificationPriority.HIGH,
+      );
+    }
+
     return booking;
   }
 
@@ -377,6 +430,16 @@ export class BookingsService {
 
     this.logger.log(`Booking ${booking.bookingNumber} confirmed`);
 
+    // Notify the customer that their booking is confirmed.
+    await this.notify(
+      booking.customerId,
+      NotificationCategory.BOOKING_CONFIRMED,
+      "Booking confirmed",
+      `${booking.provider?.user?.name || "Your provider"} confirmed booking #${booking.bookingNumber}.`,
+      booking.id,
+      NotificationPriority.HIGH,
+    );
+
     return updated;
   }
 
@@ -461,6 +524,19 @@ export class BookingsService {
       this.logger.log(`Booking ${booking.bookingNumber} completed`);
 
       return updated;
+    }).then(async (updated) => {
+      // Notify the customer the job is done and nudge them to leave a review.
+      // Runs after the transaction commits to avoid noisy notifications if the
+      // status update rolls back.
+      await this.notify(
+        booking.customerId,
+        NotificationCategory.BOOKING_COMPLETED,
+        "Service completed",
+        `${booking.provider?.user?.name || "Your provider"} marked booking #${booking.bookingNumber} as completed. Tap to leave a review.`,
+        booking.id,
+        NotificationPriority.NORMAL,
+      );
+      return updated;
     });
   }
 
@@ -534,6 +610,21 @@ export class BookingsService {
       `Booking ${booking.bookingNumber} rescheduled by ${isCustomer ? "customer" : "provider"}`,
     );
 
+    // Notify the OTHER party (whoever didn't trigger the reschedule).
+    const targetUserId = isCustomer
+      ? booking.provider?.user?.id
+      : booking.customerId;
+    if (targetUserId) {
+      await this.notify(
+        targetUserId,
+        NotificationCategory.BOOKING_REMINDER,
+        "Booking rescheduled",
+        `Booking #${booking.bookingNumber} was moved to ${data.scheduledDate}${data.scheduledStartTime ? ` at ${data.scheduledStartTime}` : ""}.`,
+        booking.id,
+        NotificationPriority.HIGH,
+      );
+    }
+
     return updated;
   }
 
@@ -569,6 +660,21 @@ export class BookingsService {
     );
 
     this.logger.log(`Booking ${booking.bookingNumber} cancelled by ${isCustomer ? "customer" : "provider"}`);
+
+    // Notify the OTHER party. Whoever clicked Cancel already knows.
+    const targetUserId = isCustomer
+      ? booking.provider?.user?.id
+      : booking.customerId;
+    if (targetUserId) {
+      await this.notify(
+        targetUserId,
+        NotificationCategory.BOOKING_CANCELLED,
+        "Booking cancelled",
+        `Booking #${booking.bookingNumber} was cancelled${reason ? `: ${reason}` : "."}.`,
+        booking.id,
+        NotificationPriority.HIGH,
+      );
+    }
 
     return updated;
   }

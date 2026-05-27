@@ -126,6 +126,19 @@ export class AdminController {
     return this.adminService.reactivateUser(id, admin.id);
   }
 
+  @Post("users/:id/message")
+  @ApiOperation({
+    summary: "Send an admin in-app message to any user (delivered via the notifications pipeline)",
+  })
+  @ApiResponse({ status: 200, description: "Message delivered" })
+  async messageUser(
+    @Param("id") id: string,
+    @Body() body: { subject: string; message: string },
+    @CurrentUser() admin: CurrentUserPayload,
+  ) {
+    return this.adminService.messageUser(id, body.subject, body.message, admin.id);
+  }
+
   // ============================================================================
   // Provider Verification
   // ============================================================================

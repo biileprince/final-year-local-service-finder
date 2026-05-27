@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { MessageSquare, Search } from "lucide-react";
+import { MessageSquare, Search, ChevronRight, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/spinner";
@@ -174,7 +174,12 @@ function ConversationItem({
   return (
     <Link
       href={`/messages/${conversation.id}`}
-      className="flex items-center gap-4 p-4 transition-colors hover:bg-secondary-50"
+      aria-label={`Open conversation with ${otherUser?.name ?? "user"}`}
+      className={cn(
+        "group flex items-center gap-4 p-4 transition-all",
+        "hover:bg-primary-50/60 focus-visible:bg-primary-50/60 focus-visible:outline-none",
+        unreadCount > 0 && "bg-primary-50/30",
+      )}
     >
       <div className="relative">
         <Avatar
@@ -189,18 +194,18 @@ function ConversationItem({
         )}
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <div className="flex items-center justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
           <h3
             className={cn(
-              "font-medium",
+              "truncate font-medium",
               unreadCount > 0 ? "text-secondary-900" : "text-secondary-700",
             )}
           >
             {otherUser?.name}
           </h3>
           {conversation.lastMessageAt && (
-            <span className="text-xs text-secondary-500">
+            <span className="shrink-0 text-xs text-secondary-500">
               {formatRelativeTime(conversation.lastMessageAt)}
             </span>
           )}
@@ -215,6 +220,17 @@ function ConversationItem({
         >
           {conversation.lastMessagePreview || "No messages yet"}
         </p>
+      </div>
+
+      {/* Trailing affordance — makes it visually obvious the row is clickable
+          and tells the user what tapping does. Hidden visually on mobile but
+          the chevron stays so the row reads as a navigable list item. */}
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="hidden items-center gap-1.5 rounded-full bg-primary-100 px-3 py-1 text-xs font-bold text-primary-700 transition-colors group-hover:bg-primary-200 sm:inline-flex">
+          <MessageCircle className="h-3.5 w-3.5" />
+          {unreadCount > 0 ? "Reply" : "Open chat"}
+        </span>
+        <ChevronRight className="h-5 w-5 text-secondary-400 transition-transform group-hover:translate-x-0.5 group-hover:text-primary-600" />
       </div>
     </Link>
   );

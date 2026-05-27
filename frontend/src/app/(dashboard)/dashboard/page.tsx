@@ -16,6 +16,16 @@ import {
   Briefcase,
   ImageIcon,
   BarChart3,
+  CheckCircle,
+  Circle,
+  AlertTriangle,
+  Sparkles,
+  Phone,
+  Camera,
+  Wrench,
+  Tag,
+  ShieldCheck,
+  MapPin,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +34,8 @@ import { Avatar } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
 import { bookingsService, messagesService, providersService } from "@/lib/api";
-import type { Booking, Conversation, Provider } from "@/types";
+import type { Booking, Conversation, Provider, ProviderService } from "@/types";
+import { cn } from "@/lib/utils";
 import { formatDate, formatTime, formatCurrency } from "@/lib/utils";
 
 const statusColors: Record<
@@ -57,6 +68,7 @@ export default function DashboardPage() {
   });
   const [providerProfile, setProviderProfile] = useState<Provider | null>(null);
   const [providerEarnings, setProviderEarnings] = useState(0);
+  const [providerServiceCount, setProviderServiceCount] = useState(0);
 
   useEffect(() => {
     loadDashboardData();
@@ -126,6 +138,17 @@ export default function DashboardPage() {
           setProviderEarnings(earnings);
         } catch {
           setProviderEarnings(0);
+        }
+
+        // Service count powers the "Add service prices" checklist row. Failure
+        // here is fine — we just treat it as 0 and the checklist nudges them.
+        try {
+          const services = await providersService.getMyServices();
+          setProviderServiceCount(
+            services.filter((s: ProviderService) => s.isActive).length,
+          );
+        } catch {
+          setProviderServiceCount(0);
         }
       } else {
         setStats({
@@ -229,8 +252,20 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Provider profile-completeness checklist — surfaces the EXACT items
+          the provider needs to complete (specialties, services, ID doc, etc.)
+          right on the dashboard so they're not lost in onboarding/profile
+          pages. Hidden once everything's done. */}
+      {user?.role === "PROVIDER" && providerProfile && (
+        <ProviderProfileChecklist
+          provider={providerProfile}
+          activeServiceCount={providerServiceCount}
+        />
+      )}
+
       {/* Provider verification banner */}
-      {user?.role === "PROVIDER" && providerProfile &&
+      {user?.role === "PROVIDER" &&
+        providerProfile &&
         providerProfile.verificationStatus !== "VERIFIED" && (
           <div className="flex flex-col gap-3 rounded-2xl border-2 border-blue-200 bg-blue-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -469,14 +504,15 @@ export default function DashboardPage() {
                     <Link
                       key={conversation.id}
                       href={`/messages/${conversation.id}`}
-                      className="flex items-center gap-4 rounded-lg p-3 transition-colors hover:bg-secondary-50"
+                      aria-label={`Open conversation with ${otherUser?.name ?? "user"}`}
+                      className="group flex items-center gap-4 rounded-lg p-3 transition-colors hover:bg-primary-50"
                     >
                       <Avatar
                         size="default"
                         src={otherUser?.profileImage}
                         name={otherUser?.name}
                       />
-                      <div className="flex-1 overflow-hidden">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate font-medium text-secondary-900">
                           {otherUser?.name}
                         </p>
@@ -485,10 +521,14 @@ export default function DashboardPage() {
                         </p>
                       </div>
                       {unreadCount > 0 && (
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-xs text-white">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
                           {unreadCount}
                         </span>
                       )}
+                      <span className="hidden shrink-0 items-center gap-1 rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-bold text-primary-700 transition-colors group-hover:bg-primary-200 sm:inline-flex">
+                        Open
+                        <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                      </span>
                     </Link>
                   );
                 })}
@@ -563,5 +603,278 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ─── Provider profile-completeness checklist ────────────────────────────────
+// Lists each profile field still needed (bio, location, phone, photo, categories,
+// specialties, services, ID doc, gallery) with a direct link to fix it. Hidden
+// once everything is done. Each missing item is a tap-target so a less-literate
+// provider can navigate themselves to the right page without reading prose.
+
+interface ChecklistItem {
+  key: string;
+  label: string;
+  hint: string;
+  icon: React.ComponentType<{ className?: string }>;
+  done: boolean;
+  href: string;
+  required: boolean;
+}
+
+function ProviderProfileChecklist({
+  provider,
+  activeServiceCount,
+}: {
+  provider: Provider;
+  activeServiceCount: number;
+}) {
+  // All provider-profile fields now live on the /services page (the dedicated
+  // "Manage my services" hub), so every checklist link points there with an
+  // #anchor hash that the destination uses to scroll to the right section.
+  const items: ChecklistItem[] = [
+    {
+      key: "bio",
+      label: "Write a short bio",
+      hint: "At least 30 characters about the services you offer.",
+      icon: Sparkles,
+      done: (provider.bio?.trim().length ?? 0) >= 30,
+      href: "/services#section-profile",
+      required: true,
+    },
+    {
+      key: "location",
+      label: "Set your service location",
+      hint: "Pick the city or neighbourhood you operate from.",
+      icon: MapPin,
+      done: !!provider.location && provider.location.trim().length > 1,
+      href: "/services#section-profile",
+      required: true,
+    },
+    {
+      key: "phone",
+      label: "Add your phone number",
+      hint: "Customers see it once they book — required for confirmations.",
+      icon: Phone,
+      done: !!provider.user?.phone && provider.user.phone.trim().length > 0,
+      href: "/profile",
+      required: true,
+    },
+    {
+      key: "photo",
+      label: "Upload a profile photo",
+      hint: "Profiles with a photo get up to 3× more booking requests.",
+      icon: Camera,
+      done: !!provider.user?.profileImage,
+      href: "/profile",
+      required: false,
+    },
+    {
+      key: "categories",
+      label: "Pick service categories",
+      hint: "Tells us where to list you (Plumbing, Cleaning, etc.).",
+      icon: Tag,
+      done: (provider.categories?.length ?? 0) > 0,
+      href: "/services#section-categories",
+      required: true,
+    },
+    {
+      key: "specialties",
+      label: "List your specialties",
+      hint: 'Free-text tags like "Pipe leak repair" — they boost search match.',
+      icon: Sparkles,
+      done: (provider.specialties?.length ?? 0) > 0,
+      href: "/services#section-specialties",
+      required: false,
+    },
+    {
+      key: "services",
+      label: "Set service prices",
+      hint: "Customers compare prices before booking — add at least one.",
+      icon: Wrench,
+      done: activeServiceCount > 0,
+      href: "/services#section-services",
+      required: true,
+    },
+    {
+      key: "availability",
+      label: "Set your weekly availability",
+      hint: "Tell us which days and hours you accept bookings.",
+      icon: Calendar,
+      // We can't tell from the provider record whether they've set availability,
+      // so this row stays as a nudge until they visit /availability. Treat as
+      // optional — it's a productivity boost, not a blocker for verification.
+      done: false,
+      href: "/availability",
+      required: false,
+    },
+    {
+      key: "id-doc",
+      label: "Upload an ID for verification",
+      hint: "Required for the blue verified badge that unlocks the public list.",
+      icon: ShieldCheck,
+      done: !!provider.idDocumentId,
+      href: "/services#section-verification",
+      required: true,
+    },
+    {
+      key: "gallery",
+      label: "Add a few photos of your work",
+      hint: "Gallery photos are the #1 booking driver for new providers.",
+      icon: ImageIcon,
+      done: (provider.gallery?.length ?? 0) > 0,
+      href: "/services#section-gallery",
+      required: false,
+    },
+  ];
+
+  const completed = items.filter((i) => i.done).length;
+  const total = items.length;
+  const percent = Math.round((completed / total) * 100);
+  const missingRequired = items.filter((i) => i.required && !i.done);
+
+  // Don't render at all once everything is done — no clutter for fully set-up
+  // providers. They still see the verification banner if pending.
+  if (completed === total) return null;
+
+  return (
+    <Card className="border-2 border-primary-200 bg-primary-50/30">
+      <CardContent className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-bold text-secondary-900">
+              <Sparkles className="h-5 w-5 text-primary-600" />
+              Complete your provider profile
+            </h2>
+            <p className="mt-1 text-sm text-secondary-600">
+              {missingRequired.length > 0 ? (
+                <>
+                  <span className="font-bold text-amber-700">
+                    {missingRequired.length} required item
+                    {missingRequired.length === 1 ? "" : "s"} left
+                  </span>{" "}
+                  before customers can find you.
+                </>
+              ) : (
+                <>
+                  You&apos;re live! A few optional items remain to boost
+                  bookings.
+                </>
+              )}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-3xl font-bold text-primary-700">{percent}%</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-secondary-500">
+              {completed} of {total} done
+            </p>
+          </div>
+        </div>
+
+        {/* Where-to-edit hint — explicitly tells the provider that the
+            service profile lives under "My Services" so they don't go
+            hunting in /profile (which is the personal account page). */}
+        <Link
+          href="/services"
+          className="mt-4 flex items-start gap-3 rounded-xl border border-primary-200 bg-white p-3 transition-colors hover:border-primary-400 hover:bg-primary-50"
+        >
+          <Wrench className="mt-0.5 h-5 w-5 shrink-0 text-primary-600" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-secondary-900">
+              Manage everything from <span className="text-primary-700">My Services</span>
+            </p>
+            <p className="text-xs text-secondary-600">
+              Bio, categories, specialties, prices, ID and gallery — all live on
+              your <strong>/services</strong> page. Tap any item below to jump
+              straight to the right section.
+            </p>
+          </div>
+          <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+        </Link>
+
+        {/* Progress bar */}
+        <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-secondary-200">
+          <div
+            className="h-full rounded-full bg-linear-to-r from-primary-500 to-amber-500 transition-all duration-500"
+            style={{ width: `${percent}%` }}
+            aria-hidden
+          />
+        </div>
+
+        {/* Checklist items — each is a link to the relevant page so they
+            can fix the gap in one tap. */}
+        <ul className="mt-5 space-y-2">
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <li key={item.key}>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "group flex items-start gap-3 rounded-xl border-2 p-3 transition-all",
+                    item.done
+                      ? "border-emerald-200 bg-white"
+                      : "border-secondary-200 bg-white hover:border-primary-300 hover:bg-primary-50",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                      item.done
+                        ? "bg-emerald-100 text-emerald-700"
+                        : item.required
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-secondary-100 text-secondary-500",
+                    )}
+                  >
+                    {item.done ? (
+                      <CheckCircle className="h-5 w-5" />
+                    ) : (
+                      <Icon className="h-4 w-4" />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={cn(
+                        "flex items-center gap-2 text-sm font-bold",
+                        item.done
+                          ? "text-emerald-800 line-through decoration-emerald-300"
+                          : "text-secondary-900",
+                      )}
+                    >
+                      {item.label}
+                      {!item.done && item.required && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">
+                          <AlertTriangle className="h-2.5 w-2.5" />
+                          Required
+                        </span>
+                      )}
+                      {!item.done && !item.required && (
+                        <span className="rounded-full bg-secondary-100 px-2 py-0.5 text-[10px] font-bold uppercase text-secondary-600"></span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-xs text-secondary-600">
+                      {item.hint}
+                    </p>
+                  </div>
+                  {!item.done && (
+                    <span className="hidden shrink-0 self-center rounded-full bg-primary-600 px-3 py-1.5 text-xs font-bold text-white transition-colors group-hover:bg-primary-700 sm:inline-flex">
+                      Fix it →
+                    </span>
+                  )}
+                  <Circle
+                    aria-hidden
+                    className={cn(
+                      "h-4 w-4 shrink-0 self-center sm:hidden",
+                      item.done ? "hidden" : "text-secondary-300",
+                    )}
+                  />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }

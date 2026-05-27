@@ -31,6 +31,7 @@ import {
   LocationPicker,
   type PickedLocation,
 } from "@/components/onboarding/location-picker";
+import { CategoryDropdown } from "@/components/onboarding/category-dropdown";
 import { useAuth } from "@/hooks";
 import {
   providersService,
@@ -88,7 +89,7 @@ export default function OnboardingPage() {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [catLoading, setCatLoading] = useState(true);
 
-  // Specialties â€” free-text tags the provider can add to narrow down what they
+  // Specialties — free-text tags the provider can add to narrow down what they
   // do within a category ("Pipe leak repair", "AC gas refill", etc.). Searched
   // via pg_trgm GIN index, so even partial matches surface the right provider.
   const [specialties, setSpecialties] = useState<string[]>([]);
@@ -138,7 +139,7 @@ export default function OnboardingPage() {
 
   const watchedLocation = watch("location");
 
-  // Geo coords captured by "Use my location" â€” submitted alongside the form
+  // Geo coords captured by "Use my location" — submitted alongside the form
   // so customers see the provider pinned on the map immediately.
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     null,
@@ -194,7 +195,7 @@ export default function OnboardingPage() {
             );
           }
         } catch {
-          // Reverse-geocode is best-effort â€” the manual picker still works.
+          // Reverse-geocode is best-effort — the manual picker still works.
         }
       },
       (err) => {
@@ -315,7 +316,7 @@ export default function OnboardingPage() {
           });
           setUser(updatedUser);
         } catch {
-          // Non-blocking â€” keep going with provider profile.
+          // Non-blocking — keep going with provider profile.
         }
       }
       const updated = await providersService.updateProfile({
@@ -345,7 +346,7 @@ export default function OnboardingPage() {
       if (selectedCategoryIds.length > 0) {
         await providersService.setCategories(selectedCategoryIds);
       }
-      // Specialties are independent of categories â€” persist them in parallel.
+      // Specialties are independent of categories — persist them in parallel.
       // We always send (including the empty list) so removals reach the server.
       try {
         await providersService.setSpecialties(specialties);
@@ -355,7 +356,7 @@ export default function OnboardingPage() {
       }
       setStep(2);
     } catch {
-      // Categories endpoint may not exist yet â€” proceed anyway
+      // Categories endpoint may not exist yet — proceed anyway
       setStep(2);
     } finally {
       setIsSaving(false);
@@ -367,7 +368,7 @@ export default function OnboardingPage() {
     kind: "id" | "license",
   ): Promise<void> => {
     if (!provider) {
-      setSaveError("Profile is still loading â€” please retry in a moment.");
+      setSaveError("Profile is still loading — please retry in a moment.");
       return;
     }
     setUploadingKind(kind);
@@ -471,7 +472,7 @@ export default function OnboardingPage() {
         </div>
       </div>
 
-      {/* Step 0 â€” Professional profile */}
+      {/* Step 0 — Professional profile */}
       {step === 0 && (
         <>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
@@ -555,7 +556,7 @@ export default function OnboardingPage() {
               )}
             </div>
 
-            {/* Service area â€” full Ghana-wide searchable picker (Mapbox
+            {/* Service area — full Ghana-wide searchable picker (Mapbox
                 Geocoding) plus a "Use my location" auto-detect that drops a
                 precise GPS pin. The picker covers every town/suburb in Ghana
                 so providers outside the big cities aren't stuck. */}
@@ -579,7 +580,7 @@ export default function OnboardingPage() {
                 onDetect={detectLocation}
                 detecting={geoStatus === "locating"}
                 error={errors.location?.message}
-                placeholder="Search any town in Ghana â€” e.g. Tarkwa, Kasoa, Bibianiâ€¦"
+                placeholder="Search any town in Ghana — e.g. Tarkwa, Kasoa, Bibiani…"
               />
               {geoStatus === "ready" && coords && (
                 <p className="mt-1 text-xs text-success-700">
@@ -595,7 +596,7 @@ export default function OnboardingPage() {
               )}
               {(geoStatus === "unavailable" || geoStatus === "timeout") && (
                 <p className="mt-1 text-xs text-gray-500">
-                  Couldn&apos;t get your location automatically â€” search for
+                  Couldn&apos;t get your location automatically — search for
                   your area instead.
                 </p>
               )}
@@ -632,7 +633,7 @@ export default function OnboardingPage() {
             />
 
             <p className="text-xs text-gray-500">
-              No hourly-rate field â€” pricing is negotiated directly with each
+              No hourly-rate field — pricing is negotiated directly with each
               customer per job.
             </p>
 
@@ -648,7 +649,7 @@ export default function OnboardingPage() {
         </>
       )}
 
-      {/* Step 1 â€” Categories */}
+      {/* Step 1 — Categories */}
       {step === 1 && (
         <>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
@@ -659,8 +660,8 @@ export default function OnboardingPage() {
             <span className="italic text-primary-600">you offer?</span>
           </h1>
           <p className="mt-2 text-sm text-gray-600">
-            Pick up to 3 categories. Customers search by category, so choose the
-            ones that best match what you do.
+            Choose the services that best match what you do. Customers find you
+            through these.
           </p>
 
           {saveError && (
@@ -670,55 +671,16 @@ export default function OnboardingPage() {
           )}
 
           <div className="mt-6">
-            {catLoading ? (
-              <div className="grid grid-cols-2 gap-3">
-                {[...Array(8)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-14 animate-pulse rounded-xl bg-gray-100"
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {categories.map((cat) => {
-                  const selected = selectedCategoryIds.includes(cat.id);
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => toggleCategory(cat.id)}
-                      className={cn(
-                        "flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm font-semibold transition-all",
-                        selected
-                          ? "border-primary-500 bg-primary-50 text-primary-700"
-                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300",
-                      )}
-                    >
-                      <Tag
-                        className={cn(
-                          "h-4 w-4 shrink-0",
-                          selected ? "text-primary-600" : "text-gray-400",
-                        )}
-                      />
-                      <span className="truncate">{cat.name}</span>
-                      {selected && (
-                        <CheckCircle className="ml-auto h-4 w-4 shrink-0 text-primary-600" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {selectedCategoryIds.length > 0 && (
-              <p className="mt-3 text-xs text-gray-500">
-                {selectedCategoryIds.length}/3 selected
-              </p>
-            )}
+            <CategoryDropdown
+              categories={categories}
+              selectedIds={selectedCategoryIds}
+              onToggle={toggleCategory}
+              maxSelectable={3}
+              loading={catLoading}
+            />
           </div>
 
-          {/* Specialties â€” narrow the broad category down. Free-text so any
+          {/* Specialties — narrow the broad category down. Free-text so any
               niche service is searchable; tag-style add/remove. Stored as
               `provider_specialties` and indexed by pg_trgm for fuzzy match. */}
           <div className="mt-6 rounded-2xl border-2 border-gray-200 bg-white p-4">
@@ -732,7 +694,7 @@ export default function OnboardingPage() {
               </label>
             </div>
             <p className="mb-3 text-xs text-gray-500">
-              Add the specific jobs you do well â€” e.g. &ldquo;Pipe leak
+              Add the specific jobs you do well — e.g. &ldquo;Pipe leak
               repair&rdquo;, &ldquo;AC gas refill&rdquo;, &ldquo;Bridal
               makeup&rdquo;. Helps customers find you for niche searches.
             </p>
@@ -763,7 +725,7 @@ export default function OnboardingPage() {
             </div>
             {specialties.length === 0 ? (
               <p className="mt-3 text-xs text-gray-400">
-                None yet â€” leave empty if your categories already describe you.
+                None yet — leave empty if your categories already describe you.
               </p>
             ) : (
               <div className="mt-3 flex flex-wrap gap-2">
@@ -809,7 +771,7 @@ export default function OnboardingPage() {
         </>
       )}
 
-      {/* Step 2 â€” Verification documents */}
+      {/* Step 2 — Verification documents */}
       {step === 2 && (
         <>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
@@ -874,7 +836,7 @@ export default function OnboardingPage() {
         </>
       )}
 
-      {/* Step 3 â€” Success */}
+      {/* Step 3 — Success */}
       {step === 3 && (
         <SuccessStep
           provider={provider}
@@ -892,7 +854,7 @@ export default function OnboardingPage() {
 /**
  * Final onboarding screen. Shows a profile-completion meter + a punch list
  * of next steps. Critically, points the user at `/services` for the gallery
- * upload â€” first-time providers had no way to discover that location before.
+ * upload — first-time providers had no way to discover that location before.
  */
 function SuccessStep({
   provider,
@@ -925,7 +887,7 @@ function SuccessStep({
       done: !!licenseDoc,
     },
     {
-      label: "Work gallery â€” upload 3â€“6 photos on /services",
+      label: "Work gallery — upload 3–6 photos on /services",
       done: (provider?.gallery?.length ?? 0) >= 3,
       nextHref: "/services",
     },
@@ -947,7 +909,7 @@ function SuccessStep({
       </h1>
       <p className="mt-3 text-center text-sm text-gray-600">
         Your profile is submitted. Once an admin approves your verification
-        documents (usually 1â€“2 business days), customers can discover and book
+        documents (usually 1–2 business days), customers can discover and book
         your services.
       </p>
 
@@ -965,7 +927,7 @@ function SuccessStep({
         </div>
         <p className="mt-3 text-xs text-gray-600">
           {pct === 100
-            ? "Beautiful â€” your profile looks great."
+            ? "Beautiful — your profile looks great."
             : pct >= 66
               ? "Almost there. Finish the items below to maximise booking trust."
               : "Profiles with gallery photos book ~3Ã— more often."}
@@ -995,7 +957,7 @@ function SuccessStep({
         </CardContent>
       </Card>
 
-      {/* Gallery nudge â€” first-time providers don't know where it lives */}
+      {/* Gallery nudge — first-time providers don't know where it lives */}
       {(provider?.gallery?.length ?? 0) < 3 && (
         <div className="mt-4 rounded-2xl border-2 border-amber-200 bg-amber-50 p-4">
           <div className="flex items-start gap-3">
@@ -1007,7 +969,7 @@ function SuccessStep({
               <p className="mt-1 text-xs text-amber-800">
                 Customers trust providers with photos of past work. Head to{" "}
                 <strong>Services</strong> in the sidebar (or the link below) and
-                use the &ldquo;Gallery&rdquo; uploader to drop 3â€“6 photos.
+                use the &ldquo;Gallery&rdquo; uploader to drop 3–6 photos.
               </p>
               <Button
                 size="sm"

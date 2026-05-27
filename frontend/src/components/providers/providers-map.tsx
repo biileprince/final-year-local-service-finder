@@ -56,17 +56,25 @@ export function ProvidersMap({
             typeof x.p.latitude === "number" &&
             typeof x.p.longitude === "number",
         );
-      return filtered.map(({ p, originalIdx }) => ({
-        id: p.id,
-        name: p.user?.name ?? "Provider",
-        latitude: p.latitude,
-        longitude: p.longitude,
-        profileImage: p.user?.profileImage,
-        rating: p.rating,
-        location: p.location,
-        // 1-based to match the visible card list.
-        index: numbered ? originalIdx + 1 : undefined,
-      }));
+      return filtered.map(({ p, originalIdx }) => {
+        const primaryCategory =
+          p.categories.find((c) => c.isPrimary)?.category?.name ??
+          p.categories[0]?.category?.name ??
+          undefined;
+        return {
+          id: p.id,
+          name: p.user?.name ?? "Provider",
+          latitude: p.latitude,
+          longitude: p.longitude,
+          profileImage: p.user?.profileImage,
+          rating: p.rating,
+          reviewCount: p.reviewCount,
+          location: p.location,
+          primaryCategory,
+          // 1-based to match the visible card list.
+          index: numbered ? originalIdx + 1 : undefined,
+        };
+      });
     },
     [providers, numbered],
   );

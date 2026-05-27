@@ -21,6 +21,8 @@ import {
   Paintbrush,
   Filter,
   Map as MapIcon,
+  ChevronRight,
+  Navigation,
 } from "lucide-react";
 import { ProvidersMap } from "@/components/providers/providers-map";
 import { queryPermission } from "@/lib/permissions";
@@ -133,10 +135,6 @@ function SearchContent() {
       ? (raw as SortBy)
       : "relevance";
   });
-  const [maxHourlyRate, setMaxHourlyRate] = useState<number | null>(
-    parseNumberParam("maxHourlyRate"),
-  );
-
   // Geo-radius: only active once the user grants location permission. If lat
   // + lng are in the URL we seed them so a shared link reconstructs the geo
   // filter without re-prompting; status stays "ready" because we trust the
@@ -248,7 +246,6 @@ function SearchContent() {
         lng: geo?.lng,
         radiusKm: geo ? radiusKm : undefined,
         minRating: minRating > 0 ? minRating : undefined,
-        maxHourlyRate: maxHourlyRate ?? undefined,
         verified: verifiedOnly || undefined,
         sortBy,
         limit: 30,
@@ -268,7 +265,6 @@ function SearchContent() {
     geo,
     radiusKm,
     minRating,
-    maxHourlyRate,
     verifiedOnly,
     sortBy,
   ]);
@@ -278,7 +274,6 @@ function SearchContent() {
   }, [
     resolvedCategoryId,
     minRating,
-    maxHourlyRate,
     verifiedOnly,
     sortBy,
     geo,
@@ -306,8 +301,6 @@ function SearchContent() {
     if (locationQuery.trim()) params.set("location", locationQuery.trim());
     if (selectedCategory !== "all") params.set("category", selectedCategory);
     if (minRating > 0) params.set("minRating", String(minRating));
-    if (maxHourlyRate !== null)
-      params.set("maxHourlyRate", String(maxHourlyRate));
     if (verifiedOnly) params.set("verified", "true");
     if (sortBy !== "relevance") params.set("sortBy", sortBy);
     if (geo) {
@@ -324,7 +317,6 @@ function SearchContent() {
     locationQuery,
     selectedCategory,
     minRating,
-    maxHourlyRate,
     verifiedOnly,
     sortBy,
     geo,
@@ -338,14 +330,12 @@ function SearchContent() {
     setVerifiedOnly(false);
     setAvailabilityFilter(null);
     setSortBy(geo ? "distance" : "relevance");
-    setMaxHourlyRate(null);
   };
 
   const activeFiltersCount =
     (minRating > 0 ? 1 : 0) +
     (verifiedOnly ? 1 : 0) +
     (availabilityFilter ? 1 : 0) +
-    (maxHourlyRate ? 1 : 0) +
     (geo ? 1 : 0);
 
   return (
@@ -481,30 +471,57 @@ function SearchContent() {
 
         {/* Category pills */}
         <div className="mx-auto max-w-7xl px-4 py-2 sm:px-6 lg:px-8">
-          <div className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
-            <CategoryPill
-              active={selectedCategory === "all"}
-              onClick={() => handleCategoryChange("all")}
+          <div className="relative">
+            <div
+              id="search-category-pills"
+              className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0"
             >
-              All Services
-            </CategoryPill>
-            {categories.map((c) => {
-              const Icon = categoryIcons[c.slug] ?? Wrench;
-              const slug = c.slug || c.id;
-              return (
-                <CategoryPill
-                  key={c.id}
-                  active={
-                    selectedCategory === slug || selectedCategory === c.id
-                  }
-                  onClick={() => handleCategoryChange(slug)}
-                >
-                  <Icon className="h-4 w-4" strokeWidth={2} />
-                  {c.name}
-                </CategoryPill>
-              );
-            })}
+              <CategoryPill
+                active={selectedCategory === "all"}
+                onClick={() => handleCategoryChange("all")}
+              >
+                All Services
+              </CategoryPill>
+              {categories.map((c) => {
+                const Icon = categoryIcons[c.slug] ?? Wrench;
+                const slug = c.slug || c.id;
+                return (
+                  <CategoryPill
+                    key={c.id}
+                    active={
+                      selectedCategory === slug || selectedCategory === c.id
+                    }
+                    onClick={() => handleCategoryChange(slug)}
+                  >
+                    <Icon className="h-4 w-4" strokeWidth={2} />
+                    {c.name}
+                  </CategoryPill>
+                );
+              })}
+              {/* Spacer so the fade doesn't cover the last pill */}
+              <div aria-hidden className="w-12 shrink-0 sm:w-16" />
+            </div>
+            {/* Right-edge gradient + arrow hints there's more to scroll. The pointer-events-none
+                makes it click-through; the button on top stays clickable. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute right-0 top-0 h-full w-16 bg-linear-to-l from-white via-white/85 to-transparent"
+            />
+            <button
+              type="button"
+              aria-label="Scroll categories right"
+              onClick={() => {
+                const el = document.getElementById("search-category-pills");
+                if (el) el.scrollBy({ left: 240, behavior: "smooth" });
+              }}
+              className="absolute right-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-md transition-colors hover:bg-primary-50 hover:text-primary-700"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
+          <p className="mt-1 text-[11px] font-medium text-gray-500 sm:hidden">
+            Swipe to see more services →
+          </p>
         </div>
       </div>
 
@@ -629,28 +646,6 @@ function SearchContent() {
                 ))}
               </FilterGroup>
 
-              {/* Max hourly rate */}
-              <FilterGroup label="Max hourly rate">
-                <div className="space-y-2">
-                  {[
-                    { value: null, label: "Any price" },
-                    { value: 50, label: "Up to GH₵50/hr" },
-                    { value: 100, label: "Up to GH₵100/hr" },
-                    { value: 200, label: "Up to GH₵200/hr" },
-                    { value: 500, label: "Up to GH₵500/hr" },
-                  ].map((opt) => (
-                    <RadioRow
-                      key={String(opt.value)}
-                      active={maxHourlyRate === opt.value}
-                      onClick={() => setMaxHourlyRate(opt.value)}
-                      name="price"
-                    >
-                      {opt.label}
-                    </RadioRow>
-                  ))}
-                </div>
-              </FilterGroup>
-
               {/* Verified */}
               <FilterGroup label="Trust" last>
                 <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-gray-50 p-3 transition-colors hover:bg-gray-100">
@@ -696,7 +691,30 @@ function SearchContent() {
                 )}
               </p>
 
-              <div className="hidden items-center gap-2 md:flex">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Near Me — prominent on the right so the user can find it
+                    without opening the sidebar/filters drawer. */}
+                {geo ? (
+                  <button
+                    type="button"
+                    onClick={clearGeo}
+                    className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-primary-100 px-4 py-2 text-sm font-bold text-primary-800 ring-2 ring-primary-300 transition-colors hover:bg-primary-200"
+                  >
+                    <Navigation className="h-4 w-4" />
+                    Near me · {radiusKm} km
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={requestGeolocation}
+                    disabled={geoStatus === "locating" || geoStatus === "unsupported"}
+                    className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-bold text-white shadow-md shadow-primary-500/30 transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Navigation className="h-4 w-4" />
+                    {geoStatus === "locating" ? "Locating…" : "Near me"}
+                  </button>
+                )}
                 <QuickChip
                   active={verifiedOnly}
                   onClick={() => setVerifiedOnly(!verifiedOnly)}
@@ -717,6 +735,21 @@ function SearchContent() {
                   <Clock className="h-3.5 w-3.5" />
                   Today
                 </QuickChip>
+                {/* Quick jump to Map view — makes the map discoverable for users
+                    who'd otherwise miss the small icon toggle in the header. */}
+                <button
+                  type="button"
+                  onClick={() => setViewMode(viewMode === "map" ? "grid" : "map")}
+                  className={cn(
+                    "inline-flex min-h-[44px] items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition-colors",
+                    viewMode === "map"
+                      ? "bg-amber-100 text-amber-800 ring-2 ring-amber-300"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200",
+                  )}
+                >
+                  <MapIcon className="h-4 w-4" />
+                  {viewMode === "map" ? "Hide map" : "View on map"}
+                </button>
               </div>
             </div>
 
@@ -808,24 +841,17 @@ function SearchContent() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <ProvidersMap
-                      providers={providers}
-                      userLocation={geo}
-                      enableRouting={!!geo}
-                      numbered
-                      selectedProviderId={selectedMapId}
-                      onProviderSelect={setSelectedMapId}
-                    />
-                    {/* Numbered strip — synced 1:1 with the pins above. Click a
-                        card to fly the map there and (when geo is on) draw a
-                        driving route. */}
-                    <p className="text-xs text-secondary-500">
-                      {geo
-                        ? "Tap a card or pin — driving directions appear once selected."
-                        : "Tap a pin or card to see provider details. Enable location for routing."}
-                    </p>
-                    <div className="-mx-2 flex snap-x snap-mandatory gap-3 overflow-x-auto px-2 pb-2">
+                  <div className="space-y-4">
+                    {/* Numbered strip first — cards at the top so the user
+                        immediately sees who matched; the map below cross-references
+                        them. Click a card to fly the map there and (when geo is on)
+                        draw a driving route. */}
+                    <div className="rounded-2xl border-2 border-primary-100 bg-primary-50/40 p-3">
+                      <p className="mb-2 flex items-center gap-2 text-sm font-bold text-primary-800">
+                        <MapIcon className="h-4 w-4" />
+                        Tap a card to locate them on the map below
+                      </p>
+                      <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
                       {providers.map((p, i) => {
                         const isSelected = selectedMapId === p.id;
                         const hasPin =
@@ -918,6 +944,31 @@ function SearchContent() {
                           </button>
                         );
                       })}
+                      </div>
+                    </div>
+
+                    {/* Map header — explicit label so the user knows this big
+                        rectangle IS the interactive map. */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-2xl border-2 border-b-0 border-gray-200 bg-white px-4 py-2">
+                      <p className="flex items-center gap-2 text-sm font-bold text-gray-800">
+                        <MapIcon className="h-4 w-4 text-primary-600" />
+                        Interactive map
+                      </p>
+                      <p className="text-xs text-secondary-500">
+                        {geo
+                          ? "Tap a card or pin — driving directions appear once selected."
+                          : "Tap a pin or card to see provider details. Enable location for routing."}
+                      </p>
+                    </div>
+                    <div className="-mt-4">
+                      <ProvidersMap
+                        providers={providers}
+                        userLocation={geo}
+                        enableRouting={!!geo}
+                        numbered
+                        selectedProviderId={selectedMapId}
+                        onProviderSelect={setSelectedMapId}
+                      />
                     </div>
                   </div>
                 )}
@@ -1067,27 +1118,6 @@ function SearchContent() {
                 ))}
               </FilterGroup>
 
-              <FilterGroup label="Max hourly rate">
-                <div className="space-y-2">
-                  {[
-                    { value: null, label: "Any price" },
-                    { value: 50, label: "Up to GH₵50/hr" },
-                    { value: 100, label: "Up to GH₵100/hr" },
-                    { value: 200, label: "Up to GH₵200/hr" },
-                    { value: 500, label: "Up to GH₵500/hr" },
-                  ].map((opt) => (
-                    <RadioRow
-                      key={String(opt.value)}
-                      active={maxHourlyRate === opt.value}
-                      onClick={() => setMaxHourlyRate(opt.value)}
-                      name="m-price"
-                    >
-                      {opt.label}
-                    </RadioRow>
-                  ))}
-                </div>
-              </FilterGroup>
-
               <FilterGroup label="Trust" last>
                 <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-gray-50 p-3">
                   <input
@@ -1152,12 +1182,15 @@ function ProviderGridCard({ provider }: { provider: Provider }) {
 
         <div className="p-4">
           {/* Name + verification */}
-          <div className="mb-1 flex items-start gap-2">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
             <h3 className="text-base font-bold text-gray-900">
               {provider.user.name}
             </h3>
             {verified && (
-              <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 fill-blue-500 text-white" />
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 ring-1 ring-blue-200">
+                <CheckCircle className="h-3 w-3 fill-blue-500 text-white" />
+                Verified
+              </span>
             )}
           </div>
 
@@ -1166,22 +1199,39 @@ function ProviderGridCard({ provider }: { provider: Provider }) {
             {primaryCategory?.name ?? "Service provider"}
           </p>
 
-          {/* All categories */}
+          {/* All categories — color-tinted so multi-service providers are
+              visually distinguishable at a glance. */}
           {provider.categories.length > 1 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {provider.categories.map((pc) => (
-                <span
-                  key={pc.id}
-                  className={cn(
-                    "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
-                    pc.isPrimary
-                      ? "bg-primary-100 text-primary-700"
-                      : "bg-gray-100 text-gray-600",
-                  )}
-                >
-                  {pc.category.name}
-                </span>
-              ))}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {provider.categories.map((pc) => {
+                const accent = pc.category.color || "#3B82F6";
+                return (
+                  <span
+                    key={pc.id}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold",
+                      pc.isPrimary ? "ring-1 ring-current" : "border-transparent",
+                    )}
+                    style={{
+                      color: accent,
+                      backgroundColor: `${accent}1A`,
+                      borderColor: pc.isPrimary ? accent : "transparent",
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: accent }}
+                    />
+                    {pc.category.name}
+                    {pc.isPrimary && (
+                      <span className="text-[9px] font-bold uppercase opacity-70">
+                        Main
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
             </div>
           )}
 

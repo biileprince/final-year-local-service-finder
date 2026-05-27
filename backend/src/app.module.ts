@@ -37,7 +37,14 @@ import { FavoritesModule } from "./modules/favorites/favorites.module";
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [".env.local", ".env"],
+      // Env file precedence: the FIRST file that defines a key wins. When
+      // NODE_ENV=production we load `.env.production.local` (local overrides
+      // for URLs/CORS so prod code can run against localhost frontends) on
+      // top of `.env.production` (real prod secrets — gitignored).
+      envFilePath:
+        process.env.NODE_ENV === "production"
+          ? [".env.production.local", ".env.production"]
+          : [".env.local", ".env"],
       validate: validateEnv,
     }),
 

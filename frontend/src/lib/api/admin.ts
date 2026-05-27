@@ -123,6 +123,18 @@ export const adminService = {
     return apiClient.post(`/admin/users/${id}/reactivate`, {}, true);
   },
 
+  async messageUser(
+    id: string,
+    subject: string,
+    message: string,
+  ): Promise<{ success: boolean }> {
+    return apiClient.post(
+      `/admin/users/${id}/message`,
+      { subject, message },
+      true,
+    );
+  },
+
   async updateUserRole(
     id: string,
     role: "CUSTOMER" | "PROVIDER" | "ADMIN",
