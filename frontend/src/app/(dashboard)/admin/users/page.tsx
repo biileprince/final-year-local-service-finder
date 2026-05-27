@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Search, Shield, ShieldOff, UserCog } from "lucide-react";
+import { Search, Shield, ShieldOff, UserCog, MessageSquare, Send, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -26,6 +26,9 @@ export default function AdminUsersPage() {
   const [reason, setReason] = useState("");
   const [reactivateTarget, setReactivateTarget] = useState<AdminUser | null>(null);
   const [roleEditTarget, setRoleEditTarget] = useState<AdminUser | null>(null);
+  const [messageTarget, setMessageTarget] = useState<AdminUser | null>(null);
+  const [msgSubject, setMsgSubject] = useState("");
+  const [msgBody, setMsgBody] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,6 +67,39 @@ export default function AdminUsersPage() {
       toast({
         variant: "error",
         title: "Suspend failed",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageTarget) return;
+    const subject = msgSubject.trim();
+    const body = msgBody.trim();
+    if (!subject || !body) {
+      toast({
+        variant: "error",
+        title: "Subject and message are required",
+      });
+      return;
+    }
+    setBusy(messageTarget.id);
+    try {
+      await adminService.messageUser(messageTarget.id, subject, body);
+      toast({
+        variant: "success",
+        title: "Message sent",
+        description: `Delivered to ${messageTarget.name}'s notifications.`,
+      });
+      setMessageTarget(null);
+      setMsgSubject("");
+      setMsgBody("");
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Send failed",
         description: err instanceof Error ? err.message : "Try again.",
       });
     } finally {
@@ -134,7 +170,7 @@ export default function AdminUsersPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && load()}
-            placeholder="Search by name or emailâ€¦"
+            placeholder="Search by name or email…"
             className="h-11 w-full rounded-lg border border-secondary-300 bg-white pl-10 pr-4 text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
           />
         </div>
@@ -190,10 +226,18 @@ export default function AdminUsersPage() {
                     <p className="truncate text-sm text-secondary-500">{u.email}</p>
                     <p className="text-xs text-secondary-400">
                       Joined {new Date(u.createdAt).toLocaleDateString()}
-                      {u.lastLoginAt && ` Â· last login ${new Date(u.lastLoginAt).toLocaleDateString()}`}
+                      {u.lastLoginAt && ` · last login ${new Date(u.lastLoginAt).toLocaleDateString()}`}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => setMessageTarget(u)}
+                      disabled={busy === u.id}
+                    >
+                      <MessageSquare className="mr-1 h-4 w-4" />
+                      Message
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -233,7 +277,7 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      {/* Suspend dialog â€” inline modal with reason field */}
+      {/* Suspend dialog — inline modal with reason field */}
       {suspendTarget && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
@@ -261,7 +305,7 @@ export default function AdminUsersPage() {
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Reason (internal note)â€¦"
+                placeholder="Reason (internal note)…"
                 rows={3}
                 className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               />
@@ -282,6 +326,105 @@ export default function AdminUsersPage() {
                   isLoading={busy === suspendTarget.id}
                 >
                   Suspend
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Admin → user direct message. Delivered via the notifications pipeline
+          so the recipient sees both a toast (if online) and a row in their
+          bell list. One-way for now — a future schema change could promote
+          this to a two-way chat. */}
+      {messageTarget && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => {
+            if (busy !== messageTarget.id) {
+              setMessageTarget(null);
+              setMsgSubject("");
+              setMsgBody("");
+            }
+          }}
+        >
+          <Card
+            className="w-full max-w-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardContent className="space-y-4 p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="flex items-center gap-2 text-lg font-semibold text-secondary-900">
+                    <MessageSquare className="h-5 w-5 text-primary-600" />
+                    Message {messageTarget.name}
+                  </h3>
+                  <p className="mt-1 text-sm text-secondary-500">
+                    Goes straight to their in-app notifications.{" "}
+                    <span className="text-secondary-400">({messageTarget.email})</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessageTarget(null);
+                    setMsgSubject("");
+                    setMsgBody("");
+                  }}
+                  disabled={busy === messageTarget.id}
+                  className="rounded-full p-1.5 text-secondary-400 hover:bg-secondary-100 hover:text-secondary-700"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-secondary-500">
+                  Subject
+                </label>
+                <input
+                  value={msgSubject}
+                  onChange={(e) => setMsgSubject(e.target.value)}
+                  maxLength={120}
+                  placeholder="e.g. Verification documents needed"
+                  className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-secondary-500">
+                  Message
+                </label>
+                <textarea
+                  value={msgBody}
+                  onChange={(e) => setMsgBody(e.target.value)}
+                  maxLength={2000}
+                  rows={5}
+                  placeholder="Write your message…"
+                  className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                />
+                <p className="mt-1 text-right text-xs text-secondary-400">
+                  {msgBody.length}/2000
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setMessageTarget(null);
+                    setMsgSubject("");
+                    setMsgBody("");
+                  }}
+                  disabled={busy === messageTarget.id}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSendMessage}
+                  isLoading={busy === messageTarget.id}
+                  disabled={!msgSubject.trim() || !msgBody.trim()}
+                >
+                  <Send className="mr-1.5 h-4 w-4" />
+                  Send message
                 </Button>
               </div>
             </CardContent>

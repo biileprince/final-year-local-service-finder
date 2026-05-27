@@ -38,7 +38,33 @@ const serviceChips = [
   "AC Repair",
   "Handyman",
   "Laundry",
+  "Gardening",
+  "Pest Control",
+  "Moving",
+  "Beauty",
+  "Tutoring",
+  "Auto Repair",
+  "Catering",
+  "Photography",
 ];
+
+interface LocationStat {
+  location: string;
+  providerCount: number;
+}
+
+async function fetchTopLocations(): Promise<LocationStat[]> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+  try {
+    const res = await fetch(`${apiUrl}/search/locations?limit=8`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return [];
+    return (await res.json()) as LocationStat[];
+  } catch {
+    return [];
+  }
+}
 
 const howItWorksCustomer = [
   {
@@ -97,7 +123,8 @@ const benefits = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const topLocations = await fetchTopLocations();
   return (
     <div className="bg-white">
       {/* ====== Hero ====== */}
@@ -377,26 +404,37 @@ export default function HomePage() {
                 Search by area or service. You can message a service provider
                 and ask questions before you book.
               </p>
-              <div className="mt-8 rounded-2xl border border-secondary-200 bg-white p-6">
-                <div className="flex items-center justify-between py-2 text-base">
-                  <span className="font-bold text-secondary-900">
-                    Accra
-                  </span>
-                  <span className="text-secondary-500">340 providers</span>
-                </div>
-                <div className="mt-2 flex items-center justify-between border-t border-secondary-100 py-2 text-base">
-                  <span className="font-bold text-secondary-900">
-                    Kumasi
-                  </span>
-                  <span className="text-secondary-500">210 providers</span>
-                </div>
-                <div className="mt-2 flex items-center justify-between border-t border-secondary-100 py-2 text-base">
-                  <span className="font-bold text-secondary-900">
-                    Takoradi
-                  </span>
-                  <span className="text-secondary-500">95 providers</span>
-                </div>
+              <div className="mt-8 rounded-2xl border border-secondary-200 bg-white p-2">
+                {topLocations.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-secondary-500">
+                    Provider locations will appear here once available.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-secondary-100">
+                    {topLocations.map((loc) => (
+                      <li key={loc.location}>
+                        <Link
+                          href={`/search?location=${encodeURIComponent(loc.location)}`}
+                          className="group flex items-center justify-between rounded-xl px-4 py-3 text-base transition-colors hover:bg-primary-50"
+                        >
+                          <span className="flex items-center gap-2 font-bold text-secondary-900 group-hover:text-primary-700">
+                            <MapPin className="h-4 w-4 text-primary-500" />
+                            {loc.location}
+                          </span>
+                          <span className="flex items-center gap-2 text-sm font-medium text-secondary-500 group-hover:text-primary-600">
+                            {loc.providerCount} provider
+                            {loc.providerCount === 1 ? "" : "s"}
+                            <ArrowRight className="h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
+              <p className="mt-3 text-xs text-secondary-500">
+                Tap a city to see local providers there.
+              </p>
             </div>
           </div>
         </div>

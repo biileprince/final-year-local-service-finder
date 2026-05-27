@@ -99,6 +99,12 @@ export const searchService = {
     return apiClient.get<TrendingResponse>(`/search/trending`);
   },
 
+  topLocations(limit = 8): Promise<Array<{ location: string; providerCount: number }>> {
+    return apiClient.get<Array<{ location: string; providerCount: number }>>(
+      `/search/locations?limit=${limit}`,
+    );
+  },
+
   searchProviders(params: AdvancedSearchParams): Promise<AdvancedSearchResponse> {
     // categoryIds is sent comma-joined; the backend accepts both shapes.
     const flat: Record<string, unknown> = { ...params };

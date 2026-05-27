@@ -30,6 +30,7 @@ import {
   LocationPicker,
   type PickedLocation,
 } from "@/components/onboarding/location-picker";
+import { CategoryDropdown } from "@/components/onboarding/category-dropdown";
 import type { Provider, Category, ProviderHours, ProviderService } from "@/types";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -62,7 +63,7 @@ export default function ProviderServicesPage() {
   const [location, setLocation] = useState("");
   // Coords captured by the Mapbox-backed picker. We track whether the user has
   // actively re-picked their location in this session so we only ship new
-  // lat/lng to the server when the label was changed â€” typing a different city
+  // lat/lng to the server when the label was changed — typing a different city
   // without picking from the dropdown shouldn't keep the old (now stale) pin.
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     null,
@@ -138,7 +139,7 @@ export default function ProviderServicesPage() {
           setLocationTouched(false);
         } catch (err) {
           // 404 / "not found" means the provider row was never created during
-          // onboarding â€” route them through that flow instead of error-pageing.
+          // onboarding — route them through that flow instead of error-pageing.
           const msg = err instanceof Error ? err.message.toLowerCase() : "";
           if (msg.includes("not found") || msg.includes("404")) {
             setNeedsOnboarding(true);
@@ -412,7 +413,7 @@ export default function ProviderServicesPage() {
         hourlyRate: rateNum,
         yearsExperience: yearsNum,
         location: location.trim(),
-        // Only ship coords when the user picked a new location this session â€”
+        // Only ship coords when the user picked a new location this session —
         // avoids accidentally re-sending stale lat/lng if they only edited the
         // text by hand, in which case the server should keep what it has.
         ...(locationTouched && coords
@@ -478,9 +479,12 @@ export default function ProviderServicesPage() {
       )}
 
       {/* Service profile */}
-      <Card>
+      <Card id="section-profile" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>Service profile</CardTitle>
+          <p className="mt-1 text-sm text-secondary-600">
+            Your bio, service area, and rate — this is what customers see first.
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
@@ -491,7 +495,7 @@ export default function ProviderServicesPage() {
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               rows={4}
-              placeholder="Describe your services, experience, and what makes you stand outâ€¦"
+              placeholder="Describe your services, experience, and what makes you stand out…"
               className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             />
           </div>
@@ -537,7 +541,7 @@ export default function ProviderServicesPage() {
                   setCoords(null);
                   setLocationTouched(true);
                 }}
-                placeholder="Search any town in Ghana â€” e.g. Accra, Tarkwaâ€¦"
+                placeholder="Search any town in Ghana — e.g. Accra, Tarkwa…"
               />
               {coords && !locationTouched && (
                 <p className="mt-1 text-xs text-secondary-500">
@@ -547,12 +551,12 @@ export default function ProviderServicesPage() {
               )}
               {locationTouched && coords && (
                 <p className="mt-1 text-xs text-success-700">
-                  New pin captured â€” save to update your map location.
+                  New pin captured — save to update your map location.
                 </p>
               )}
               {locationTouched && !coords && (
                 <p className="mt-1 text-xs text-amber-700 dark:text-amber-200">
-                  Pick a location from the suggestions to set a new map pin â€”
+                  Pick a location from the suggestions to set a new map pin —
                   saving without a pick leaves the existing pin unchanged.
                 </p>
               )}
@@ -562,45 +566,26 @@ export default function ProviderServicesPage() {
       </Card>
 
       {/* Categories */}
-      <Card>
+      <Card id="section-categories" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>Service categories</CardTitle>
+          <p className="mt-1 text-sm text-secondary-600">
+            Choose the categories you offer. These are how customers find you.
+          </p>
         </CardHeader>
         <CardContent>
-          {categories.length === 0 ? (
-            <p className="text-sm text-secondary-500">
-              No categories available.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {categories.map((cat) => {
-                const active = selectedCategoryIds.has(cat.id);
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => toggleCategory(cat.id)}
-                    className={`inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-sm font-semibold transition-colors ${
-                      active
-                        ? "border-primary-500 bg-primary-50 text-primary-700"
-                        : "border-secondary-200 bg-white text-secondary-700 hover:border-primary-300"
-                    }`}
-                  >
-                    <Briefcase className="h-3.5 w-3.5" />
-                    {cat.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <p className="mt-3 text-xs text-secondary-500">
-            {selectedCategoryIds.size} selected
-          </p>
+          <CategoryDropdown
+            categories={categories}
+            selectedIds={Array.from(selectedCategoryIds)}
+            onToggle={toggleCategory}
+            maxSelectable={3}
+            loading={categories.length === 0 && loading}
+          />
         </CardContent>
       </Card>
 
       {/* Specialties */}
-      <Card>
+      <Card id="section-specialties" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>Specialties</CardTitle>
         </CardHeader>
@@ -625,7 +610,7 @@ export default function ProviderServicesPage() {
           </div>
           {specialties.length === 0 ? (
             <p className="text-sm text-secondary-500">
-              No specialties yet â€” add the specific services you offer.
+              No specialties yet — add the specific services you offer.
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
@@ -652,7 +637,7 @@ export default function ProviderServicesPage() {
       </Card>
 
       {/* Verification documents */}
-      <Card>
+      <Card id="section-verification" className="scroll-mt-24">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary-600" />
@@ -715,7 +700,7 @@ export default function ProviderServicesPage() {
                   ) : (
                     <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-3 py-2 text-sm font-semibold text-secondary-700 hover:border-primary-400 hover:bg-primary-50">
                       <ImagePlus className="h-4 w-4" />
-                      {uploadingDoc === kind ? "Uploadingâ€¦" : "Upload"}
+                      {uploadingDoc === kind ? "Uploading…" : "Upload"}
                       <input
                         type="file"
                         accept="image/*,application/pdf"
@@ -733,18 +718,18 @@ export default function ProviderServicesPage() {
       </Card>
 
       {/* Gallery */}
-      <Card>
+      <Card id="section-gallery" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>Portfolio gallery</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-secondary-600">
-            Show off past work â€” these images appear on your public profile.
+            Show off past work — these images appear on your public profile.
           </p>
 
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed border-gray-300 px-4 py-3 text-sm font-semibold text-secondary-700 hover:border-primary-400 hover:bg-primary-50">
             <ImagePlus className="h-4 w-4" />
-            {uploadingGallery ? "Uploadingâ€¦" : "Upload images"}
+            {uploadingGallery ? "Uploading…" : "Upload images"}
             <input
               type="file"
               accept="image/*"
@@ -900,7 +885,7 @@ export default function ProviderServicesPage() {
       </Card>
 
       {/* Service offerings */}
-      <Card>
+      <Card id="section-services" className="scroll-mt-24">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-primary-600" />
@@ -1098,7 +1083,7 @@ function ProviderProfileMissingCard() {
         </h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-secondary-600">
           You haven&apos;t finished provider onboarding yet. Add your service
-          bio, location, and verification documents â€” then you can start
+          bio, location, and verification documents — then you can start
           managing services here.
         </p>
         <Button asChild className="mt-6">

@@ -12,7 +12,8 @@ import Map, {
 } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import Link from "next/link";
-import { MapPin, Star } from "lucide-react";
+import Image from "next/image";
+import { MapPin, Star, Briefcase } from "lucide-react";
 import { useTheme } from "@/components/theme/theme-provider";
 
 export interface MapProvider {
@@ -22,7 +23,9 @@ export interface MapProvider {
   longitude: number;
   profileImage?: string;
   rating?: number;
+  reviewCount?: number;
   location?: string;
+  primaryCategory?: string;
   /** 1-based label shown on the marker. Lets callers sync pins to a numbered result list. */
   index?: number;
 }
@@ -336,30 +339,70 @@ export default function InteractiveMap({
             onClose={() => setSelectedId(null)}
             className="lsf-mapbox-popup"
           >
-            <div className="min-w-[160px] p-1">
-              {linkProviderProfile ? (
-                <Link
-                  href={`/providers/${selected.id}`}
-                  className="text-sm font-semibold text-primary-700 hover:underline"
-                >
-                  {selected.name}
-                </Link>
-              ) : (
-                <p className="text-sm font-semibold text-secondary-900">
-                  {selected.name}
-                </p>
-              )}
+            <div className="min-w-[200px] max-w-[240px] p-1">
+              <div className="flex items-start gap-2">
+                {selected.profileImage ? (
+                  <Image
+                    src={selected.profileImage}
+                    alt={selected.name}
+                    width={44}
+                    height={44}
+                    className="h-11 w-11 shrink-0 rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary-100 text-primary-600">
+                    <MapPin className="h-5 w-5" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  {linkProviderProfile ? (
+                    <Link
+                      href={`/providers/${selected.id}`}
+                      className="block truncate text-sm font-semibold text-primary-700 hover:underline"
+                    >
+                      {selected.name}
+                    </Link>
+                  ) : (
+                    <p className="truncate text-sm font-semibold text-secondary-900">
+                      {selected.name}
+                    </p>
+                  )}
+                  {selected.primaryCategory && (
+                    <p className="mt-0.5 flex items-center gap-1 truncate text-xs font-medium text-primary-600">
+                      <Briefcase className="h-3 w-3" />
+                      {selected.primaryCategory}
+                    </p>
+                  )}
+                </div>
+              </div>
               {selected.location && (
-                <p className="mt-0.5 text-xs text-secondary-500">
+                <p className="mt-1.5 flex items-center gap-1 text-xs text-secondary-500">
+                  <MapPin className="h-3 w-3" />
                   {selected.location}
                 </p>
               )}
               {typeof selected.rating === "number" && selected.rating > 0 && (
-                <p className="mt-1 flex items-center gap-1 text-xs text-amber-600">
+                <p className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-700">
                   <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                   {selected.rating.toFixed(1)}
+                  {selected.reviewCount ? (
+                    <span className="text-secondary-500">
+                      ({selected.reviewCount})
+                    </span>
+                  ) : null}
                 </p>
               )}
+              {linkProviderProfile && (
+                <Link
+                  href={`/providers/${selected.id}`}
+                  className="mt-2 block w-full rounded-lg bg-primary-600 px-3 py-1.5 text-center text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-700"
+                >
+                  View &amp; book
+                </Link>
+              )}
+              <p className="mt-1.5 text-[10px] italic leading-tight text-secondary-500">
+                Contact details unlock after you book this provider.
+              </p>
             </div>
           </Popup>
         )}

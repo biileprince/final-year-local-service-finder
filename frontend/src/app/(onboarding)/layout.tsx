@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import Image from "next/image";
 
 export const metadata: Metadata = {
   title: "Set up your provider profile",
@@ -19,11 +19,16 @@ export default function OnboardingLayout({
           <Link
             href="/"
             className="group flex items-center gap-2.5"
-            aria-label="Home"
+            aria-label="Local Service Finder home"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary-500 to-primary-600 shadow-md transition-all group-hover:shadow-lg group-hover:shadow-primary-500/30">
-              <Search className="h-5 w-5 text-white" strokeWidth={2.5} />
-            </span>
+            <Image
+              src="/images/local-service-finder-icon.png"
+              alt=""
+              width={40}
+              height={40}
+              priority
+              className="h-10 w-10 shrink-0 rounded-xl object-contain transition-transform group-hover:scale-105"
+            />
             <span className="flex flex-col leading-tight">
               <span className="font-sans text-base font-bold tracking-tight text-gray-900">
                 Local Service

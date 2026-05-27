@@ -193,7 +193,7 @@ export function SearchOverlay({ open, onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search services, providers, specialties, locationsâ€¦"
+            placeholder="Search services, providers, specialties, locations…"
             className="w-full bg-transparent text-base font-medium outline-none placeholder:text-gray-500 sm:text-lg"
             aria-label="Search"
             autoComplete="off"
@@ -618,7 +618,7 @@ function KbdHint({ label, text }: { label: string; text: string }) {
 }
 
 // =========================================================================
-// localStorage helpers â€” recent searches
+// localStorage helpers — recent searches
 // =========================================================================
 
 function loadRecent(): string[] {

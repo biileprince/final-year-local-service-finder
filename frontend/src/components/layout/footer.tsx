@@ -117,8 +117,8 @@ export function Footer() {
 
         {/* Contact strip */}
         <div className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-secondary-200 pt-8 text-sm text-secondary-600">
-          <ContactItem icon={MapPin}>Accra, Ghana</ContactItem>
-          <ContactItem icon={Phone}>+233 XX XXX XXXX</ContactItem>
+          <ContactItem icon={MapPin}>Cape Coast, Ghana</ContactItem>
+          <ContactItem icon={Phone}>+233 55 902 675</ContactItem>
           <ContactItem icon={Mail}>support@localservicefinder.com</ContactItem>
         </div>
 

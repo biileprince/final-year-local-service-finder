@@ -11,7 +11,7 @@ const FALLBACK_IMAGE =
 async function fetchCategories(): Promise<Category[]> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   try {
-    const res = await fetch(`${apiUrl}/categories/top?limit=6`, {
+    const res = await fetch(`${apiUrl}/categories/top?limit=9`, {
       // Revalidate every 5 minutes so admin updates show without a redeploy.
       next: { revalidate: 300 },
     });

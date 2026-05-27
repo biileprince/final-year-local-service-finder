@@ -39,6 +39,11 @@ export interface SuggestPayload {
   topHit?: SuggestGroupItem;
 }
 
+export interface LocationStat {
+  location: string;
+  providerCount: number;
+}
+
 export interface TrendingPayload {
   /** Categories with the most bookings in the last 30 days, falling back to
    *  highest providerCount when there's no booking history yet. */
@@ -381,6 +386,42 @@ export class SearchService {
   }
 
   /**
+   * Top locations by active provider count. Powers the homepage "Across Ghana"
+   * panel — feeds real city totals instead of the hard-coded Accra/Kumasi list.
+   * The grouping strips leading articles and lowercases the city name so the
+   * same place isn't double-counted under variant spellings.
+   */
+  async topLocations(limit = 8): Promise<LocationStat[]> {
+    const cacheKey = `search:top-locations:v1:${limit}`;
+    const cached = await this.cache.get<LocationStat[]>(cacheKey);
+    if (cached) return cached;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{ location: string; cnt: number }>
+    >`
+      SELECT
+        TRIM(SPLIT_PART(p.location, ',', 1)) AS location,
+        COUNT(*)::int AS cnt
+      FROM providers p
+      WHERE p.deleted_at IS NULL
+        AND p.is_active = TRUE
+        AND p.location IS NOT NULL
+        AND p.location <> ''
+      GROUP BY TRIM(SPLIT_PART(p.location, ',', 1))
+      HAVING COUNT(*) > 0
+      ORDER BY cnt DESC, location ASC
+      LIMIT ${Math.min(limit, 20)}
+    `;
+
+    const payload = rows.map((r) => ({
+      location: r.location,
+      providerCount: r.cnt,
+    }));
+    await this.cache.set(cacheKey, payload, 300);
+    return payload;
+  }
+
+  /**
    * Top recent search terms — pulled from a Redis sorted set we populate on
    * every server-side search. Falls back gracefully if Redis is empty (fresh
    * deploy) by returning the most popular category names instead.
@@ -431,11 +472,12 @@ export class SearchService {
     const conditions: Prisma.Sql[] = [
       Prisma.sql`p.deleted_at IS NULL`,
       Prisma.sql`p.is_active = TRUE`,
+      // Only verified providers ever appear in the public results list.
+      // Pending/rejected providers stay hidden from customers — they're only
+      // surfaced in the admin verification queue. (The `verified` query param
+      // is now a no-op kept for URL backward-compat.)
+      Prisma.sql`p.verification_status = 'VERIFIED'`,
     ];
-
-    if (dto.verified) {
-      conditions.push(Prisma.sql`p.verification_status = 'VERIFIED'`);
-    }
     if (typeof dto.minRating === "number") {
       conditions.push(Prisma.sql`p.rating >= ${dto.minRating}`);
     }

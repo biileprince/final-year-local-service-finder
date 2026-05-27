@@ -71,28 +71,55 @@ export function ProviderCard({
           <div className="flex flex-1 flex-col">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <h3 className="text-xl font-bold text-gray-900">
-                  {provider.user.name}
-                </h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-xl font-bold text-gray-900">
+                    {provider.user.name}
+                  </h3>
+                  {verified && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700 ring-1 ring-blue-200">
+                      <CheckCircle className="h-3 w-3 fill-blue-500 text-white" />
+                      Verified
+                    </span>
+                  )}
+                </div>
                 <p className="text-base font-medium capitalize text-primary-600">
                   {primaryCategory?.name ?? "Service Professional"}
                 </p>
-                {/* All categories */}
+                {/* All categories — color-tinted from category.color so
+                    multiple services are visually distinguishable at a glance. */}
                 {provider.categories.length > 1 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {provider.categories.map((pc) => (
-                      <span
-                        key={pc.id}
-                        className={cn(
-                          "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
-                          pc.isPrimary
-                            ? "bg-primary-100 text-primary-700"
-                            : "bg-gray-100 text-gray-600",
-                        )}
-                      >
-                        {pc.category.name}
-                      </span>
-                    ))}
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {provider.categories.map((pc) => {
+                      const accent = pc.category.color || "#3B82F6";
+                      return (
+                        <span
+                          key={pc.id}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold",
+                            pc.isPrimary
+                              ? "ring-1 ring-current"
+                              : "border-transparent",
+                          )}
+                          style={{
+                            color: accent,
+                            backgroundColor: `${accent}1A`,
+                            borderColor: pc.isPrimary ? accent : "transparent",
+                          }}
+                        >
+                          <span
+                            aria-hidden
+                            className="h-1.5 w-1.5 rounded-full"
+                            style={{ backgroundColor: accent }}
+                          />
+                          {pc.category.name}
+                          {pc.isPrimary && (
+                            <span className="text-[9px] font-bold uppercase opacity-70">
+                              Main
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -184,10 +211,18 @@ export function ProviderCard({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-xl font-bold text-gray-900">
-              {provider.user.name}
-            </h3>
-            <p className="truncate text-base font-medium text-gray-600">
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-xl font-bold text-gray-900">
+                {provider.user.name}
+              </h3>
+            </div>
+            {verified && (
+              <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700 ring-1 ring-blue-200">
+                <CheckCircle className="h-3 w-3 fill-blue-500 text-white" />
+                Verified
+              </span>
+            )}
+            <p className="mt-1 truncate text-base font-medium text-gray-600">
               {primaryCategory?.name ?? "Service Professional"}
             </p>
           </div>

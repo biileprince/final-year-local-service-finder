@@ -12,6 +12,8 @@ import {
   MessageSquare,
   Phone,
   Mail,
+  Lock,
+  ExternalLink,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
@@ -31,6 +33,7 @@ import {
   providersService,
   availabilityService,
   messagesService,
+  bookingsService,
 } from "@/lib/api";
 import type { Provider, Review, Availability, ProviderService } from "@/types";
 import { formatRelativeTime, formatTime, cn } from "@/lib/utils";
@@ -287,6 +290,10 @@ export default function ProviderDetailPage() {
   const [providerServices, setProviderServices] = useState<ProviderService[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [suggested, setSuggested] = useState<Provider[]>([]);
+  // Contact (email/phone) is gated behind a booking — customers only see it
+  // once they've actually engaged the provider. Cancelled bookings still count
+  // (they exchanged info during the booking flow).
+  const [hasBooked, setHasBooked] = useState(false);
 
   useEffect(() => {
     if (params.id) {
@@ -333,6 +340,36 @@ export default function ProviderDetailPage() {
       setIsLoading(false);
     }
   };
+
+  // Check whether the signed-in customer has any booking history with this
+  // provider. Runs after provider is loaded so we don't keep contact details
+  // permanently locked while the page is still resolving.
+  useEffect(() => {
+    if (!provider || !user || user.role !== "CUSTOMER") {
+      setHasBooked(false);
+      return;
+    }
+    let cancelled = false;
+    bookingsService
+      .getCustomerBookings({ limit: 100 })
+      .then((res) => {
+        if (cancelled) return;
+        setHasBooked(res.data.some((b) => b.providerId === provider.id));
+      })
+      .catch(() => {
+        if (!cancelled) setHasBooked(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, user]);
+
+  // The provider sees their own contact regardless; staff/admin always; everyone
+  // else (customers + visitors) must have a booking with this provider.
+  const canSeeContact =
+    user?.role === "ADMIN" ||
+    (user?.role === "PROVIDER" && user?.id === provider?.user?.id) ||
+    hasBooked;
 
   if (isLoading) {
     return (
@@ -724,6 +761,10 @@ export default function ProviderDetailPage() {
 
           {/* Right Column: Action sidebar */}
           <div className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+            {/* Map + directions — moved to the top so customers immediately
+                see where this provider is located before scrolling. */}
+            <ProviderLocationCard provider={provider} />
+
             {/* Contact Card */}
             <Card>
               <CardHeader>
@@ -733,22 +774,6 @@ export default function ProviderDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {provider.user.email && (
-                  <div className="flex items-center gap-4">
-                    <Mail className="h-5 w-5 shrink-0 text-secondary-400" />
-                    <span className="text-base text-secondary-700">
-                      {provider.user.email}
-                    </span>
-                  </div>
-                )}
-                {provider.user.phone && (
-                  <div className="flex items-center gap-4">
-                    <Phone className="h-5 w-5 shrink-0 text-secondary-400" />
-                    <span className="text-base text-secondary-700">
-                      {provider.user.phone}
-                    </span>
-                  </div>
-                )}
                 <div className="flex items-center gap-4">
                   <MapPin className="h-5 w-5 shrink-0 text-secondary-400" />
                   <span className="text-base text-secondary-700">
@@ -757,11 +782,64 @@ export default function ProviderDetailPage() {
                       ` · serves up to ${provider.serviceRadiusKm} km`}
                   </span>
                 </div>
+                {canSeeContact ? (
+                  <>
+                    {provider.user.email && (
+                      <div className="flex items-center gap-4">
+                        <Mail className="h-5 w-5 shrink-0 text-secondary-400" />
+                        <span className="break-all text-base text-secondary-700">
+                          {provider.user.email}
+                        </span>
+                      </div>
+                    )}
+                    {provider.user.phone && (
+                      <div className="flex items-center gap-4">
+                        <Phone className="h-5 w-5 shrink-0 text-secondary-400" />
+                        <span className="text-base text-secondary-700">
+                          {provider.user.phone}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-secondary-200 bg-secondary-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <Lock className="mt-0.5 h-5 w-5 shrink-0 text-primary-600" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-secondary-900">
+                          Contact unlocks after booking
+                        </p>
+                        <p className="mt-1 text-sm leading-relaxed text-secondary-600">
+                          Phone &amp; email are shared with you once you book
+                          this provider. Use the in-app{" "}
+                          <strong>Message</strong> button to ask questions
+                          first — no personal details required.
+                        </p>
+                        {(!user || user.role === "CUSTOMER") && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button size="sm" asChild>
+                              <Link href={`/book/${provider.id}`}>
+                                <Calendar className="mr-1.5 h-4 w-4" />
+                                Book now
+                              </Link>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleMessage(provider.id)}
+                              isLoading={messaging}
+                            >
+                              <MessageSquare className="mr-1.5 h-4 w-4" />
+                              Message
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
-
-            {/* Map + directions */}
-            <ProviderLocationCard provider={provider} />
 
             {/* Availability Calendar */}
             <ProviderAvailabilitySection provider={provider} />
@@ -997,9 +1075,10 @@ function ProviderLocationCard({ provider }: { provider: Provider }) {
             href={`https://www.google.com/maps/dir/?api=1&origin=${userLoc.lat},${userLoc.lng}&destination=${renderProvider.latitude},${renderProvider.longitude}&travelmode=driving`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs font-semibold text-primary-600 hover:underline"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
           >
-            Open full turn-by-turn directions in Google Maps →
+            <ExternalLink className="h-4 w-4" />
+            Open turn-by-turn directions in Google Maps
           </a>
         )}
       </CardContent>

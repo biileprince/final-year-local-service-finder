@@ -1,10 +1,16 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from "@nestjs/common";
 import { PrismaService } from "../../database/prisma.service";
 import { CacheService } from "../../cache/cache.service";
+import {
+  NotificationsService,
+  NotificationCategory,
+  NotificationPriority,
+} from "../notifications/notifications.service";
 import {
   UserRole,
   BookingStatus,
@@ -72,10 +78,38 @@ export interface BookingListParams {
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  /** Fire-and-forget admin notification helper (see BookingsService.notify). */
+  private async notify(
+    userId: string,
+    category: NotificationCategory,
+    title: string,
+    body: string,
+    referenceId?: string,
+  ) {
+    try {
+      await this.notificationsService.send({
+        userId,
+        category,
+        title,
+        body,
+        referenceId,
+        priority: NotificationPriority.HIGH,
+        channels: ["in_app"],
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Notification (${category}) for ${userId} failed: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
 
   // ============================================================================
   // Dashboard & Analytics
@@ -390,6 +424,38 @@ export class AdminService {
     });
   }
 
+  /**
+   * Send an admin message to any user. Persisted + pushed via the notifications
+   * pipeline, so the recipient sees a toast (when online) and a row in their
+   * bell list. One-way for now — a future Conversation schema migration could
+   * promote this to a real two-way DM.
+   */
+  async messageUser(
+    userId: string,
+    subject: string,
+    message: string,
+    adminId: string,
+  ) {
+    if (!subject?.trim() || !message?.trim()) {
+      throw new BadRequestException("Subject and message are required.");
+    }
+    const recipient = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!recipient) {
+      throw new NotFoundException("User not found");
+    }
+    await this.notify(
+      userId,
+      NotificationCategory.SYSTEM,
+      subject.trim().slice(0, 120),
+      message.trim().slice(0, 2000),
+      adminId,
+    );
+    return { success: true };
+  }
+
   // ============================================================================
   // Provider Verification
   // ============================================================================
@@ -432,6 +498,11 @@ export class AdminService {
             },
           },
           categories: { include: { category: true } },
+          // Specialties + gallery let the admin "View details" pane render the
+          // full provider story (free-text tags + photos of work) without an
+          // extra round-trip.
+          specialties: true,
+          gallery: { include: { file: true } },
           idDocument: true,
           businessLicense: true,
         },
@@ -453,13 +524,14 @@ export class AdminService {
   async verifyProvider(providerId: string, adminId: string) {
     const provider = await this.prisma.provider.findUnique({
       where: { id: providerId },
+      select: { id: true, userId: true },
     });
 
     if (!provider) {
       throw new NotFoundException("Provider not found");
     }
 
-    return this.prisma.provider.update({
+    const updated = await this.prisma.provider.update({
       where: { id: providerId },
       data: {
         verificationStatus: VerificationStatus.VERIFIED,
@@ -468,24 +540,51 @@ export class AdminService {
         isActive: true,
       },
     });
+
+    // Notify the provider in-app — also unlocks the public list for them, so
+    // this is high-priority. The dashboard layout's toast listener surfaces it.
+    await this.notify(
+      provider.userId,
+      NotificationCategory.PROVIDER_VERIFIED,
+      "You're verified",
+      "Your provider account was approved. Customers can now find you in the public search list.",
+      providerId,
+    );
+
+    return updated;
   }
 
   async rejectProvider(providerId: string, reason: string, adminId: string) {
     const provider = await this.prisma.provider.findUnique({
       where: { id: providerId },
+      select: { id: true, userId: true },
     });
 
     if (!provider) {
       throw new NotFoundException("Provider not found");
     }
 
-    return this.prisma.provider.update({
+    const updated = await this.prisma.provider.update({
       where: { id: providerId },
       data: {
         verificationStatus: VerificationStatus.REJECTED,
         verifiedById: adminId,
       },
     });
+
+    // Notify the provider so they can act on the rejection reason. The body
+    // includes the reason so it shows up in the toast + bell-list entry.
+    await this.notify(
+      provider.userId,
+      NotificationCategory.PROVIDER_SUSPENDED,
+      "Verification rejected",
+      reason
+        ? `Your verification was rejected: ${reason}. Update your profile and re-submit.`
+        : "Your verification was rejected. Update your profile and re-submit.",
+      providerId,
+    );
+
+    return updated;
   }
 
   // ============================================================================
