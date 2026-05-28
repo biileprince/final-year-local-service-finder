@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Star,
   CheckCircle,
+  Repeat,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,7 +18,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
 import { bookingsService, providersService } from "@/lib/api";
-import type { Booking, BookingStatus } from "@/types";
+import type { Booking, BookingStatus, RecurringBooking } from "@/types";
 import { formatDate, formatTime, formatCurrency, cn } from "@/lib/utils";
 
 const statusConfig: Record<
@@ -53,10 +54,39 @@ export default function BookingsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [providerId, setProviderId] = useState<string | null>(null);
   const [missingProviderProfile, setMissingProviderProfile] = useState(false);
+  const [recurring, setRecurring] = useState<RecurringBooking[]>([]);
 
   useEffect(() => {
     loadBookings();
   }, [user, activeTab, page]);
+
+  useEffect(() => {
+    if (user?.role === "CUSTOMER") {
+      bookingsService
+        .getRecurring()
+        .then(setRecurring)
+        .catch(() => setRecurring([]));
+    }
+  }, [user]);
+
+  const FREQUENCY_LABEL: Record<string, string> = {
+    WEEKLY: "Weekly",
+    BIWEEKLY: "Every 2 weeks",
+    MONTHLY: "Monthly",
+  };
+
+  const handleStopSeries = async (id: string) => {
+    if (!confirm("Stop this recurring booking? Existing bookings are kept."))
+      return;
+    try {
+      await bookingsService.cancelRecurring(id);
+      setRecurring((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, isActive: false } : s)),
+      );
+    } catch (err) {
+      console.error("Failed to stop series:", err);
+    }
+  };
 
   const loadBookings = async () => {
     if (!user) return;
@@ -131,6 +161,51 @@ export default function BookingsPage() {
           </Button>
         )}
       </div>
+
+      {/* Recurring series (customers only) */}
+      {user?.role === "CUSTOMER" &&
+        recurring.filter((s) => s.isActive).length > 0 && (
+          <Card>
+            <CardContent className="p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <Repeat className="h-5 w-5 text-primary-600" />
+                <h2 className="font-semibold text-secondary-900">
+                  Recurring bookings
+                </h2>
+              </div>
+              <div className="space-y-3">
+                {recurring
+                  .filter((s) => s.isActive)
+                  .map((s) => (
+                    <div
+                      key={s.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-secondary-200 p-3"
+                    >
+                      <div className="text-sm">
+                        <p className="font-medium text-secondary-900">
+                          {s.provider?.user?.name ?? "Provider"} ·{" "}
+                          {FREQUENCY_LABEL[s.frequency] ?? s.frequency}
+                        </p>
+                        <p className="text-secondary-500">
+                          {s.occurrencesCreated} booked
+                          {s.nextOccurrenceDate
+                            ? ` · next ${formatDate(s.nextOccurrenceDate)}`
+                            : ""}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleStopSeries(s.id)}
+                      >
+                        Stop
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
       {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2">

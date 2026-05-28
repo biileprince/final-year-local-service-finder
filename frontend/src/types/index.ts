@@ -113,6 +113,32 @@ export interface Category {
 // Booking types
 export type BookingStatus = "PENDING" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
 export type NoShowParty = "CUSTOMER" | "PROVIDER";
+export type RecurrenceFrequency = "WEEKLY" | "BIWEEKLY" | "MONTHLY";
+
+export interface RecurringBooking {
+  id: string;
+  customerId: string;
+  providerId: string;
+  provider?: Provider;
+  frequency: RecurrenceFrequency;
+  scheduledStartTime?: string | null;
+  serviceAddress: string;
+  problemDescription: string;
+  startDate: string;
+  endDate?: string | null;
+  maxOccurrences?: number | null;
+  occurrencesCreated: number;
+  nextOccurrenceDate?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  bookings?: {
+    id: string;
+    bookingNumber: string;
+    scheduledDate: string;
+    status: BookingStatus;
+  }[];
+  _count?: { bookings: number };
+}
 export type PaymentStatus = "UNPAID" | "PENDING" | "PAID" | "REFUNDED" | "FAILED";
 
 export interface Booking {
