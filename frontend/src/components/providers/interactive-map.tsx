@@ -13,7 +13,7 @@ import Map, {
 import "mapbox-gl/dist/mapbox-gl.css";
 import Link from "next/link";
 import Image from "next/image";
-import { MapPin, Star, Briefcase } from "lucide-react";
+import { MapPin, Star, Briefcase, Home } from "lucide-react";
 import { useTheme } from "@/components/theme/theme-provider";
 
 export interface MapProvider {
@@ -45,6 +45,9 @@ interface InteractiveMapProps {
   selectedProviderId?: string | null;
   /** Called when the user clicks a marker (or closes the popup → null). */
   onProviderSelect?: (id: string | null) => void;
+  /** Optional customer / destination pin. When provided, routing goes from
+   *  `userLocation` to this pin (instead of to a provider pin). */
+  customerPin?: { lat: number; lng: number; label?: string } | null;
 }
 
 interface RouteInfo {
@@ -69,6 +72,7 @@ export default function InteractiveMap({
   linkProviderProfile = true,
   selectedProviderId,
   onProviderSelect,
+  customerPin,
 }: InteractiveMapProps) {
   const mapRef = useRef<MapRef | null>(null);
   const [internalSelectedId, setInternalSelectedId] = useState<string | null>(
@@ -102,12 +106,11 @@ export default function InteractiveMap({
   );
 
   const initialView = useMemo(() => {
+    if (customerPin) {
+      return { latitude: customerPin.lat, longitude: customerPin.lng, zoom: 13 };
+    }
     if (userLocation) {
-      return {
-        latitude: userLocation.lat,
-        longitude: userLocation.lng,
-        zoom: 12,
-      };
+      return { latitude: userLocation.lat, longitude: userLocation.lng, zoom: 12 };
     }
     if (points[0]) {
       return {
@@ -117,7 +120,7 @@ export default function InteractiveMap({
       };
     }
     return { ...FALLBACK_CENTER, zoom: 7 };
-  }, [userLocation, points]);
+  }, [userLocation, points, customerPin]);
 
   // Fit bounds when the set of plotted points changes. We compute bounds
   // imperatively rather than via initialViewState so re-filtering on /search
@@ -130,6 +133,7 @@ export default function InteractiveMap({
       p.latitude,
     ]);
     if (userLocation) coords.push([userLocation.lng, userLocation.lat]);
+    if (customerPin) coords.push([customerPin.lng, customerPin.lat]);
     if (coords.length === 0) return;
     if (coords.length === 1) {
       const [lng, lat] = coords[0]!;
@@ -155,7 +159,7 @@ export default function InteractiveMap({
       maxZoom: 14,
       duration: 600,
     });
-  }, [points, userLocation]);
+  }, [points, userLocation, customerPin]);
 
   // Driving directions — only when there is a single target and we have a
   // user location. Mapbox Directions API returns GeoJSON we can hand straight
@@ -164,12 +168,19 @@ export default function InteractiveMap({
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   // Routing target = the only pin if there's exactly one, otherwise whichever
-  // pin the user has selected. That way the search-page multi-pin map can also
-  // show a route to a clicked provider.
-  const target =
+  // pin the user has selected. When a customerPin is provided and no provider
+  // target exists, route to the customerPin instead.
+  const providerTarget =
     points.length === 1
       ? points[0]!
       : (points.find((p) => p.id === selectedId) ?? null);
+  // Memoize so the routing useEffect doesn't re-fire on every render when
+  // the target is built from a customerPin (new object each render otherwise).
+  const target = useMemo(() => {
+    if (providerTarget) return { longitude: providerTarget.longitude, latitude: providerTarget.latitude };
+    if (customerPin) return { longitude: customerPin.lng, latitude: customerPin.lat };
+    return null;
+  }, [providerTarget, customerPin]);
 
   // Fly to the selected pin when selection changes from outside (clicking a
   // result card). Skip the fly when the selected pin is the only one — initial
@@ -245,7 +256,7 @@ export default function InteractiveMap({
     );
   }
 
-  if (points.length === 0 && !userLocation) {
+  if (points.length === 0 && !userLocation && !customerPin) {
     return (
       <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-12 text-center">
         <p className="text-sm font-semibold text-gray-700">
@@ -282,6 +293,25 @@ export default function InteractiveMap({
               aria-label="You are here"
               className="h-[18px] w-[18px] rounded-full border-[3px] border-white bg-primary-600 shadow-[0_0_0_2px_rgba(37,99,235,.33),0_2px_6px_rgba(0,0,0,.25)]"
             />
+          </Marker>
+        )}
+
+        {customerPin && (
+          <Marker
+            longitude={customerPin.lng}
+            latitude={customerPin.lat}
+            anchor="bottom"
+          >
+            <div className="flex flex-col items-center">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-emerald-500 shadow-lg">
+                <Home className="h-4 w-4 text-white" />
+              </div>
+              {customerPin.label && (
+                <span className="mt-0.5 max-w-[120px] truncate rounded-md bg-white/95 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 shadow">
+                  {customerPin.label}
+                </span>
+              )}
+            </div>
           </Marker>
         )}
 

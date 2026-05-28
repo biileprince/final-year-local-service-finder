@@ -25,6 +25,8 @@ interface ProvidersMapProps {
   /** When true, each marker shows its 1-based index from `providers` so the map
    *  pins can be cross-referenced with a numbered result list. */
   numbered?: boolean;
+  /** Optional customer/destination pin shown as a green home marker. */
+  customerPin?: { lat: number; lng: number; label?: string } | null;
 }
 
 /**
@@ -41,6 +43,7 @@ export function ProvidersMap({
   selectedProviderId,
   onProviderSelect,
   numbered,
+  customerPin,
 }: ProvidersMapProps) {
   const points: MapProvider[] = useMemo(
     () => {
@@ -88,6 +91,7 @@ export function ProvidersMap({
       linkProviderProfile={linkProviderProfile}
       selectedProviderId={selectedProviderId}
       onProviderSelect={onProviderSelect}
+      customerPin={customerPin}
     />
   );
 }

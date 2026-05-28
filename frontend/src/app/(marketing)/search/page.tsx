@@ -31,9 +31,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProviderCard } from "@/components/providers/provider-card";
 import { SearchTrigger } from "@/components/search/search-trigger";
-import { searchService, categoriesService, type ProviderSortBy } from "@/lib/api";
+import {
+  searchService,
+  categoriesService,
+  type ProviderSortBy,
+  type PlatformStats,
+} from "@/lib/api";
 import type { Provider, Category } from "@/types";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 
 const categoryIcons: Record<
   string,
@@ -154,6 +159,7 @@ function SearchContent() {
   );
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [stats, setStats] = useState<PlatformStats | null>(null);
   const [providers, setProviders] = useState<ProviderWithDistance[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -230,6 +236,21 @@ function SearchContent() {
         if (!cancelled) setCategoriesLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Live platform totals for the overview panel. Best-effort — if the endpoint
+  // fails the panel just stays on its placeholder dashes.
+  useEffect(() => {
+    let cancelled = false;
+    searchService
+      .platformStats()
+      .then((s) => {
+        if (!cancelled) setStats(s);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -990,12 +1011,24 @@ function SearchContent() {
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatTile
               label="Verified service providers"
-              value="850+"
+              value={stats ? compactCount(stats.verifiedProviders) : "—"}
               tone="orange"
             />
-            <StatTile label="Categories" value="12" tone="blue" />
-            <StatTile label="Bookings" value="12k+" tone="green" />
-            <StatTile label="Avg. rating" value="4.9" tone="amber" />
+            <StatTile
+              label="Categories"
+              value={stats ? stats.categories : "—"}
+              tone="blue"
+            />
+            <StatTile
+              label="Bookings"
+              value={stats ? compactCount(stats.bookings) : "—"}
+              tone="green"
+            />
+            <StatTile
+              label="Avg. rating"
+              value={stats && stats.avgRating > 0 ? stats.avgRating.toFixed(1) : "—"}
+              tone="amber"
+            />
           </div>
         </Card>
       </div>
@@ -1166,19 +1199,27 @@ function ProviderGridCard({ provider }: { provider: Provider }) {
       href={`/providers/${provider.id}`}
       className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
     >
-      <Card className="h-full border-2 border-transparent transition-all hover:-translate-y-1 hover:border-primary-300 hover:shadow-lg">
-        {/* Provider image */}
-        {provider.user.profileImage && (
-          <div className="relative h-36 w-full overflow-hidden rounded-t-2xl bg-gray-100">
+      <Card className="group h-full border-2 border-transparent transition-all hover:-translate-y-1 hover:border-primary-300 hover:shadow-lg">
+        {/* Provider image — always rendered so cards stay uniform height.
+            object-top keeps faces in frame; missing photos get an initials
+            placeholder instead of a ragged card with no header. */}
+        <div className="relative h-44 w-full overflow-hidden rounded-t-2xl bg-gray-100">
+          {provider.user.profileImage ? (
             <Image
               src={provider.user.profileImage}
               alt={provider.user.name}
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 300px"
-              className="object-cover"
+              className="object-cover object-top transition-transform duration-200 group-hover:scale-105"
             />
-          </div>
-        )}
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary-100 to-primary-50">
+              <span className="text-3xl font-bold text-primary-600">
+                {getInitials(provider.user.name)}
+              </span>
+            </div>
+          )}
+        </div>
 
         <div className="p-4">
           {/* Name + verification */}
@@ -1418,6 +1459,13 @@ const toneStyles: Record<string, string> = {
   green: "bg-emerald-50 text-emerald-700",
   amber: "bg-amber-50 text-amber-700",
 };
+
+/** 0–999 shown as-is; 1,000+ shown as "1.2k+" so the tile doesn't overflow. */
+function compactCount(n: number): string {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return `${k >= 10 ? Math.floor(k) : k.toFixed(1).replace(/\.0$/, "")}k+`;
+}
 
 function StatTile({
   label,

@@ -44,6 +44,14 @@ export interface LocationStat {
   providerCount: number;
 }
 
+export interface PlatformStats {
+  verifiedProviders: number;
+  categories: number;
+  bookings: number;
+  /** Mean of provider ratings that have at least one review, 1 decimal. */
+  avgRating: number;
+}
+
 export interface TrendingPayload {
   /** Categories with the most bookings in the last 30 days, falling back to
    *  highest providerCount when there's no booking history yet. */
@@ -417,6 +425,45 @@ export class SearchService {
       location: r.location,
       providerCount: r.cnt,
     }));
+    await this.cache.set(cacheKey, payload, 300);
+    return payload;
+  }
+
+  /**
+   * Live platform totals for the search-page "Platform overview" panel.
+   * Replaces hard-coded marketing numbers with real counts. Cached 5 min —
+   * these move slowly and the panel renders on every search visit.
+   */
+  async platformStats(): Promise<PlatformStats> {
+    const cacheKey = "search:platform-stats:v1";
+    const cached = await this.cache.get<PlatformStats>(cacheKey);
+    if (cached) return cached;
+
+    const [verifiedProviders, categories, bookings, ratingAgg] =
+      await Promise.all([
+        this.prisma.provider.count({
+          where: {
+            deletedAt: null,
+            isActive: true,
+            verificationStatus: "VERIFIED",
+          },
+        }),
+        this.prisma.category.count({
+          where: { deletedAt: null, isActive: true },
+        }),
+        this.prisma.booking.count({ where: { deletedAt: null } }),
+        this.prisma.provider.aggregate({
+          _avg: { rating: true },
+          where: { deletedAt: null, isActive: true, reviewCount: { gt: 0 } },
+        }),
+      ]);
+
+    const payload: PlatformStats = {
+      verifiedProviders,
+      categories,
+      bookings,
+      avgRating: Number((Number(ratingAgg._avg.rating ?? 0)).toFixed(1)),
+    };
     await this.cache.set(cacheKey, payload, 300);
     return payload;
   }

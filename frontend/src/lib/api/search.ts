@@ -47,6 +47,13 @@ export interface TrendingResponse {
   }>;
 }
 
+export interface PlatformStats {
+  verifiedProviders: number;
+  categories: number;
+  bookings: number;
+  avgRating: number;
+}
+
 export type ProviderSortBy =
   | "relevance"
   | "rating"
@@ -103,6 +110,10 @@ export const searchService = {
     return apiClient.get<Array<{ location: string; providerCount: number }>>(
       `/search/locations?limit=${limit}`,
     );
+  },
+
+  platformStats(): Promise<PlatformStats> {
+    return apiClient.get<PlatformStats>(`/search/stats`);
   },
 
   searchProviders(params: AdvancedSearchParams): Promise<AdvancedSearchResponse> {
