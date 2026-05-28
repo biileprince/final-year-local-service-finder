@@ -10,6 +10,8 @@ import {
   Star,
   CheckCircle,
   Repeat,
+  Download,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +22,11 @@ import { useAuth } from "@/hooks";
 import { bookingsService, providersService } from "@/lib/api";
 import type { Booking, BookingStatus, RecurringBooking } from "@/types";
 import { formatDate, formatTime, formatCurrency, cn } from "@/lib/utils";
+import {
+  bookingsToCsv,
+  downloadText,
+  printBookings,
+} from "@/lib/booking-export";
 
 const statusConfig: Record<
   BookingStatus,
@@ -85,6 +92,53 @@ export default function BookingsPage() {
       );
     } catch (err) {
       console.error("Failed to stop series:", err);
+    }
+  };
+
+  // Pull the full (unpaginated) history for export/print.
+  const fetchAllBookings = async (): Promise<Booking[]> => {
+    if (user?.role === "PROVIDER") {
+      if (!providerId) return [];
+      const res = await bookingsService.getProviderBookings(providerId, {
+        page: 1,
+        limit: 1000,
+      });
+      return res.data || [];
+    }
+    const res = await bookingsService.getCustomerBookings({
+      page: 1,
+      limit: 1000,
+    });
+    return res.data || [];
+  };
+
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportCsv = async () => {
+    setExporting(true);
+    try {
+      const all = await fetchAllBookings();
+      downloadText(
+        "booking-history.csv",
+        bookingsToCsv(all, user?.role),
+        "text/csv",
+      );
+    } catch (err) {
+      console.error("Failed to export bookings:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handlePrint = async () => {
+    setExporting(true);
+    try {
+      const all = await fetchAllBookings();
+      printBookings(all, user?.role);
+    } catch (err) {
+      console.error("Failed to print bookings:", err);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -155,11 +209,25 @@ export default function BookingsPage() {
               : "Track your service appointments"}
           </p>
         </div>
-        {user?.role === "CUSTOMER" && (
-          <Button asChild>
-            <Link href="/search">Book New Service</Link>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExportCsv}
+            isLoading={exporting}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
           </Button>
-        )}
+          <Button variant="outline" onClick={handlePrint} isLoading={exporting}>
+            <Printer className="mr-2 h-4 w-4" />
+            Print
+          </Button>
+          {user?.role === "CUSTOMER" && (
+            <Button asChild>
+              <Link href="/search">Book New Service</Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Recurring series (customers only) */}
