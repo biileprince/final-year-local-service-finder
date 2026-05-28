@@ -1,3 +1,6 @@
+// Sentry init — must run before any other import so instrumentation can
+// patch http/express/prisma at require time.
+import "./instrument";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, RequestMethod } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";

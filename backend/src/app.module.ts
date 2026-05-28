@@ -4,6 +4,7 @@ import { ThrottlerModule } from "@nestjs/throttler";
 import { ScheduleModule } from "@nestjs/schedule";
 import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard } from "@nestjs/throttler";
+import { SentryModule } from "@sentry/nestjs/setup";
 import { LoggerModule } from "nestjs-pino";
 import { validateEnv } from "./config/env.validation";
 import { loggerConfig } from "./config/logger.config";
@@ -34,6 +35,10 @@ import { FavoritesModule } from "./modules/favorites/favorites.module";
 
 @Module({
   imports: [
+    // Sentry — error + performance monitoring. No-op unless SENTRY_DSN is set
+    // (see instrument.ts). Must be first so it wraps the other modules.
+    SentryModule.forRoot(),
+
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
