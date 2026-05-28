@@ -140,6 +140,7 @@ model User {
   profileImage    String?   @map("avatar_url")
   role            UserRole  @default(CUSTOMER)
   googleId        String?   @unique @map("google_id")
+  calendarToken   String?   @unique @map("calendar_token")
   emailVerifiedAt DateTime? @map("email_verified_at")
   phoneVerifiedAt DateTime? @map("phone_verified_at")
   lastLoginAt     DateTime? @map("last_login_at")

@@ -12,13 +12,56 @@ import {
   ChevronRight,
   CheckCircle,
   AlertCircle,
+  CalendarDays,
+  Copy,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { bookingsService } from "@/lib/api";
 
 export default function SettingsPage() {
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const [language, setLanguage] = useState("en");
+  const [feedUrl, setFeedUrl] = useState<string | null>(null);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const loadFeed = async () => {
+    setFeedLoading(true);
+    try {
+      const { url } = await bookingsService.getCalendarFeed();
+      setFeedUrl(url);
+    } catch (err) {
+      console.error("Failed to load calendar feed:", err);
+    } finally {
+      setFeedLoading(false);
+    }
+  };
+
+  const resetFeed = async () => {
+    if (
+      !confirm(
+        "Reset the link? Calendars subscribed to the old URL will stop updating.",
+      )
+    )
+      return;
+    setFeedLoading(true);
+    try {
+      const { url } = await bookingsService.resetCalendarFeed();
+      setFeedUrl(url);
+    } catch (err) {
+      console.error("Failed to reset calendar feed:", err);
+    } finally {
+      setFeedLoading(false);
+    }
+  };
+
+  const copyFeed = () => {
+    if (!feedUrl) return;
+    navigator.clipboard.writeText(feedUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
 
 
@@ -190,6 +233,57 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Calendar sync */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5" />
+            Calendar sync
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-secondary-600">
+            Subscribe to a private calendar feed to see your bookings in Google
+            Calendar, Apple Calendar, or Outlook. The link updates automatically
+            as bookings change.
+          </p>
+
+          {!feedUrl ? (
+            <Button variant="outline" onClick={loadFeed} isLoading={feedLoading}>
+              Generate subscription link
+            </Button>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  readOnly
+                  value={feedUrl}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm text-secondary-700 focus:border-primary-500 focus:outline-none"
+                />
+                <Button variant="outline" size="sm" onClick={copyFeed}>
+                  <Copy className="mr-1.5 h-4 w-4" />
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              <p className="text-xs text-secondary-500">
+                Paste this into your calendar app&apos;s &quot;subscribe by
+                URL&quot; option. Keep it private — anyone with the link can see
+                your bookings.
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetFeed}
+                isLoading={feedLoading}
+                className="text-error-600"
+              >
+                Reset link
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
