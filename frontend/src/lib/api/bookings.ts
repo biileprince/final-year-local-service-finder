@@ -48,6 +48,8 @@ export interface CreateBookingDto {
   // Optional. Omit when the customer wants the provider to confirm the time.
   scheduledStartTime?: string;
   serviceAddress: string;
+  serviceLatitude?: number;
+  serviceLongitude?: number;
   problemDescription: string;
   estimatedAmount?: number;
   attachmentIds?: string[];
@@ -116,6 +118,10 @@ export const bookingsService = {
 
   async cancel(id: string, reason: string): Promise<Booking> {
     return apiClient.put<Booking>(`/bookings/${id}/cancel`, { reason }, true);
+  },
+
+  async flagNoShow(id: string, reason?: string): Promise<Booking> {
+    return apiClient.put<Booking>(`/bookings/${id}/no-show`, { reason }, true);
   },
 
   async reschedule(

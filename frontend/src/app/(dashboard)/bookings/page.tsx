@@ -6,9 +6,9 @@ import {
   Calendar,
   Clock,
   MapPin,
-  Filter,
-  Search,
   ChevronRight,
+  Star,
+  CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,6 +32,7 @@ const statusConfig: Record<
   IN_PROGRESS: { label: "In Progress", variant: "default" },
   COMPLETED: { label: "Completed", variant: "success" },
   CANCELLED: { label: "Cancelled", variant: "error" },
+  NO_SHOW: { label: "No-show", variant: "error" },
 };
 
 const tabs = [
@@ -322,6 +323,28 @@ function BookingCard({
           <p className="mt-3 line-clamp-2 text-sm text-secondary-600">
             {booking.problemDescription}
           </p>
+        )}
+
+        {/* Action nudges so neither party forgets the next step. */}
+        {!isProvider && booking.status === "COMPLETED" && !booking.review && (
+          <Link
+            href={`/bookings/${booking.id}`}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-warning-50 px-3 py-1.5 text-sm font-semibold text-warning-700 hover:bg-warning-100"
+          >
+            <Star className="h-4 w-4 fill-warning-500 text-warning-500" />
+            Leave a review
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        )}
+        {isProvider && booking.status === "IN_PROGRESS" && (
+          <Link
+            href={`/bookings/${booking.id}`}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-1.5 text-sm font-semibold text-primary-700 hover:bg-primary-100"
+          >
+            <CheckCircle className="h-4 w-4" />
+            Mark as completed
+            <ChevronRight className="h-4 w-4" />
+          </Link>
         )}
       </CardContent>
     </Card>

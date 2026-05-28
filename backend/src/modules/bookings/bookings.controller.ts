@@ -20,6 +20,7 @@ import { BookingsService } from "./bookings.service";
 import { CreateBookingDto } from "./dto/create-booking.dto";
 import { UpdateBookingDto } from "./dto/update-booking.dto";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
+import { FlagNoShowDto } from "./dto/flag-no-show.dto";
 import { RecordPaymentDto } from "./dto/record-payment.dto";
 import { RescheduleBookingDto } from "./dto/reschedule-booking.dto";
 import { ConfirmBookingDto } from "./dto/confirm-booking.dto";
@@ -181,6 +182,19 @@ export class BookingsController {
     @Body() cancelBookingDto: CancelBookingDto,
   ) {
     return this.bookingsService.cancel(id, user.id, cancelBookingDto.reason);
+  }
+
+  @Put(":id/no-show")
+  @ApiOperation({
+    summary: "Flag a confirmed booking as a no-show (customer or provider)",
+  })
+  @ApiResponse({ status: 200, description: "Booking flagged as no-show" })
+  async flagNoShow(
+    @Param("id") id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: FlagNoShowDto,
+  ) {
+    return this.bookingsService.flagNoShow(id, user.id, dto?.reason);
   }
 
   @Post(":id/attachments")

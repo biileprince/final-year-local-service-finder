@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -21,6 +21,8 @@ import {
   X,
   Paperclip,
   FileText,
+  Navigation,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +41,8 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/hooks";
 import { bookingsService, reviewsService, messagesService, filesService } from "@/lib/api";
+import { ProvidersMap } from "@/components/providers/providers-map";
+import { queryPermission } from "@/lib/permissions";
 import type { Booking, BookingStatus } from "@/types";
 import { formatDate, formatTime, formatCurrency, cn } from "@/lib/utils";
 
@@ -55,6 +59,7 @@ const statusConfig: Record<
   IN_PROGRESS: { label: "In Progress", variant: "default", icon: Clock },
   COMPLETED: { label: "Completed", variant: "success", icon: CheckCircle },
   CANCELLED: { label: "Cancelled", variant: "error", icon: XCircle },
+  NO_SHOW: { label: "No-show", variant: "error", icon: AlertCircle },
 };
 
 const PAYMENT_METHODS = [
@@ -99,7 +104,25 @@ export default function BookingDetailPage() {
   const [showConfirmTime, setShowConfirmTime] = useState(false);
   const [confirmTime, setConfirmTime] = useState("");
 
+  // Provider location for routing to the customer's service address.
+  const [providerLocation, setProviderLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [detectingProviderLoc, setDetectingProviderLoc] = useState(false);
+
   const { toast } = useToast();
+
+  // Lets the prominent "Leave a review" banner scroll the form into view.
+  const reviewSectionRef = useRef<HTMLDivElement>(null);
+
+  const openReviewForm = () => {
+    setShowReviewForm(true);
+    // Wait a tick so the form is mounted before scrolling to it.
+    requestAnimationFrame(() =>
+      reviewSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      }),
+    );
+  };
 
   // Payment recording state
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -110,6 +133,26 @@ export default function BookingDetailPage() {
   useEffect(() => {
     if (params.id) loadBooking(params.id as string);
   }, [params.id]);
+
+  // Auto-detect the provider's location once the booking loads — but only if
+  // the browser has *already* granted geolocation, so we never trigger a
+  // surprise permission prompt. This lets the route render automatically for
+  // returning providers; first-timers still use the explicit button.
+  useEffect(() => {
+    if (!booking || providerLocation) return;
+    if (user?.role !== "PROVIDER") return;
+    if (!booking.serviceLatitude || !booking.serviceLongitude) return;
+    let cancelled = false;
+    (async () => {
+      const perm = await queryPermission("geolocation");
+      if (cancelled || perm !== "granted") return;
+      handleDetectProviderLocation();
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking, user]);
 
   const loadBooking = async (id: string) => {
     setIsLoading(true);
@@ -168,6 +211,24 @@ export default function BookingDetailPage() {
       setConfirmCancel(false);
       setConfirmDecline(false);
       setShowConfirmTime(false);
+    }
+  };
+
+  const handleNoShow = async () => {
+    if (!booking) return;
+    setIsUpdating(true);
+    try {
+      const updated = await bookingsService.flagNoShow(booking.id);
+      setBooking(updated);
+      toast({ variant: "success", title: "Marked as a no-show" });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Action failed",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -310,6 +371,19 @@ export default function BookingDetailPage() {
     }
   };
 
+  const handleDetectProviderLocation = () => {
+    if (!navigator.geolocation) return;
+    setDetectingProviderLoc(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setProviderLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setDetectingProviderLoc(false);
+      },
+      () => setDetectingProviderLoc(false),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 5 * 60 * 1000 },
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -360,6 +434,30 @@ export default function BookingDetailPage() {
   const otherUser = isProvider ? booking.customer : booking.provider?.user;
   const paymentRecorded = booking.paymentStatus === "PAID";
 
+  // Google Maps turn-by-turn link for the provider. Prefer exact customer
+  // coordinates; fall back to the typed address. When we've detected the
+  // provider's own location, pass it as the origin so Google opens a real
+  // start→destination route instead of guessing the origin.
+  const hasCustomerCoords =
+    booking.serviceLatitude != null && booking.serviceLongitude != null;
+  const directionsDestination = hasCustomerCoords
+    ? `${booking.serviceLatitude},${booking.serviceLongitude}`
+    : encodeURIComponent(booking.serviceAddress);
+  const googleMapsDirectionsUrl = providerLocation
+    ? `https://www.google.com/maps/dir/?api=1&origin=${providerLocation.lat},${providerLocation.lng}&destination=${directionsDestination}&travelmode=driving`
+    : `https://www.google.com/maps/dir/?api=1&destination=${directionsDestination}&travelmode=driving`;
+
+  // Whether the scheduled day is in the past — used to nudge a provider who
+  // may have finished the job but forgotten to update the booking status.
+  const scheduledPast = (() => {
+    const d = new Date(booking.scheduledDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return d < today;
+  })();
+  const customerNeedsReview =
+    !isProvider && booking.status === "COMPLETED" && !booking.review;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -383,7 +481,36 @@ export default function BookingDetailPage() {
               </Badge>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {/* Primary provider action — visible at a glance without scrolling */}
+            {isProvider && booking.status === "PENDING" && (
+              <Button
+                onClick={() => {
+                  const isFlexible =
+                    !booking.scheduledStartTime ||
+                    new Date(booking.scheduledStartTime)
+                      .toISOString()
+                      .slice(11, 19) === "00:00:00";
+                  if (isFlexible) setShowConfirmTime(true);
+                  else handleStatusUpdate("CONFIRMED");
+                }}
+                isLoading={isUpdating}
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Confirm Booking
+              </Button>
+            )}
+            {isProvider && booking.status === "CONFIRMED" && (
+              <Button onClick={() => handleStatusUpdate("IN_PROGRESS")} isLoading={isUpdating}>
+                Start Service
+              </Button>
+            )}
+            {isProvider && booking.status === "IN_PROGRESS" && (
+              <Button onClick={() => handleStatusUpdate("COMPLETED")} isLoading={isUpdating}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Mark Completed
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={handleOpenMessage}
@@ -401,6 +528,145 @@ export default function BookingDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Status guidance banners ── */}
+      {customerNeedsReview && (
+        <Card className="border-2 border-warning-300 bg-warning-50">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning-100">
+                <Star className="h-5 w-5 fill-warning-500 text-warning-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-secondary-900">
+                  How was your service?
+                </p>
+                <p className="text-sm text-secondary-600">
+                  Your booking is complete. Leave a quick review to help{" "}
+                  {otherUser?.name ?? "your provider"} and other customers.
+                </p>
+              </div>
+            </div>
+            <Button onClick={openReviewForm} className="shrink-0">
+              <Star className="mr-2 h-4 w-4" />
+              Leave a review
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isProvider && booking.status === "IN_PROGRESS" && (
+        <Card className="border-2 border-primary-200 bg-primary-50">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100">
+                <CheckCircle className="h-5 w-5 text-primary-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-secondary-900">
+                  Finished the job?
+                </p>
+                <p className="text-sm text-secondary-600">
+                  Mark this service as completed so the customer can pay and
+                  leave a review. Don&apos;t leave it stuck in progress.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => handleStatusUpdate("COMPLETED")}
+              isLoading={isUpdating}
+              className="shrink-0"
+            >
+              <CheckCircle className="mr-2 h-4 w-4" />
+              Mark completed
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isProvider && booking.status === "CONFIRMED" && scheduledPast && (
+        <Card className="border-2 border-warning-300 bg-warning-50">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning-100">
+                <AlertCircle className="h-5 w-5 text-warning-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-secondary-900">
+                  This booking&apos;s scheduled date has passed
+                </p>
+                <p className="text-sm text-secondary-600">
+                  If you&apos;ve done the work, start the service and mark it
+                  completed so the customer can leave a review.
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+              <Button
+                onClick={() => handleStatusUpdate("IN_PROGRESS")}
+                isLoading={isUpdating}
+              >
+                Start service
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleNoShow}
+                isLoading={isUpdating}
+              >
+                Customer didn&apos;t show
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isProvider && booking.status === "CONFIRMED" && scheduledPast && (
+        <Card className="border-2 border-warning-300 bg-warning-50">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning-100">
+                <AlertCircle className="h-5 w-5 text-warning-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-secondary-900">
+                  Did the provider show up?
+                </p>
+                <p className="text-sm text-secondary-600">
+                  If your provider never arrived for this appointment, you can
+                  flag it as a no-show.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleNoShow}
+              isLoading={isUpdating}
+              className="shrink-0"
+            >
+              Provider didn&apos;t show
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {booking.status === "NO_SHOW" && (
+        <Card className="border-2 border-error-200 bg-error-50">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-error-600" />
+            <div>
+              <p className="font-semibold text-secondary-900">
+                Marked as a no-show
+              </p>
+              <p className="text-sm text-secondary-600">
+                {booking.noShowParty === "PROVIDER"
+                  ? "The provider was flagged as not showing up for this appointment."
+                  : "The customer was flagged as not showing up for this appointment."}
+                {booking.noShowReason ? ` "${booking.noShowReason}"` : ""}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Info */}
@@ -449,9 +715,20 @@ export default function BookingDetailPage() {
               </div>
               <div className="flex items-start gap-3">
                 <MapPin className="mt-0.5 h-5 w-5 text-secondary-400" />
-                <div>
+                <div className="flex-1">
                   <p className="font-medium text-secondary-900">Location</p>
                   <p className="text-secondary-600">{booking.serviceAddress}</p>
+                  {isProvider && (
+                    <a
+                      href={googleMapsDirectionsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-100"
+                    >
+                      <Navigation className="h-3.5 w-3.5" />
+                      Open in Google Maps
+                    </a>
+                  )}
                 </div>
               </div>
               {booking.problemDescription && (
@@ -462,6 +739,64 @@ export default function BookingDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* ── Customer location map (providers only) ── */}
+          {isProvider && hasCustomerCoords && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Customer Location
+                </CardTitle>
+                <p className="mt-1 text-sm text-secondary-500">
+                  {providerLocation
+                    ? "Driving route and travel time from your location to the customer are shown below."
+                    : "Show the route from where you are now, or open turn-by-turn directions in Google Maps."}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="overflow-hidden rounded-xl">
+                  <ProvidersMap
+                    providers={[]}
+                    customerPin={{
+                      lat: booking.serviceLatitude!,
+                      lng: booking.serviceLongitude!,
+                      label: booking.customer?.name ?? "Customer",
+                    }}
+                    userLocation={providerLocation}
+                    enableRouting={!!providerLocation}
+                    height="280px"
+                    linkProviderProfile={false}
+                  />
+                </div>
+                {/* Clear, labelled controls so the provider knows exactly what
+                    each button does. */}
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {!providerLocation && (
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={handleDetectProviderLocation}
+                      isLoading={detectingProviderLoc}
+                    >
+                      <Navigation className="mr-2 h-4 w-4" />
+                      Show route on map
+                    </Button>
+                  )}
+                  <Button asChild className="flex-1">
+                    <a
+                      href={googleMapsDirectionsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Open turn-by-turn in Google Maps
+                    </a>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* ── Attachments ── */}
           <Card>
@@ -693,16 +1028,28 @@ export default function BookingDetailPage() {
 
           {/* ── Customer: leave a review ── */}
           {!isProvider && booking.status === "COMPLETED" && !booking.review && (
-            <Card>
+            <Card
+              ref={reviewSectionRef}
+              className="border-2 border-warning-200 scroll-mt-24"
+            >
               <CardHeader>
-                <CardTitle>Leave a Review</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Star className="h-5 w-5 fill-warning-500 text-warning-500" />
+                  Leave a Review
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {!showReviewForm ? (
-                  <Button onClick={() => setShowReviewForm(true)}>
-                    <Star className="mr-2 h-4 w-4" />
-                    Write a Review
-                  </Button>
+                  <div className="space-y-3">
+                    <p className="text-sm text-secondary-600">
+                      Share your experience with {otherUser?.name ?? "the provider"}.
+                      Your feedback helps other customers choose with confidence.
+                    </p>
+                    <Button size="lg" onClick={() => setShowReviewForm(true)}>
+                      <Star className="mr-2 h-4 w-4" />
+                      Write a Review
+                    </Button>
+                  </div>
                 ) : (
                   <div className="space-y-4">
                     {reviewError && (
