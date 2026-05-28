@@ -24,6 +24,7 @@ export type {
   AdvancedSearchResponse,
   ProviderSortBy,
   SuggestType,
+  PlatformStats,
 } from "./search";
 export type { LoginDto, RegisterDto } from "./auth";
 export type { SearchProvidersParams, ProviderSearchResult } from "./providers";

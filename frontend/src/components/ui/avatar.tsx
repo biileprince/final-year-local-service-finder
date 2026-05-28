@@ -30,6 +30,10 @@ export interface AvatarProps
   src?: string | null;
   alt?: string;
   name?: string;
+  /** next/image `sizes` hint. Override for large avatars (e.g. profile
+   *  headers) so the browser requests a high-res source instead of the
+   *  list-thumbnail default. */
+  sizes?: string;
 }
 
 function Avatar({
@@ -38,6 +42,7 @@ function Avatar({
   src,
   alt,
   name,
+  sizes = "(max-width: 768px) 64px, 96px",
   children,
   ...props
 }: AvatarProps) {
@@ -52,7 +57,7 @@ function Avatar({
           src={src}
           alt={alt || name || "Avatar"}
           fill
-          sizes="(max-width: 768px) 64px, 96px"
+          sizes={sizes}
           className="object-cover"
         />
       ) : (
@@ -78,7 +83,7 @@ function AvatarImage({ className, src, alt = "" }: AvatarImageProps) {
       alt={alt}
       fill
       sizes="(max-width: 768px) 64px, 96px"
-      className={cn("object-cover", className)}
+      className={cn("object-cover z-10", className)}
     />
   );
 }
@@ -91,7 +96,7 @@ function AvatarFallback({
   return (
     <div
       className={cn(
-        "flex h-full w-full items-center justify-center bg-primary-100 font-semibold text-primary-700",
+        "absolute inset-0 z-0 flex h-full w-full items-center justify-center bg-primary-100 font-semibold text-primary-700",
         className
       )}
       {...props}

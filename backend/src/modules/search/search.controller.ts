@@ -43,6 +43,14 @@ export class SearchController {
     );
   }
 
+  @Get("stats")
+  @ApiOperation({
+    summary: "Live platform totals (verified providers, categories, bookings, avg rating)",
+  })
+  async stats() {
+    return this.searchService.platformStats();
+  }
+
   @Get("providers")
   @ApiOperation({
     summary:
