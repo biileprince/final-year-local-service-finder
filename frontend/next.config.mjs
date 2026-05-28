@@ -74,4 +74,19 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+import { withSentryConfig } from "@sentry/nextjs";
+
+// Sentry build-time wrapper. Source-map upload only runs when SENTRY_AUTH_TOKEN
+// + org/project are set in the build env, so local/CI builds without them are
+// unaffected. Runtime error reporting is gated separately on
+// NEXT_PUBLIC_SENTRY_DSN (see instrumentation-client.ts / sentry.server.config.ts).
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  // Tunnels browser SDK requests through the app to dodge ad-blockers.
+  tunnelRoute: "/monitoring",
+  // Strip Sentry SDK logger statements to shrink the client bundle.
+  disableLogger: true,
+});

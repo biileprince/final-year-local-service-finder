@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { Prisma } from "@prisma/client";
+import * as Sentry from "@sentry/nestjs";
 import { randomUUID } from "crypto";
 import { DomainError } from "../errors/domain-error";
 import { ErrorCode } from "../errors/error-codes";
@@ -42,6 +43,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
         `${request.method} ${request.url} → ${body.statusCode} ${body.code}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
+      // Only server-side faults reach Sentry; 4xx are client errors and would
+      // be noise. requestId ties the Sentry event back to the API response and
+      // the correlated Pino log line. No-op when SENTRY_DSN is unset.
+      Sentry.withScope((scope) => {
+        scope.setTag("requestId", requestId);
+        scope.setContext("request", {
+          method: request.method,
+          path: request.url,
+          code: body.code,
+        });
+        Sentry.captureException(exception);
+      });
     } else {
       this.logger.debug(
         `${request.method} ${request.url} → ${body.statusCode} ${body.code}`,
