@@ -32,6 +32,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { AdminModule } from "./modules/admin/admin.module";
 import { SearchModule } from "./modules/search/search.module";
 import { FavoritesModule } from "./modules/favorites/favorites.module";
+import { CalendarModule } from "./modules/calendar/calendar.module";
 
 @Module({
   imports: [
@@ -101,6 +102,7 @@ import { FavoritesModule } from "./modules/favorites/favorites.module";
     AdminModule,
     SearchModule,
     FavoritesModule,
+    CalendarModule,
   ],
   providers: [
     {

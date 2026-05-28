@@ -23,6 +23,7 @@ import {
   FileText,
   Navigation,
   ExternalLink,
+  CalendarPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +42,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/hooks";
 import { bookingsService, reviewsService, messagesService, filesService } from "@/lib/api";
+import { bookingToIcs, downloadIcs } from "@/lib/ical";
 import { ProvidersMap } from "@/components/providers/providers-map";
 import { queryPermission } from "@/lib/permissions";
 import type { Booking, BookingStatus } from "@/types";
@@ -482,6 +484,20 @@ export default function BookingDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            {booking.status !== "CANCELLED" && booking.status !== "NO_SHOW" && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  downloadIcs(
+                    `booking-${booking.bookingNumber}.ics`,
+                    bookingToIcs(booking, otherUser?.name ?? "provider"),
+                  )
+                }
+              >
+                <CalendarPlus className="mr-2 h-4 w-4" />
+                Add to calendar
+              </Button>
+            )}
             {/* Primary provider action — visible at a glance without scrolling */}
             {isProvider && booking.status === "PENDING" && (
               <Button

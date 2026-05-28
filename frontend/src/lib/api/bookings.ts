@@ -157,6 +157,17 @@ export const bookingsService = {
     );
   },
 
+  async getCalendarFeed(): Promise<{ token: string; url: string }> {
+    return apiClient.get<{ token: string; url: string }>("/calendar/feed", true);
+  },
+
+  async resetCalendarFeed(): Promise<{ token: string; url: string }> {
+    return apiClient.delete<{ token: string; url: string }>(
+      "/calendar/feed",
+      true,
+    );
+  },
+
   async reschedule(
     id: string,
     data: { scheduledDate: string; scheduledStartTime?: string },
