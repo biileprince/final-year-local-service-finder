@@ -38,6 +38,12 @@ enum NoShowParty {
   PROVIDER
 }
 
+enum RecurrenceFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
 enum VerificationStatus {
   PENDING
   VERIFIED
@@ -170,6 +176,7 @@ model User {
   apiRequestLogs          ApiRequestLog[]
   providersVerified       Provider[]              @relation("VerifiedProviders")
   favorites               Favorite[]
+  recurringBookings       RecurringBooking[]      @relation("CustomerRecurringBookings")
 
   @@index([email])
   @@index([role])
@@ -257,6 +264,7 @@ model Provider {
   favoritedBy             Favorite[]
   hours                   ProviderHours[]
   services                ProviderService[]
+  recurringBookings       RecurringBooking[]
 
   @@index([userId])
   @@index([verificationStatus])
@@ -437,6 +445,7 @@ model Booking {
   cancellationReason String?       @map("cancellation_reason")
   cancelledAt        DateTime?     @map("cancelled_at")
   cancelledById      String?       @map("cancelled_by")
+  recurringBookingId String?       @map("recurring_booking_id")
   noShowParty        NoShowParty?  @map("no_show_party")
   noShowReason       String?       @map("no_show_reason")
   noShowFlaggedAt    DateTime?     @map("no_show_flagged_at")
@@ -451,16 +460,53 @@ model Booking {
   statusChangedBy User?               @relation("BookingStatusChangedBy", fields: [statusChangedById], references: [id])
   cancelledBy     User?               @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
   createdBy       User?               @relation("BookingCreatedBy", fields: [createdById], references: [id])
-  review          Review?
-  attachments     BookingAttachment[]
-  conversations   Conversation[]
+  review           Review?
+  attachments      BookingAttachment[]
+  conversations    Conversation[]
+  recurringBooking RecurringBooking?   @relation(fields: [recurringBookingId], references: [id], onDelete: SetNull)
 
   @@index([customerId])
   @@index([providerId])
   @@index([status])
   @@index([scheduledDate])
   @@index([bookingNumber])
+  @@index([recurringBookingId])
   @@map("bookings")
+}
+
+// A recurring booking series. Acts as a template: a daily cron materializes the
+// next upcoming instance (a real Booking, status PENDING) within a lead window,
+// so we never create hundreds of future rows up front. The series ends when
+// endDate passes or maxOccurrences is reached.
+model RecurringBooking {
+  id                 String              @id @default(uuid())
+  customerId         String              @map("customer_id")
+  providerId         String              @map("provider_id")
+  frequency          RecurrenceFrequency
+  scheduledStartTime DateTime?           @map("scheduled_start_time") @db.Time
+  scheduledEndTime   DateTime?           @map("scheduled_end_time") @db.Time
+  serviceAddress     String              @map("service_address")
+  serviceLatitude    Decimal?            @map("service_latitude") @db.Decimal(10, 8)
+  serviceLongitude   Decimal?            @map("service_longitude") @db.Decimal(11, 8)
+  problemDescription String              @map("problem_description")
+  estimatedAmount    Decimal?            @map("estimated_amount") @db.Decimal(10, 2)
+  startDate          DateTime            @map("start_date") @db.Date
+  endDate            DateTime?           @map("end_date") @db.Date
+  maxOccurrences     Int?                @map("max_occurrences")
+  occurrencesCreated Int                 @default(0) @map("occurrences_created")
+  nextOccurrenceDate DateTime?           @map("next_occurrence_date") @db.Date
+  isActive           Boolean             @default(true) @map("is_active")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  customer User      @relation("CustomerRecurringBookings", fields: [customerId], references: [id], onDelete: Cascade)
+  provider Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([isActive, nextOccurrenceDate])
+  @@map("recurring_bookings")
 }
 
 model BookingAttachment {

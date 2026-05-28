@@ -31,7 +31,12 @@ import {
   bookingsService,
   filesService,
 } from "@/lib/api";
-import type { Provider, TimeSlot, ProviderService } from "@/types";
+import type {
+  Provider,
+  TimeSlot,
+  ProviderService,
+  RecurrenceFrequency,
+} from "@/types";
 import { formatCurrency, formatDate, formatTime, cn } from "@/lib/utils";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -77,6 +82,11 @@ export default function BookProviderPage() {
   const [serviceLatitude, setServiceLatitude] = useState<number | null>(null);
   const [serviceLongitude, setServiceLongitude] = useState<number | null>(null);
   const [detectingLocation, setDetectingLocation] = useState(false);
+  // Recurrence: "" = one-time. When set, an end condition is required.
+  const [repeat, setRepeat] = useState<"" | RecurrenceFrequency>("");
+  const [repeatEndMode, setRepeatEndMode] = useState<"count" | "date">("count");
+  const [repeatCount, setRepeatCount] = useState("4");
+  const [repeatUntil, setRepeatUntil] = useState("");
 
   useEffect(() => {
     if (params.providerId) {
@@ -172,14 +182,46 @@ export default function BookProviderPage() {
     setIsBooking(true);
     setError(null);
 
+    const scheduledDate = selectedDate.toISOString().split("T")[0] ?? "";
+    const scheduledStartTime =
+      flexibleTime || !selectedSlot
+        ? undefined
+        : extractHHMMSS(selectedSlot.startTime);
+
     try {
+      if (repeat) {
+        const count = Number(repeatCount);
+        if (repeatEndMode === "count" && (!count || count < 1)) {
+          setError("Enter how many times this booking should repeat.");
+          setIsBooking(false);
+          return;
+        }
+        if (repeatEndMode === "date" && !repeatUntil) {
+          setError("Choose a date for the recurring booking to end.");
+          setIsBooking(false);
+          return;
+        }
+        await bookingsService.createRecurring({
+          providerId: provider.id,
+          frequency: repeat,
+          startDate: scheduledDate,
+          scheduledStartTime,
+          ...(repeatEndMode === "count"
+            ? { maxOccurrences: count }
+            : { endDate: repeatUntil }),
+          serviceAddress,
+          serviceLatitude: serviceLatitude ?? undefined,
+          serviceLongitude: serviceLongitude ?? undefined,
+          problemDescription,
+        });
+        router.push(`/bookings?recurring=created`);
+        return;
+      }
+
       const booking = await bookingsService.create({
         providerId: provider.id,
-        scheduledDate: selectedDate.toISOString().split("T")[0] ?? "",
-        scheduledStartTime:
-          flexibleTime || !selectedSlot
-            ? undefined
-            : extractHHMMSS(selectedSlot.startTime),
+        scheduledDate,
+        scheduledStartTime,
         serviceAddress,
         serviceLatitude: serviceLatitude ?? undefined,
         serviceLongitude: serviceLongitude ?? undefined,
@@ -494,6 +536,73 @@ export default function BookProviderPage() {
                       </button>
                     </>
                   )}
+
+                  <div className="mt-6 rounded-xl border-2 border-gray-200 p-4">
+                    <label className="mb-1.5 block text-sm font-medium text-secondary-700">
+                      Repeat this booking
+                    </label>
+                    <select
+                      value={repeat}
+                      onChange={(e) =>
+                        setRepeat(e.target.value as "" | RecurrenceFrequency)
+                      }
+                      className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none"
+                    >
+                      <option value="">One-time only</option>
+                      <option value="WEEKLY">Weekly</option>
+                      <option value="BIWEEKLY">Every 2 weeks</option>
+                      <option value="MONTHLY">Monthly</option>
+                    </select>
+
+                    {repeat && (
+                      <div className="mt-3 space-y-3">
+                        <div className="flex flex-wrap gap-4 text-sm">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="repeatEndMode"
+                              checked={repeatEndMode === "count"}
+                              onChange={() => setRepeatEndMode("count")}
+                            />
+                            End after
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="repeatEndMode"
+                              checked={repeatEndMode === "date"}
+                              onChange={() => setRepeatEndMode("date")}
+                            />
+                            End on date
+                          </label>
+                        </div>
+                        {repeatEndMode === "count" ? (
+                          <div className="flex items-center gap-2 text-sm">
+                            <input
+                              type="number"
+                              min={1}
+                              max={104}
+                              value={repeatCount}
+                              onChange={(e) => setRepeatCount(e.target.value)}
+                              className="w-20 rounded-lg border-2 border-gray-200 px-3 py-2 text-secondary-900 focus:border-primary-500 focus:outline-none"
+                            />
+                            <span className="text-secondary-600">bookings</span>
+                          </div>
+                        ) : (
+                          <input
+                            type="date"
+                            value={repeatUntil}
+                            onChange={(e) => setRepeatUntil(e.target.value)}
+                            className="rounded-lg border-2 border-gray-200 px-3 py-2 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none"
+                          />
+                        )}
+                        <p className="text-xs text-secondary-500">
+                          The provider confirms each booking. You can stop the
+                          series anytime from your bookings.
+                        </p>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="mt-8 flex justify-between">
                     <Button variant="outline" size="lg" onClick={() => setStep(1)}>

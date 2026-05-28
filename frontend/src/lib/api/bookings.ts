@@ -4,7 +4,23 @@ import type {
   BookingAttachment,
   BookingStatus,
   PaginatedResponse,
+  RecurringBooking,
+  RecurrenceFrequency,
 } from "@/types";
+
+export interface CreateRecurringBookingDto {
+  providerId: string;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  endDate?: string;
+  maxOccurrences?: number;
+  scheduledStartTime?: string;
+  serviceAddress: string;
+  serviceLatitude?: number;
+  serviceLongitude?: number;
+  problemDescription: string;
+  estimatedAmount?: number;
+}
 
 type BookingListResponse =
   | PaginatedResponse<Booking>
@@ -122,6 +138,23 @@ export const bookingsService = {
 
   async flagNoShow(id: string, reason?: string): Promise<Booking> {
     return apiClient.put<Booking>(`/bookings/${id}/no-show`, { reason }, true);
+  },
+
+  async createRecurring(
+    data: CreateRecurringBookingDto,
+  ): Promise<RecurringBooking> {
+    return apiClient.post<RecurringBooking>("/recurring-bookings", data, true);
+  },
+
+  async getRecurring(): Promise<RecurringBooking[]> {
+    return apiClient.get<RecurringBooking[]>("/recurring-bookings/my", true);
+  },
+
+  async cancelRecurring(id: string): Promise<RecurringBooking> {
+    return apiClient.delete<RecurringBooking>(
+      `/recurring-bookings/${id}`,
+      true,
+    );
   },
 
   async reschedule(
