@@ -27,6 +27,15 @@ enum BookingStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  NO_SHOW
+}
+
+// Which party failed to show up for a confirmed appointment. The flagging party
+// reports the *other* side: a provider flags a CUSTOMER no-show, a customer
+// flags a PROVIDER no-show.
+enum NoShowParty {
+  CUSTOMER
+  PROVIDER
 }
 
 enum VerificationStatus {
@@ -225,6 +234,7 @@ model Provider {
   reviewCount            Int                @default(0) @map("review_count")
   totalBookings          Int                @default(0) @map("total_bookings")
   completedBookings      Int                @default(0) @map("completed_bookings")
+  noShowCount            Int                @default(0) @map("no_show_count")
   galleryCount           Int                @default(0) @map("gallery_count")
   responseRate           Decimal            @default(0) @map("response_rate") @db.Decimal(5, 2)
   avgResponseTimeMinutes Int?               @map("avg_response_time_minutes")
@@ -427,6 +437,9 @@ model Booking {
   cancellationReason String?       @map("cancellation_reason")
   cancelledAt        DateTime?     @map("cancelled_at")
   cancelledById      String?       @map("cancelled_by")
+  noShowParty        NoShowParty?  @map("no_show_party")
+  noShowReason       String?       @map("no_show_reason")
+  noShowFlaggedAt    DateTime?     @map("no_show_flagged_at")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
   createdById        String?       @map("created_by")

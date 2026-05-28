@@ -70,6 +70,7 @@ const statusBadge: Record<string, string> = {
   IN_PROGRESS: "bg-primary-50 text-primary-700",
   COMPLETED: "bg-success-50 text-success-700",
   CANCELLED: "bg-error-50 text-error-700",
+  NO_SHOW: "bg-error-50 text-error-700",
 };
 
 export default function ConversationPage() {

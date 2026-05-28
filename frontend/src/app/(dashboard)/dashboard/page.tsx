@@ -47,6 +47,7 @@ const statusColors: Record<
   IN_PROGRESS: "default",
   COMPLETED: "success",
   CANCELLED: "error",
+  NO_SHOW: "error",
 };
 
 export default function DashboardPage() {

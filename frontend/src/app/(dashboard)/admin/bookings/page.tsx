@@ -20,6 +20,7 @@ const STATUS_VARIANT: Record<BookingStatus, "default" | "warning" | "success" | 
   IN_PROGRESS: "info",
   COMPLETED: "success",
   CANCELLED: "error",
+  NO_SHOW: "error",
 };
 
 export default function AdminBookingsPage() {

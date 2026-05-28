@@ -679,6 +679,124 @@ export class BookingsService {
     return updated;
   }
 
+  /**
+   * Flag a confirmed booking as a no-show. Either party may flag the *other*
+   * one: a provider reports a CUSTOMER no-show, a customer reports a PROVIDER
+   * no-show. Only allowed once the scheduled start time has passed, so it can't
+   * be used to pre-emptively bail on an upcoming appointment (use cancel for
+   * that). Provider-side no-shows increment the provider's reliability counter.
+   */
+  async flagNoShow(id: string, userId: string, reason?: string) {
+    const booking = await this.findById(id);
+
+    const isCustomer = booking.customerId === userId;
+    const isProvider = booking.provider.userId === userId;
+
+    if (!isCustomer && !isProvider) {
+      throw new ForbiddenException("Not authorized to flag this booking");
+    }
+
+    if (booking.status !== "CONFIRMED") {
+      throw new BadRequestException(
+        "Only confirmed bookings can be marked as a no-show",
+      );
+    }
+
+    if (this.scheduledMoment(booking) > new Date()) {
+      throw new BadRequestException(
+        "Cannot flag a no-show before the scheduled time",
+      );
+    }
+
+    // The flagger reports the other side. Provider → customer didn't show.
+    const noShowParty = isProvider ? "CUSTOMER" : "PROVIDER";
+
+    const updated = await this.prisma.executeInTransaction(async (tx) => {
+      const result = await tx.booking.update({
+        where: { id, version: booking.version },
+        data: {
+          status: "NO_SHOW",
+          statusChangedAt: new Date(),
+          statusChangedById: userId,
+          noShowParty,
+          noShowReason: reason,
+          noShowFlaggedAt: new Date(),
+          version: { increment: 1 },
+        },
+        include: {
+          customer: {
+            select: { id: true, name: true, email: true, phone: true },
+          },
+          provider: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true, phone: true },
+              },
+            },
+          },
+        },
+      });
+
+      // Only provider no-shows count against provider reliability.
+      if (noShowParty === "PROVIDER") {
+        await tx.provider.update({
+          where: { id: booking.providerId },
+          data: { noShowCount: { increment: 1 } },
+        });
+      }
+
+      return result;
+    });
+
+    // Free the slot back up.
+    await this.cacheService.invalidateAvailability(
+      booking.providerId,
+      booking.scheduledDate.toISOString().split("T")[0],
+    );
+
+    this.logger.log(
+      `Booking ${booking.bookingNumber} flagged no-show (${noShowParty}) by ${isProvider ? "provider" : "customer"}`,
+    );
+
+    // Notify the party who was flagged.
+    const targetUserId =
+      noShowParty === "CUSTOMER"
+        ? booking.customerId
+        : booking.provider?.user?.id;
+    if (targetUserId) {
+      await this.notify(
+        targetUserId,
+        NotificationCategory.BOOKING_CANCELLED,
+        "Marked as a no-show",
+        `Booking #${booking.bookingNumber} was marked as a no-show${reason ? `: ${reason}` : "."}.`,
+        booking.id,
+        NotificationPriority.HIGH,
+      );
+    }
+
+    return updated;
+  }
+
+  /**
+   * Combine a booking's scheduled date + start time into a single Date. For
+   * flexible-time bookings (sentinel "00:00:00") we anchor to end-of-day so a
+   * no-show can only be flagged after that whole day has passed.
+   */
+  private scheduledMoment(booking: {
+    scheduledDate: Date;
+    scheduledStartTime: Date | null;
+  }): Date {
+    const date = new Date(booking.scheduledDate);
+    const time = booking.scheduledStartTime?.toISOString().slice(11, 19);
+    if (!time || time === BookingsService.FLEXIBLE_TIME) {
+      date.setUTCHours(23, 59, 59, 999);
+      return date;
+    }
+    const [h, m, s] = time.split(":").map(Number);
+    date.setUTCHours(h, m, s ?? 0, 0);
+    return date;
+  }
+
   async getCustomerBookings(customerId: string, params: Partial<BookingListParams>) {
     return this.bookingsRepository.findMany({
       ...params,

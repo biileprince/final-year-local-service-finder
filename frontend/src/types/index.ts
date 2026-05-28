@@ -111,7 +111,8 @@ export interface Category {
 }
 
 // Booking types
-export type BookingStatus = "PENDING" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export type BookingStatus = "PENDING" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
+export type NoShowParty = "CUSTOMER" | "PROVIDER";
 export type PaymentStatus = "UNPAID" | "PENDING" | "PAID" | "REFUNDED" | "FAILED";
 
 export interface Booking {
@@ -136,6 +137,9 @@ export interface Booking {
   paymentStatus: PaymentStatus;
   paymentMethod?: string;
   cancellationReason?: string;
+  noShowParty?: NoShowParty | null;
+  noShowReason?: string | null;
+  noShowFlaggedAt?: string | null;
   createdAt: string;
   review?: Review;
   attachments?: BookingAttachment[];
