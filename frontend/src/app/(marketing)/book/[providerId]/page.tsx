@@ -15,6 +15,8 @@ import {
   Paperclip,
   X,
   FileText,
+  Navigation,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,6 +74,9 @@ export default function BookProviderPage() {
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [providerServices, setProviderServices] = useState<ProviderService[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
+  const [serviceLatitude, setServiceLatitude] = useState<number | null>(null);
+  const [serviceLongitude, setServiceLongitude] = useState<number | null>(null);
+  const [detectingLocation, setDetectingLocation] = useState(false);
 
   useEffect(() => {
     if (params.providerId) {
@@ -121,6 +126,38 @@ export default function BookProviderPage() {
     }
   };
 
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) return;
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setServiceLatitude(lat);
+        setServiceLongitude(lng);
+        // Reverse-geocode to pre-fill the address field only when empty.
+        if (!serviceAddress.trim()) {
+          const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+          if (token) {
+            try {
+              const res = await fetch(
+                `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=address&access_token=${token}`,
+              );
+              const json = await res.json();
+              const place = json?.features?.[0]?.place_name;
+              if (place) setServiceAddress(place);
+            } catch {
+              // Silent — address remains empty for the user to fill.
+            }
+          }
+        }
+        setDetectingLocation(false);
+      },
+      () => setDetectingLocation(false),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 5 * 60 * 1000 },
+    );
+  };
+
   const handleBooking = async () => {
     if (
       !provider ||
@@ -144,6 +181,8 @@ export default function BookProviderPage() {
             ? undefined
             : extractHHMMSS(selectedSlot.startTime),
         serviceAddress,
+        serviceLatitude: serviceLatitude ?? undefined,
+        serviceLongitude: serviceLongitude ?? undefined,
         problemDescription,
         attachmentIds: attachments.map((a) => a.id),
       });
@@ -525,14 +564,40 @@ export default function BookProviderPage() {
                   )}
 
                   <div>
-                    <label className="mb-2 block text-base font-semibold text-secondary-700">
-                      Service Address *
-                    </label>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="text-base font-semibold text-secondary-700">
+                        Service Address *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleDetectLocation}
+                        disabled={detectingLocation}
+                        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 disabled:opacity-60"
+                      >
+                        {detectingLocation ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Navigation className="h-3.5 w-3.5" />
+                        )}
+                        Use my location
+                      </button>
+                    </div>
                     <Input
                       value={serviceAddress}
-                      onChange={(e) => setServiceAddress(e.target.value)}
+                      onChange={(e) => {
+                        setServiceAddress(e.target.value);
+                        // Clear stored coords when user manually edits the address.
+                        setServiceLatitude(null);
+                        setServiceLongitude(null);
+                      }}
                       placeholder="Enter your address"
                     />
+                    {serviceLatitude && serviceLongitude && (
+                      <p className="mt-1 flex items-center gap-1 text-xs text-primary-600">
+                        <Navigation className="h-3 w-3" />
+                        Location pinned — provider will see your exact location on the map.
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -761,6 +826,16 @@ export default function BookProviderPage() {
                   Final amount is agreed with the provider after the job and
                   paid offline.
                 </p>
+                {provider.cancellationPolicy?.trim() && (
+                  <div className="border-t border-secondary-200 pt-4">
+                    <p className="mb-1 text-sm font-semibold text-secondary-700">
+                      Cancellation policy
+                    </p>
+                    <p className="whitespace-pre-line text-sm text-secondary-500">
+                      {provider.cancellationPolicy}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

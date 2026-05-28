@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -22,6 +22,7 @@ import {
   Award,
   ImageIcon,
   DollarSign,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +43,144 @@ import { ReviewCard } from "@/components/reviews/review-card";
 import { ProvidersMap } from "@/components/providers/providers-map";
 import { FavoriteButton } from "@/components/providers/favorite-button";
 import { queryPermission } from "@/lib/permissions";
+
+// ─── Work Gallery + Lightbox ─────────────────────────────────────────────────
+
+function GalleryLightbox({
+  gallery,
+}: {
+  gallery: NonNullable<Provider["gallery"]>;
+}) {
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const count = gallery.length;
+
+  const close = useCallback(() => setOpenIdx(null), []);
+  const go = useCallback(
+    (delta: number) =>
+      setOpenIdx((cur) => (cur === null ? cur : (cur + delta + count) % count)),
+    [count],
+  );
+
+  // While the lightbox is open: arrow keys navigate, Escape closes, and we
+  // lock body scroll so the page behind doesn't move.
+  useEffect(() => {
+    if (openIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+      else if (e.key === "ArrowRight") go(1);
+      else if (e.key === "ArrowLeft") go(-1);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [openIdx, close, go]);
+
+  const active = openIdx === null ? null : gallery[openIdx];
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {gallery.map((g, idx) => (
+          <button
+            key={g.id}
+            type="button"
+            onClick={() => setOpenIdx(idx)}
+            aria-label={g.title ? `Expand ${g.title}` : "Expand image"}
+            className="group relative block aspect-square overflow-hidden rounded-xl bg-secondary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+          >
+            <Image
+              src={g.file.thumbnailUrl || g.file.url}
+              alt={g.title || "Gallery item"}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 300px"
+              className="object-cover transition-transform duration-200 group-hover:scale-105"
+            />
+            {g.title && (
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-left text-sm font-semibold text-white">
+                {g.title}
+              </div>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {active && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4 sm:p-8"
+          onClick={close}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image viewer"
+        >
+          <button
+            type="button"
+            onClick={close}
+            className="absolute right-4 top-4 z-10 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/25"
+            aria-label="Close"
+          >
+            <X className="h-6 w-6" />
+          </button>
+
+          {count > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  go(-1);
+                }}
+                className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/25 sm:left-4"
+                aria-label="Previous image"
+              >
+                <ChevronLeft className="h-7 w-7" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  go(1);
+                }}
+                className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/25 sm:right-4"
+                aria-label="Next image"
+              >
+                <ChevronRight className="h-7 w-7" />
+              </button>
+            </>
+          )}
+
+          <div
+            className="relative h-[80vh] w-full max-w-5xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Image
+              src={active.file.url}
+              alt={active.title || "Gallery image"}
+              fill
+              sizes="100vw"
+              className="object-contain"
+              priority
+            />
+          </div>
+
+          {(active.title || count > 1) && (
+            <div className="pointer-events-none absolute bottom-4 left-0 right-0 text-center text-sm text-white/90">
+              {active.title && <span className="font-medium">{active.title}</span>}
+              {count > 1 && (
+                <span className="ml-2 text-white/60">
+                  {openIdx! + 1} / {count}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
 
 // ─── Availability Section ────────────────────────────────────────────────────
 
@@ -444,7 +583,8 @@ export default function ProviderDetailPage() {
               size="2xl"
               src={provider.user.profileImage}
               name={provider.user.name}
-              className="h-24 w-24 shrink-0 rounded-2xl"
+              sizes="(max-width: 640px) 144px, 192px"
+              className="h-36 w-36 shrink-0 rounded-2xl object-cover shadow-md ring-1 ring-secondary-100 sm:h-48 sm:w-48"
             />
             <div className="flex-1">
               <div className="flex flex-wrap items-center gap-4">
@@ -578,6 +718,16 @@ export default function ProviderDetailPage() {
                 <p className="whitespace-pre-line text-base leading-relaxed text-secondary-700">
                   {provider.bio || "No description available."}
                 </p>
+                {provider.cancellationPolicy?.trim() && (
+                  <div className="mt-6 border-t border-secondary-200 pt-4">
+                    <h3 className="mb-1.5 text-sm font-semibold text-secondary-800">
+                      Cancellation policy
+                    </h3>
+                    <p className="whitespace-pre-line text-sm leading-relaxed text-secondary-600">
+                      {provider.cancellationPolicy}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -698,31 +848,7 @@ export default function ProviderDetailPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                    {provider.gallery.map((g) => (
-                      <a
-                        key={g.id}
-                        href={g.file.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="group relative block overflow-hidden rounded-xl bg-secondary-100"
-                      >
-                        <Image
-                          src={g.file.thumbnailUrl || g.file.url}
-                          alt={g.title || "Gallery item"}
-                          width={400}
-                          height={400}
-                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 250px"
-                          className="aspect-square w-full object-cover transition-transform group-hover:scale-105"
-                        />
-                        {g.title && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-sm font-semibold text-white">
-                            {g.title}
-                          </div>
-                        )}
-                      </a>
-                    ))}
-                  </div>
+                  <GalleryLightbox gallery={provider.gallery} />
                 </CardContent>
               </Card>
             )}

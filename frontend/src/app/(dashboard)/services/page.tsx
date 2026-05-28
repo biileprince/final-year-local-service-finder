@@ -60,6 +60,7 @@ export default function ProviderServicesPage() {
   const [bio, setBio] = useState("");
   const [hourlyRate, setHourlyRate] = useState<string>("");
   const [yearsExperience, setYearsExperience] = useState<string>("");
+  const [cancellationPolicy, setCancellationPolicy] = useState("");
   const [location, setLocation] = useState("");
   // Coords captured by the Mapbox-backed picker. We track whether the user has
   // actively re-picked their location in this session so we only ship new
@@ -129,6 +130,7 @@ export default function ProviderServicesPage() {
           setBio(me.bio || "");
           setHourlyRate(String(me.hourlyRate ?? ""));
           setYearsExperience(String(me.yearsExperience ?? ""));
+          setCancellationPolicy(me.cancellationPolicy || "");
           setLocation(me.location || "");
           if (
             typeof me.latitude === "number" &&
@@ -412,6 +414,7 @@ export default function ProviderServicesPage() {
         bio: bio.trim(),
         hourlyRate: rateNum,
         yearsExperience: yearsNum,
+        cancellationPolicy: cancellationPolicy.trim(),
         location: location.trim(),
         // Only ship coords when the user picked a new location this session —
         // avoids accidentally re-sending stale lat/lng if they only edited the
@@ -561,6 +564,24 @@ export default function ProviderServicesPage() {
                 </p>
               )}
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-secondary-700">
+              Cancellation policy
+            </label>
+            <textarea
+              value={cancellationPolicy}
+              onChange={(e) => setCancellationPolicy(e.target.value)}
+              rows={3}
+              maxLength={1000}
+              placeholder="e.g. Free cancellation up to 24h before the appointment. Same-day cancellations may incur a call-out fee, payable directly to me."
+              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            />
+            <p className="mt-1 text-xs text-secondary-500">
+              Shown to customers before they book. Payments are handled offline,
+              so any fee is collected directly by you.
+            </p>
           </div>
         </CardContent>
       </Card>

@@ -213,6 +213,7 @@ model Provider {
   latitude               Decimal?           @db.Decimal(10, 8)
   longitude              Decimal?           @db.Decimal(11, 8)
   serviceRadiusKm        Int                @default(50) @map("service_radius_km")
+  cancellationPolicy     String?            @map("cancellation_policy")
   verificationStatus     VerificationStatus @default(PENDING) @map("verification_status")
   verifiedAt             DateTime?          @map("verified_at")
   verifiedById           String?            @map("verified_by")

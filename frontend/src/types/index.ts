@@ -31,6 +31,7 @@ export interface Provider {
   latitude?: number;
   longitude?: number;
   serviceRadiusKm: number;
+  cancellationPolicy?: string | null;
   verificationStatus: VerificationStatus;
   featured: boolean;
   isActive: boolean;
@@ -124,6 +125,8 @@ export interface Booking {
   scheduledStartTime: string;
   scheduledEndTime?: string;
   serviceAddress: string;
+  serviceLatitude?: number | null;
+  serviceLongitude?: number | null;
   problemDescription: string;
   serviceNotes?: string;
   status: BookingStatus;

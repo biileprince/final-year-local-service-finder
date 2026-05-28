@@ -62,6 +62,15 @@ export class UpdateProviderDto {
   @Max(500)
   serviceRadiusKm?: number;
 
+  @ApiPropertyOptional({
+    example:
+      "Free cancellation up to 24h before the appointment. Same-day cancellations may be subject to a call-out fee, payable directly to the provider.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  cancellationPolicy?: string;
+
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
