@@ -84,6 +84,7 @@ export const providersService = {
       latitude: number;
       longitude: number;
       serviceRadiusKm: number;
+      cancellationPolicy: string;
     }>,
   ): Promise<Provider> {
     return apiClient.put<Provider>("/providers/me", data, true);

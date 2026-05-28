@@ -23,6 +23,7 @@ export interface UpdateProviderData {
   latitude?: number;
   longitude?: number;
   serviceRadiusKm?: number;
+  cancellationPolicy?: string;
   isActive?: boolean;
 }
 
