@@ -14,6 +14,7 @@ export { filesService, type FileContext, type UploadedFile } from "./files";
 export { adminService } from "./admin";
 export { searchService } from "./search";
 export { favoritesService, type FavoriteListItem } from "./favorites";
+export { usersService } from "./users";
 
 // Re-export types from services
 export type {

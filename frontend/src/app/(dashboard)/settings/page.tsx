@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   Moon,
@@ -10,21 +11,70 @@ import {
   Shield,
   Smartphone,
   ChevronRight,
-  CheckCircle,
-  AlertCircle,
   CalendarDays,
   Copy,
+  Download,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { bookingsService } from "@/lib/api";
+import { bookingsService, usersService } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const { logout } = useAuth();
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const [language, setLanguage] = useState("en");
   const [feedUrl, setFeedUrl] = useState<string | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const exportData = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const data = await usersService.exportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `my-data-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(
+        err instanceof Error ? err.message : "Failed to export your data",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await usersService.deleteAccount();
+      await logout();
+      router.replace("/");
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete your account",
+      );
+      setDeleting(false);
+    }
+  };
 
   const loadFeed = async () => {
     setFeedLoading(true);
@@ -215,21 +265,94 @@ export default function SettingsPage() {
                 Download Your Data
               </h3>
               <p className="text-sm text-secondary-500">
-                Get a copy of all your data — contact support to request
+                Get a machine-readable copy of all your data (profile, bookings,
+                reviews, messages, and more)
               </p>
+              {exportError && (
+                <p className="mt-1 text-sm text-error-600">{exportError}</p>
+              )}
             </div>
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                alert(
-                  "To request your data export, email support@localservicefinder.com",
-                )
-              }
+              onClick={exportData}
+              isLoading={exporting}
             >
-              Request
+              <Download className="mr-1.5 h-4 w-4" />
+              Download
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Danger zone */}
+      <Card className="border-error-500/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-error-700">
+            <Trash2 className="h-5 w-5" />
+            Delete account
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-secondary-600">
+            Permanently delete your account and sign out of all devices. This
+            cannot be undone. We recommend downloading your data first.
+          </p>
+
+          {!deleteOpen ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-error-500/40 text-error-700 hover:bg-error-50"
+              onClick={() => setDeleteOpen(true)}
+            >
+              Delete my account
+            </Button>
+          ) : (
+            <div className="space-y-3 rounded-lg border border-error-500/30 bg-error-50 p-4">
+              <label
+                htmlFor="delete-confirm"
+                className="block text-sm font-medium text-secondary-900"
+              >
+                Type <span className="font-mono font-bold">DELETE</span> to
+                confirm
+              </label>
+              <input
+                id="delete-confirm"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                className="w-full max-w-xs rounded-lg border border-secondary-300 px-3 py-2 text-secondary-900 focus:border-error-500 focus:outline-none focus:ring-2 focus:ring-error-500/20"
+                placeholder="DELETE"
+                autoComplete="off"
+              />
+              {deleteError && (
+                <p className="text-sm text-error-600">{deleteError}</p>
+              )}
+              <div className="flex gap-3">
+                <Button
+                  size="sm"
+                  className="bg-error-600 text-white hover:bg-error-700"
+                  disabled={deleteConfirm !== "DELETE"}
+                  isLoading={deleting}
+                  onClick={deleteAccount}
+                >
+                  Permanently delete
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDeleteOpen(false);
+                    setDeleteConfirm("");
+                    setDeleteError(null);
+                  }}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
