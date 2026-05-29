@@ -32,7 +32,7 @@ export type {
   SuggestType,
   PlatformStats,
 } from "./search";
-export type { LoginDto, RegisterDto } from "./auth";
+export type { LoginDto, RegisterDto, SessionInfo } from "./auth";
 export type { SearchProvidersParams, ProviderSearchResult } from "./providers";
 export type { CreateBookingDto, BookingsQueryParams } from "./bookings";
 export type { SendMessageDto } from "./messages";

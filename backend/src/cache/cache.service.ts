@@ -7,6 +7,15 @@ import {
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
 
+export interface SessionMeta {
+  sessionId: string;
+  tokenId: string; // the *current* (rotating) refresh token id for this session
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+  lastActiveAt: string;
+}
+
 @Injectable()
 export class CacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CacheService.name);
@@ -225,6 +234,40 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
 
   async deleteAllRefreshTokens(userId: string): Promise<void> {
     await this.delByPattern(`refresh:${userId}:*`);
+  }
+
+  // --- Session metadata (parallel to the refresh token, for the sessions UI) ---
+  // Keyed by a stable sessionId that survives refresh-token rotation, so the
+  // user sees one entry per device rather than one per rotated token.
+
+  async setSession(
+    userId: string,
+    sessionId: string,
+    data: SessionMeta,
+  ): Promise<void> {
+    await this.set(
+      `session:${userId}:${sessionId}`,
+      data,
+      CacheService.TTL.USER_SESSION,
+    );
+  }
+
+  async getSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<SessionMeta | null> {
+    return this.get<SessionMeta>(`session:${userId}:${sessionId}`);
+  }
+
+  async listSessions(userId: string): Promise<SessionMeta[]> {
+    const keys = await this.getKeys(`session:${userId}:*`);
+    if (keys.length === 0) return [];
+    const values = await Promise.all(keys.map((k) => this.get<SessionMeta>(k)));
+    return values.filter((v): v is SessionMeta => v !== null);
+  }
+
+  async deleteSession(userId: string, sessionId: string): Promise<void> {
+    await this.del(`session:${userId}:${sessionId}`);
   }
 
   // ============================================================================

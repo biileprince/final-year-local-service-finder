@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -15,11 +15,15 @@ import {
   Copy,
   Download,
   Trash2,
+  Monitor,
+  LogOut,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { bookingsService, usersService } from "@/lib/api";
+import { bookingsService, usersService, authService } from "@/lib/api";
+import type { SessionInfo } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
+import { formatRelativeTime } from "@/lib/utils";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -73,6 +77,51 @@ export default function SettingsPage() {
         err instanceof Error ? err.message : "Failed to delete your account",
       );
       setDeleting(false);
+    }
+  };
+
+  // --- Active sessions ---
+  const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokingOthers, setRevokingOthers] = useState(false);
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      setSessions(await authService.listSessions());
+    } catch {
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSessions();
+  }, [loadSessions]);
+
+  const revokeSession = async (id: string) => {
+    setRevokingId(id);
+    try {
+      await authService.revokeSession(id);
+      setSessions((prev) => prev?.filter((s) => s.id !== id) ?? null);
+    } catch {
+      /* surfaced via reload below */
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const revokeOthers = async () => {
+    setRevokingOthers(true);
+    try {
+      await authService.revokeOtherSessions();
+      setSessions((prev) => prev?.filter((s) => s.current) ?? null);
+    } catch {
+      /* no-op */
+    } finally {
+      setRevokingOthers(false);
     }
   };
 
@@ -245,18 +294,80 @@ export default function SettingsPage() {
             </Button>
           </div>
 
-          <div className="flex items-center justify-between rounded-lg border border-secondary-200 p-4">
-            <div>
-              <h3 className="font-medium text-secondary-900">
-                Active Sessions
-              </h3>
-              <p className="text-sm text-secondary-500">
-                You are currently signed in on this device
-              </p>
+          <div className="rounded-lg border border-secondary-200 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-medium text-secondary-900">
+                  Active Sessions
+                </h3>
+                <p className="text-sm text-secondary-500">
+                  Devices currently signed in to your account
+                </p>
+              </div>
+              {sessions && sessions.some((s) => !s.current) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={revokeOthers}
+                  isLoading={revokingOthers}
+                >
+                  <LogOut className="mr-1.5 h-4 w-4" />
+                  Sign out others
+                </Button>
+              )}
             </div>
-            <Button variant="outline" size="sm" disabled>
-              1 active
-            </Button>
+
+            <div className="mt-4 space-y-2">
+              {sessionsLoading ? (
+                <p className="text-sm text-secondary-500">Loading sessions…</p>
+              ) : !sessions || sessions.length === 0 ? (
+                <p className="text-sm text-secondary-500">
+                  No active sessions found.
+                </p>
+              ) : (
+                sessions.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between gap-3 rounded-lg bg-secondary-50 px-3 py-2.5"
+                  >
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-secondary-600">
+                        {isMobileAgent(s.userAgent) ? (
+                          <Smartphone className="h-4 w-4" />
+                        ) : (
+                          <Monitor className="h-4 w-4" />
+                        )}
+                      </div>
+                      <div className="overflow-hidden">
+                        <p className="truncate text-sm font-medium text-secondary-900">
+                          {describeAgent(s.userAgent)}
+                          {s.current && (
+                            <span className="ml-2 rounded-full bg-success-50 px-2 py-0.5 text-xs font-medium text-success-700">
+                              This device
+                            </span>
+                          )}
+                        </p>
+                        <p className="truncate text-xs text-secondary-500">
+                          {s.ipAddress ? `${s.ipAddress} · ` : ""}
+                          Active {formatRelativeTime(s.lastActiveAt)}
+                        </p>
+                      </div>
+                    </div>
+                    {!s.current && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 text-error-600 hover:bg-error-50"
+                        onClick={() => revokeSession(s.id)}
+                        isLoading={revokingId === s.id}
+                      >
+                        Revoke
+                      </Button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-between rounded-lg border border-secondary-200 p-4">
@@ -409,6 +520,37 @@ export default function SettingsPage() {
       </Card>
     </div>
   );
+}
+
+function isMobileAgent(ua: string | null): boolean {
+  if (!ua) return false;
+  return /mobile|android|iphone|ipad|ipod/i.test(ua);
+}
+
+// Best-effort "Browser on OS" label from a user-agent string.
+function describeAgent(ua: string | null): string {
+  if (!ua) return "Unknown device";
+  const browser = /edg/i.test(ua)
+    ? "Edge"
+    : /chrome|crios/i.test(ua)
+      ? "Chrome"
+      : /firefox|fxios/i.test(ua)
+        ? "Firefox"
+        : /safari/i.test(ua)
+          ? "Safari"
+          : "Browser";
+  const os = /windows/i.test(ua)
+    ? "Windows"
+    : /android/i.test(ua)
+      ? "Android"
+      : /iphone|ipad|ipod/i.test(ua)
+        ? "iOS"
+        : /mac os/i.test(ua)
+          ? "macOS"
+          : /linux/i.test(ua)
+            ? "Linux"
+            : "";
+  return os ? `${browser} on ${os}` : browser;
 }
 
 function ThemeButton({
