@@ -92,7 +92,12 @@ export const providersService = {
 
   async getReviews(
     providerId: string,
-    params?: { page?: number; limit?: number },
+    params?: {
+      page?: number;
+      limit?: number;
+      sortBy?: "rating" | "createdAt" | "helpfulCount";
+      sortOrder?: "asc" | "desc";
+    },
   ): Promise<PaginatedResponse<Review>> {
     const queryString = buildQueryString(params || {});
     // Reviews controller returns { items, total, page, limit, totalPages }

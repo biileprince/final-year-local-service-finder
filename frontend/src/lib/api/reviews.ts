@@ -33,7 +33,12 @@ export const reviewsService = {
 
   async getByProvider(
     providerId: string,
-    params?: { page?: number; limit?: number },
+    params?: {
+      page?: number;
+      limit?: number;
+      sortBy?: "rating" | "createdAt" | "helpfulCount";
+      sortOrder?: "asc" | "desc";
+    },
   ): Promise<PaginatedResponse<Review>> {
     const qs = buildQueryString(params || {});
     const raw = await apiClient.get<{

@@ -426,6 +426,10 @@ export default function ProviderDetailPage() {
   };
   const [provider, setProvider] = useState<Provider | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewSort, setReviewSort] = useState<
+    "recent" | "helpful" | "rating"
+  >("recent");
+  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [providerServices, setProviderServices] = useState<ProviderService[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [suggested, setSuggested] = useState<Provider[]>([]);
@@ -477,6 +481,29 @@ export default function ProviderDetailPage() {
       setProviderServices(servicesData.status === "fulfilled" ? servicesData.value : []);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const REVIEW_SORTS = {
+    recent: { sortBy: "createdAt", sortOrder: "desc" },
+    helpful: { sortBy: "helpfulCount", sortOrder: "desc" },
+    rating: { sortBy: "rating", sortOrder: "desc" },
+  } as const;
+
+  const changeReviewSort = async (sort: typeof reviewSort) => {
+    setReviewSort(sort);
+    if (!provider) return;
+    setReviewsLoading(true);
+    try {
+      const res = await providersService.getReviews(
+        provider.id,
+        REVIEW_SORTS[sort],
+      );
+      setReviews(res.data ?? []);
+    } catch {
+      /* keep existing list on failure */
+    } finally {
+      setReviewsLoading(false);
     }
   };
 
@@ -856,10 +883,31 @@ export default function ProviderDetailPage() {
             {/* Reviews — flattened, not behind a tab */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <Star className="h-5 w-5 text-primary-600" />
-                  Reviews ({reviews.length})
-                </CardTitle>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <Star className="h-5 w-5 text-primary-600" />
+                    Reviews ({reviews.length})
+                  </CardTitle>
+                  {reviews.length > 1 && (
+                    <label className="flex items-center gap-2 text-sm text-secondary-600">
+                      <span className="sr-only sm:not-sr-only">Sort by</span>
+                      <select
+                        value={reviewSort}
+                        onChange={(e) =>
+                          void changeReviewSort(
+                            e.target.value as typeof reviewSort,
+                          )
+                        }
+                        disabled={reviewsLoading}
+                        className="rounded-lg border border-secondary-300 bg-white px-2.5 py-1.5 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-60"
+                      >
+                        <option value="recent">Most recent</option>
+                        <option value="helpful">Most helpful</option>
+                        <option value="rating">Highest rated</option>
+                      </select>
+                    </label>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {reviews.length === 0 ? (
