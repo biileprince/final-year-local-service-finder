@@ -10,6 +10,7 @@ import {
 } from "@/components/theme/theme-provider";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { PostHogProvider } from "@/components/analytics/posthog-provider";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -99,6 +100,7 @@ export default function RootLayout({
               {children}
               <CookieConsent />
               <InstallPrompt />
+              <PostHogProvider />
             </SearchOverlayProvider>
           </ToastProvider>
         </ThemeProvider>

@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { User } from "@/types";
 import { authService, apiClient, type LoginDto, type RegisterDto } from "@/lib/api";
 import { useFavoritesStore } from "./favorites-store";
+import { analytics } from "@/lib/analytics";
 
 interface AuthState {
   user: User | null;
@@ -36,6 +37,8 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          analytics.identify(response.user.id, { role: response.user.role });
+          analytics.capture("user_logged_in", { method: "password" });
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Login failed",
@@ -54,6 +57,8 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          analytics.identify(response.user.id, { role: response.user.role });
+          analytics.capture("user_signed_up", { role: response.user.role });
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Registration failed",
@@ -76,6 +81,7 @@ export const useAuthStore = create<AuthState>()(
           });
           // Clear per-user caches that leak across accounts.
           useFavoritesStore.getState().reset();
+          analytics.reset();
         }
       },
 
@@ -93,6 +99,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          analytics.identify(user.id, { role: user.role });
         } catch {
           // Token is invalid/expired — clear it so the redirect guard unblocks
           apiClient.clearTokens();
