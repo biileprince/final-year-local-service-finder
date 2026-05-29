@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Roboto } from "next/font/google";
 import "@/styles/globals.css";
 import { ToastProvider } from "@/components/ui/toast";
@@ -8,6 +8,8 @@ import {
   ThemeProvider,
   themeNoFlashScript,
 } from "@/components/theme/theme-provider";
+import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -55,6 +57,19 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  appleWebApp: {
+    capable: true,
+    title: "Local Service Finder",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#f97316",
 };
 
 export default function RootLayout({
@@ -83,9 +98,11 @@ export default function RootLayout({
             <SearchOverlayProvider>
               {children}
               <CookieConsent />
+              <InstallPrompt />
             </SearchOverlayProvider>
           </ToastProvider>
         </ThemeProvider>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
