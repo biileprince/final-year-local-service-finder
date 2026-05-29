@@ -14,6 +14,15 @@ export interface RegisterDto {
   role?: "CUSTOMER" | "PROVIDER";
 }
 
+export interface SessionInfo {
+  id: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  lastActiveAt: string;
+  current: boolean;
+}
+
 export const authService = {
   async login(data: LoginDto): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>("/auth/login", data);
@@ -130,6 +139,22 @@ export const authService = {
     profileImage?: string;
   }): Promise<import("@/types").User> {
     return apiClient.put<import("@/types").User>("/users/me", data, true);
+  },
+
+  async listSessions(): Promise<SessionInfo[]> {
+    return apiClient.get<SessionInfo[]>("/auth/sessions", true);
+  },
+
+  async revokeSession(sessionId: string): Promise<void> {
+    await apiClient.delete(`/auth/sessions/${sessionId}`, true);
+  },
+
+  async revokeOtherSessions(): Promise<{ revoked: number }> {
+    return apiClient.post<{ revoked: number }>(
+      "/auth/sessions/revoke-others",
+      {},
+      true,
+    );
   },
 
   isAuthenticated(): boolean {

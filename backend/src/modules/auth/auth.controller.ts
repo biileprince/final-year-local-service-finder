@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
+  Param,
   Body,
   HttpCode,
   HttpStatus,
@@ -65,9 +67,13 @@ export class AuthController {
   @ApiResponse({ status: 409, description: "Email already registered" })
   async register(
     @Body() registerDto: RegisterDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const tokens = await this.authService.register(registerDto);
+    const tokens = await this.authService.register(
+      registerDto,
+      this.sessionContext(req),
+    );
     this.applySessionCookies(res, tokens.refreshToken);
     return tokens;
   }
@@ -81,9 +87,13 @@ export class AuthController {
   @ApiResponse({ status: 401, description: "Invalid credentials" })
   async login(
     @Body() loginDto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const tokens = await this.authService.login(loginDto);
+    const tokens = await this.authService.login(
+      loginDto,
+      this.sessionContext(req),
+    );
     this.applySessionCookies(res, tokens.refreshToken);
     return tokens;
   }
@@ -107,7 +117,10 @@ export class AuthController {
     if (!refreshToken) {
       throw new UnauthorizedException("Missing refresh token");
     }
-    const tokens = await this.authService.refreshTokens(refreshToken);
+    const tokens = await this.authService.refreshTokens(
+      refreshToken,
+      this.sessionContext(req),
+    );
     this.applySessionCookies(res, tokens.refreshToken);
     return tokens;
   }
@@ -122,9 +135,46 @@ export class AuthController {
     @CurrentUser() user: CurrentUserPayload,
     @Res({ passthrough: true }) res: Response,
   ) {
-    await this.authService.logout(user.id);
+    // Log out just this device when we know the session; the access token
+    // carries the sessionId. Falls back to all-sessions if it's missing.
+    await this.authService.logout(user.id, user.sessionId);
     clearRefreshCookie(res);
     return { message: "Logged out successfully" };
+  }
+
+  @Get("sessions")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "List the current user's active sessions" })
+  @ApiResponse({ status: 200, description: "Active sessions returned" })
+  async listSessions(@CurrentUser() user: CurrentUserPayload) {
+    return this.authService.listSessions(user.id, user.sessionId);
+  }
+
+  @Delete("sessions/:sessionId")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Revoke a specific session" })
+  @ApiResponse({ status: 200, description: "Session revoked" })
+  async revokeSession(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("sessionId") sessionId: string,
+  ) {
+    await this.authService.revokeSession(user.id, sessionId);
+    return { message: "Session revoked" };
+  }
+
+  @Post("sessions/revoke-others")
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Revoke all sessions except the current one" })
+  @ApiResponse({ status: 200, description: "Other sessions revoked" })
+  async revokeOtherSessions(@CurrentUser() user: CurrentUserPayload) {
+    if (!user.sessionId) {
+      return { revoked: 0 };
+    }
+    return this.authService.revokeOtherSessions(user.id, user.sessionId);
   }
 
   /**
@@ -135,6 +185,14 @@ export class AuthController {
   private applySessionCookies(res: Response, refreshToken: string): void {
     setRefreshCookie(res, refreshToken);
     setCsrfCookie(res, randomBytes(32).toString("base64url"));
+  }
+
+  /** Captures the request's IP + user-agent for the sessions UI. */
+  private sessionContext(req: Request) {
+    return {
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+    };
   }
 
   // -- Password reset  -------------------------------------------------------
@@ -337,6 +395,7 @@ export class AuthController {
   })
   async googleExchange(
     @Body() body: { code?: string },
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     if (!body?.code) {
@@ -345,7 +404,10 @@ export class AuthController {
     const userId = await this.googleAuthService.exchangeCodeForUserId(
       body.code,
     );
-    const tokens = await this.authService.issueSessionForUserId(userId);
+    const tokens = await this.authService.issueSessionForUserId(
+      userId,
+      this.sessionContext(req),
+    );
     this.applySessionCookies(res, tokens.refreshToken);
     return tokens;
   }
@@ -359,6 +421,7 @@ export class AuthController {
   })
   async googleComplete(
     @Body() body: { signup?: string; role?: "CUSTOMER" | "PROVIDER" },
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     if (!body?.signup) {
@@ -372,7 +435,10 @@ export class AuthController {
       body.role,
     );
     const userId = await this.googleAuthService.exchangeCodeForUserId(code);
-    const tokens = await this.authService.issueSessionForUserId(userId);
+    const tokens = await this.authService.issueSessionForUserId(
+      userId,
+      this.sessionContext(req),
+    );
     this.applySessionCookies(res, tokens.refreshToken);
     return tokens;
   }
