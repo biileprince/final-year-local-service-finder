@@ -15,6 +15,11 @@ export { adminService } from "./admin";
 export { searchService } from "./search";
 export { favoritesService, type FavoriteListItem } from "./favorites";
 export { usersService } from "./users";
+export {
+  moderationService,
+  type ReportReason,
+  type BlockStatus,
+} from "./moderation";
 
 // Re-export types from services
 export type {

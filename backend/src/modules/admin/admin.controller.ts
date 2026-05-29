@@ -32,6 +32,9 @@ import { ModerateReviewDto } from "./dto/moderate-review.dto";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
+import { ResolveReportDto } from "./dto/resolve-report.dto";
+import { ModerationService } from "../moderation/moderation.service";
+import { ReportStatus } from "@prisma/client";
 
 @Controller("admin")
 @ApiTags("admin")
@@ -39,7 +42,10 @@ import { CancelBookingDto } from "./dto/cancel-booking.dto";
 @Roles(UserRole.ADMIN)
 @ApiBearerAuth()
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly moderationService: ModerationService,
+  ) {}
 
   // ============================================================================
   // Dashboard & Analytics
@@ -256,6 +262,34 @@ export class AdminController {
     @CurrentUser() admin: CurrentUserPayload,
   ) {
     return this.adminService.moderateReview(id, dto.action, admin.id);
+  }
+
+  // ============================================================================
+  // User Reports (chat block & report)
+  // ============================================================================
+
+  @Get("reports")
+  @ApiOperation({ summary: "List user reports filed from chat" })
+  @ApiQuery({ name: "status", required: false, enum: ReportStatus })
+  @ApiResponse({ status: 200, description: "Returns user reports" })
+  async getReports(@Query("status") status?: ReportStatus) {
+    return this.moderationService.listReports(status);
+  }
+
+  @Post("reports/:id/resolve")
+  @ApiOperation({ summary: "Resolve a user report" })
+  @ApiResponse({ status: 200, description: "Report resolved" })
+  async resolveReport(
+    @Param("id") id: string,
+    @Body() dto: ResolveReportDto,
+    @CurrentUser() admin: CurrentUserPayload,
+  ) {
+    return this.moderationService.resolveReport(
+      id,
+      admin.id,
+      dto.status,
+      dto.resolutionNote,
+    );
   }
 
   // ============================================================================

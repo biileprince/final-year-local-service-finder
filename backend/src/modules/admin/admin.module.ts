@@ -7,6 +7,7 @@ import { BookingsModule } from "../bookings/bookings.module";
 import { ReviewsModule } from "../reviews/reviews.module";
 import { CategoriesModule } from "../categories/categories.module";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { ModerationModule } from "../moderation/moderation.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
     ReviewsModule,
     CategoriesModule,
     NotificationsModule,
+    ModerationModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

@@ -21,12 +21,20 @@ import {
   X as XIcon,
   FileText,
   UploadCloud,
+  Ban,
+  Flag,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
-import { messagesService, filesService } from "@/lib/api";
+import {
+  messagesService,
+  filesService,
+  moderationService,
+  type ReportReason,
+} from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import { useMessagesSocket } from "@/lib/messages-socket";
 import { VoiceMessage } from "@/components/messages/voice-message";
@@ -84,6 +92,18 @@ export default function ConversationPage() {
   const [isSending, setIsSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // Moderation — block/report from chat
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [blockStatus, setBlockStatus] = useState<{
+    blockedByMe: boolean;
+    blockedByThem: boolean;
+  } | null>(null);
+  const [blockBusy, setBlockBusy] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<ReportReason>("SPAM");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   // Files queued in the preview tray, not yet uploaded. Each entry holds an
   // object URL for image previews — revoked on remove / clear / unmount.
@@ -609,6 +629,94 @@ export default function ConversationPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // The other party's *user* id (provider conversations nest it under provider.user).
+  const otherUserId =
+    !conversation || !user
+      ? null
+      : user.role === "PROVIDER"
+        ? conversation.customer?.id
+        : conversation.provider?.user?.id;
+  const otherUserName =
+    user?.role === "PROVIDER"
+      ? conversation?.customer?.name
+      : conversation?.provider?.user?.name;
+  const isBlocked = !!(
+    blockStatus?.blockedByMe || blockStatus?.blockedByThem
+  );
+
+  useEffect(() => {
+    if (!otherUserId) return;
+    let cancelled = false;
+    moderationService
+      .blockStatus(otherUserId)
+      .then((s) => {
+        if (!cancelled) setBlockStatus(s);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [otherUserId]);
+
+  const handleToggleBlock = async () => {
+    if (!otherUserId || blockBusy) return;
+    setBlockBusy(true);
+    const wasBlocked = blockStatus?.blockedByMe;
+    try {
+      if (wasBlocked) {
+        await moderationService.unblock(otherUserId);
+        setBlockStatus((s) => ({
+          blockedByThem: s?.blockedByThem ?? false,
+          blockedByMe: false,
+        }));
+        toast({ title: "User unblocked", variant: "success" });
+      } else {
+        await moderationService.block(otherUserId);
+        setBlockStatus((s) => ({
+          blockedByThem: s?.blockedByThem ?? false,
+          blockedByMe: true,
+        }));
+        toast({ title: "User blocked", variant: "success" });
+      }
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Action failed",
+        variant: "error",
+      });
+    } finally {
+      setBlockBusy(false);
+      setHeaderMenuOpen(false);
+    }
+  };
+
+  const handleSubmitReport = async () => {
+    if (!otherUserId || reportSubmitting) return;
+    setReportSubmitting(true);
+    try {
+      await moderationService.report({
+        reportedUserId: otherUserId,
+        conversationId: conversation?.id,
+        reason: reportReason,
+        details: reportDetails.trim() || undefined,
+      });
+      toast({
+        title: "Report submitted",
+        description: "Our team will review it shortly.",
+        variant: "success",
+      });
+      setReportOpen(false);
+      setReportDetails("");
+      setReportReason("SPAM");
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Failed to submit report",
+        variant: "error",
+      });
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim() || !conversation) return;
@@ -703,11 +811,75 @@ export default function ConversationPage() {
           <Button variant="ghost" size="icon" aria-label="Start video call">
             <Video className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" aria-label="More options">
-            <MoreVertical className="h-5 w-5" />
-          </Button>
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="More options"
+              aria-haspopup="menu"
+              aria-expanded={headerMenuOpen}
+              onClick={() => setHeaderMenuOpen((o) => !o)}
+            >
+              <MoreVertical className="h-5 w-5" />
+            </Button>
+            {headerMenuOpen && (
+              <>
+                {/* Click-away backdrop */}
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setHeaderMenuOpen(false)}
+                />
+                <div
+                  role="menu"
+                  className="absolute right-0 z-50 mt-1 w-48 overflow-hidden rounded-xl border border-secondary-200 bg-white py-1 shadow-lg"
+                >
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setHeaderMenuOpen(false);
+                      setReportOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-secondary-700 hover:bg-secondary-50"
+                  >
+                    <Flag className="h-4 w-4" />
+                    Report user
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={handleToggleBlock}
+                    disabled={blockBusy || blockStatus?.blockedByThem}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-error-600 hover:bg-error-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {blockStatus?.blockedByMe ? (
+                      <>
+                        <ShieldCheck className="h-4 w-4" />
+                        Unblock user
+                      </>
+                    ) : (
+                      <>
+                        <Ban className="h-4 w-4" />
+                        Block user
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Block banner */}
+      {isBlocked && (
+        <div className="flex items-center gap-2 border-b border-error-500/20 bg-error-50 px-4 py-2.5 text-sm text-error-700">
+          <Ban className="h-4 w-4 shrink-0" />
+          <span>
+            {blockStatus?.blockedByMe
+              ? `You blocked ${otherUserName ?? "this user"}. Unblock to resume messaging.`
+              : "You can't reply to this conversation."}
+          </span>
+        </div>
+      )}
 
       {/* Pinned booking summary */}
       {conversation.booking && (
@@ -1083,7 +1255,14 @@ export default function ConversationPage() {
       )}
 
       {/* Input */}
-      {isRecording ? (
+      {isBlocked ? (
+        <div className="flex items-center justify-center gap-2 border-t px-4 py-4 text-sm text-secondary-500">
+          <Ban className="h-4 w-4" />
+          {blockStatus?.blockedByMe
+            ? "Unblock this user to send a message."
+            : "You can't send messages in this conversation."}
+        </div>
+      ) : isRecording ? (
         <div className="flex items-center gap-3 border-t px-4 py-3">
           <Button
             type="button"
@@ -1228,6 +1407,76 @@ export default function ConversationPage() {
                 className="bg-error-600 hover:bg-error-700"
               >
                 Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report user modal */}
+      {reportOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !reportSubmitting && setReportOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-center gap-2">
+              <Flag className="h-5 w-5 text-error-600" />
+              <h3 className="text-lg font-semibold text-secondary-900">
+                Report {otherUserName ?? "user"}
+              </h3>
+            </div>
+            <p className="mt-2 text-sm text-secondary-600">
+              Tell us what&apos;s wrong. Our team reviews every report. This
+              won&apos;t notify the other person.
+            </p>
+
+            <label className="mt-4 block text-sm font-medium text-secondary-700">
+              Reason
+            </label>
+            <select
+              value={reportReason}
+              onChange={(e) =>
+                setReportReason(e.target.value as ReportReason)
+              }
+              className="mt-1 w-full rounded-lg border border-secondary-300 bg-white px-3 py-2 text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            >
+              <option value="SPAM">Spam</option>
+              <option value="HARASSMENT">Harassment or abuse</option>
+              <option value="INAPPROPRIATE">Inappropriate content</option>
+              <option value="SCAM">Scam or fraud</option>
+              <option value="OTHER">Other</option>
+            </select>
+
+            <label className="mt-4 block text-sm font-medium text-secondary-700">
+              Details <span className="text-secondary-400">(optional)</span>
+            </label>
+            <textarea
+              value={reportDetails}
+              onChange={(e) => setReportDetails(e.target.value)}
+              maxLength={2000}
+              rows={3}
+              placeholder="Add any context that will help us review this report."
+              className="mt-1 w-full resize-none rounded-lg border border-secondary-300 bg-white px-3 py-2 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            />
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setReportOpen(false)}
+                disabled={reportSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmitReport}
+                isLoading={reportSubmitting}
+                className="bg-error-600 hover:bg-error-700"
+              >
+                Submit report
               </Button>
             </div>
           </div>
