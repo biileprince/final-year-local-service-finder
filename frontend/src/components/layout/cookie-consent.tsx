@@ -31,6 +31,12 @@ export function CookieConsent() {
     } catch {
       // ignore
     }
+    // Let consent-aware listeners (e.g. PostHogProvider) react without a reload.
+    try {
+      window.dispatchEvent(new CustomEvent("lsf:consent", { detail: choice }));
+    } catch {
+      // ignore
+    }
     setVisible(false);
   };
 
