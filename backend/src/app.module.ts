@@ -33,6 +33,7 @@ import { AdminModule } from "./modules/admin/admin.module";
 import { SearchModule } from "./modules/search/search.module";
 import { FavoritesModule } from "./modules/favorites/favorites.module";
 import { CalendarModule } from "./modules/calendar/calendar.module";
+import { ModerationModule } from "./modules/moderation/moderation.module";
 
 @Module({
   imports: [
@@ -103,6 +104,7 @@ import { CalendarModule } from "./modules/calendar/calendar.module";
     SearchModule,
     FavoritesModule,
     CalendarModule,
+    ModerationModule,
   ],
   providers: [
     {

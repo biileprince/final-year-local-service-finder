@@ -12,6 +12,7 @@ import {
   MessageListParams,
 } from "./messages.repository";
 import { MessagesGateway } from "./messages.gateway";
+import { ModerationService } from "../moderation/moderation.service";
 
 @Injectable()
 export class MessagesService {
@@ -20,6 +21,7 @@ export class MessagesService {
     private readonly messagesRepository: MessagesRepository,
     @Inject(forwardRef(() => MessagesGateway))
     private readonly messagesGateway: MessagesGateway,
+    private readonly moderationService: ModerationService,
   ) {}
 
   async getOrCreateConversation(
@@ -137,6 +139,17 @@ export class MessagesService {
   ) {
     // Verify conversation exists and user is participant
     const conversation = await this.getConversation(conversationId, senderId);
+
+    // Block gate: refuse to deliver if either participant has blocked the other.
+    const otherUserId =
+      conversation.customerId === senderId
+        ? conversation.provider.userId
+        : conversation.customerId;
+    if (await this.moderationService.isBlockedBetween(senderId, otherUserId)) {
+      throw new ForbiddenException(
+        "You can't message this user because of a block",
+      );
+    }
 
     // Create message
     const message = await this.messagesRepository.createMessage({
