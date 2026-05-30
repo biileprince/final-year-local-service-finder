@@ -35,6 +35,7 @@ import { CancelBookingDto } from "./dto/cancel-booking.dto";
 import { ResolveReportDto } from "./dto/resolve-report.dto";
 import { ModerationService } from "../moderation/moderation.service";
 import { ReportStatus } from "@prisma/client";
+import { RateLimitObserverService } from "../../common/security/rate-limit-observer.service";
 
 @Controller("admin")
 @ApiTags("admin")
@@ -45,6 +46,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly moderationService: ModerationService,
+    private readonly rateLimitObserver: RateLimitObserverService,
   ) {}
 
   // ============================================================================
@@ -330,6 +332,26 @@ export class AdminController {
   @ApiResponse({ status: 200, description: "Returns system health" })
   async getSystemHealth() {
     return this.adminService.getSystemHealth();
+  }
+
+  @Get("system/rate-limit/stats")
+  @ApiOperation({
+    summary:
+      "Get rate-limit hit counters (in-memory, since last process start)",
+  })
+  getRateLimitStats() {
+    return this.rateLimitObserver.stats();
+  }
+
+  @Get("system/rate-limit/recent")
+  @ApiOperation({ summary: "Get recent throttled requests" })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  getRateLimitRecent(@Query("limit") limit?: string) {
+    return {
+      events: this.rateLimitObserver.recent(
+        limit ? parseInt(limit, 10) : undefined,
+      ),
+    };
   }
 
   @Get("system/audit-logs")
