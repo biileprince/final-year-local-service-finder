@@ -32,12 +32,18 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await authService.login(data);
+          // The login response may carry the user, but older/other backends
+          // return tokens only — hydrate from /users/me in that case so we
+          // never read `.id` off undefined.
+          const user = response.user ?? (await authService.getCurrentUser());
           set({
-            user: response.user,
+            user,
             isAuthenticated: true,
             isLoading: false,
           });
-          analytics.identify(response.user.id, { role: response.user.role });
+          if (user) {
+            analytics.identify(user.id, { role: user.role });
+          }
           analytics.capture("user_logged_in", { method: "password" });
         } catch (error) {
           set({
@@ -52,13 +58,16 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await authService.register(data);
+          const user = response.user ?? (await authService.getCurrentUser());
           set({
-            user: response.user,
+            user,
             isAuthenticated: true,
             isLoading: false,
           });
-          analytics.identify(response.user.id, { role: response.user.role });
-          analytics.capture("user_signed_up", { role: response.user.role });
+          if (user) {
+            analytics.identify(user.id, { role: user.role });
+            analytics.capture("user_signed_up", { role: user.role });
+          }
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Registration failed",

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../database/prisma.service";
-import { Prisma } from "@prisma/client";
+import { Prisma, VerificationStatus } from "@prisma/client";
+import { computeTrustScore } from "./trust-score";
 
 export interface CreateProviderData {
   userId: string;
@@ -406,6 +407,47 @@ export class ProvidersRepository {
         rating: result._avg.rating || 0,
         reviewCount: result._count.rating,
       },
+    });
+  }
+
+  /**
+   * Recompute and persist the provider's composite trust score (Section 4.6.4)
+   * from the counters already maintained on the record. Call this after any
+   * input changes — a review is created/updated/moderated, or a booking is
+   * completed, cancelled or flagged as a no-show.
+   */
+  async recomputeTrustScore(providerId: string) {
+    const p = await this.prisma.provider.findUnique({
+      where: { id: providerId },
+      select: {
+        rating: true,
+        reviewCount: true,
+        completedBookings: true,
+        totalBookings: true,
+        noShowCount: true,
+        responseRate: true,
+        avgResponseTimeMinutes: true,
+        verificationStatus: true,
+        yearsExperience: true,
+      },
+    });
+    if (!p) return null;
+
+    const trustScore = computeTrustScore({
+      averageRating: Number(p.rating),
+      reviewCount: p.reviewCount,
+      completedBookings: p.completedBookings,
+      totalBookings: p.totalBookings,
+      providerCancellations: p.noShowCount,
+      responseRate: Number(p.responseRate),
+      avgResponseTimeMinutes: p.avgResponseTimeMinutes,
+      isVerified: p.verificationStatus === VerificationStatus.VERIFIED,
+      yearsExperience: p.yearsExperience,
+    });
+
+    return this.prisma.provider.update({
+      where: { id: providerId },
+      data: { trustScore },
     });
   }
 

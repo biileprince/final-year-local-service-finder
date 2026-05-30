@@ -31,6 +31,16 @@ export interface AuthTokens {
   expiresIn: number;
 }
 
+/**
+ * Login / register / OAuth responses return the authenticated user alongside
+ * the tokens, so the client can populate its auth state in one round-trip
+ * (matches the frontend LoginResponse contract). The user is the same
+ * password-free shape returned by GET /users/me.
+ */
+export interface AuthResult extends AuthTokens {
+  user: Awaited<ReturnType<UsersService["findById"]>>;
+}
+
 /** Request context captured at login so the sessions UI can show device info. */
 export interface SessionContext {
   ipAddress?: string;
@@ -55,7 +65,7 @@ export class AuthService {
   async register(
     registerDto: RegisterDto,
     context?: SessionContext,
-  ): Promise<AuthTokens> {
+  ): Promise<AuthResult> {
     const { email, password, name, phone, role } = registerDto;
 
     // Check if user exists
@@ -94,13 +104,14 @@ export class AuthService {
       );
 
     // Generate tokens
-    return this.generateTokens(user, context);
+    const tokens = await this.generateTokens(user, context);
+    return { ...tokens, user: await this.usersService.findById(user.id) };
   }
 
   async login(
     loginDto: LoginDto,
     context?: SessionContext,
-  ): Promise<AuthTokens> {
+  ): Promise<AuthResult> {
     const { email, password } = loginDto;
 
     const user = await this.usersService.findByEmail(email);
@@ -118,7 +129,8 @@ export class AuthService {
 
     this.logger.log(`User logged in: ${email}`);
 
-    return this.generateTokens(user, context);
+    const tokens = await this.generateTokens(user, context);
+    return { ...tokens, user: await this.usersService.findById(user.id) };
   }
 
   async refreshTokens(
@@ -236,13 +248,13 @@ export class AuthService {
   async issueSessionForUserId(
     userId: string,
     context?: SessionContext,
-  ): Promise<AuthTokens> {
+  ): Promise<AuthResult> {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new UnauthorizedException("User not found");
     }
     await this.usersService.updateLastLogin(user.id);
-    return this.generateTokens(
+    const tokens = await this.generateTokens(
       {
         id: user.id,
         email: user.email,
@@ -250,6 +262,7 @@ export class AuthService {
       },
       context,
     );
+    return { ...tokens, user };
   }
 
   // --- Session management (sessions UI) ---

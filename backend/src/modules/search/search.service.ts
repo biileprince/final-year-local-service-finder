@@ -619,6 +619,9 @@ export class SearchService {
       case ProviderSortBy.RATING:
         orderSql = Prisma.sql`p.rating DESC NULLS LAST, p.review_count DESC`;
         break;
+      case ProviderSortBy.TRUST:
+        orderSql = Prisma.sql`p.trust_score DESC, p.rating DESC NULLS LAST, p.review_count DESC`;
+        break;
       case ProviderSortBy.REVIEWS:
         orderSql = Prisma.sql`p.review_count DESC, p.rating DESC NULLS LAST`;
         break;
@@ -638,11 +641,13 @@ export class SearchService {
         break;
       case ProviderSortBy.RELEVANCE:
       default:
+        // Relevance blends textual/geographic match with the composite trust
+        // score so that close, reputable providers surface first (Section 4.6.2).
         orderSql = hasQuery
-          ? Prisma.sql`relevance DESC, p.rating DESC NULLS LAST, p.review_count DESC`
+          ? Prisma.sql`relevance DESC, p.trust_score DESC, p.rating DESC NULLS LAST, p.review_count DESC`
           : hasGeo
-            ? Prisma.sql`distance_km ASC, p.rating DESC NULLS LAST`
-            : Prisma.sql`p.featured DESC, p.rating DESC NULLS LAST, p.review_count DESC`;
+            ? Prisma.sql`distance_km ASC, p.trust_score DESC, p.rating DESC NULLS LAST`
+            : Prisma.sql`p.featured DESC, p.trust_score DESC, p.rating DESC NULLS LAST, p.review_count DESC`;
         break;
     }
 
