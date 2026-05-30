@@ -15,6 +15,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { MapPin, Star, Briefcase, Home } from "lucide-react";
 import { useTheme } from "@/components/theme/theme-provider";
+import { formatTravelDuration } from "@/lib/utils";
 
 export interface MapProvider {
   id: string;
@@ -484,7 +485,7 @@ export default function InteractiveMap({
               </span>
               <span>
                 <span className="font-bold text-primary-700">
-                  {Math.max(1, Math.round(route.durationMin))} min
+                  {formatTravelDuration(route.durationMin)}
                 </span>{" "}
                 by car
               </span>

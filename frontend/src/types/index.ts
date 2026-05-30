@@ -93,6 +93,7 @@ export interface ProviderService {
   basePrice: number;
   durationMin: number;
   description?: string | null;
+  imageUrl?: string | null;
   isActive: boolean;
   createdAt: string;
 }

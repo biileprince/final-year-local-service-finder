@@ -10,6 +10,7 @@ import {
   Folder,
   History,
   TrendingUp,
+  Flag,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
@@ -41,6 +42,12 @@ const TILES = [
     title: "Review moderation",
     description: "Triage reported reviews — approve, hide, or delete.",
     icon: Star,
+  },
+  {
+    href: "/admin/reports",
+    title: "User reports",
+    description: "Triage chat reports — action, dismiss, or mark reviewed.",
+    icon: Flag,
   },
   {
     href: "/admin/categories",

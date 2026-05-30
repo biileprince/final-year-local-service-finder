@@ -226,6 +226,7 @@ export const providersService = {
     basePrice: number;
     durationMin?: number;
     description?: string;
+    imageUrl?: string;
     categoryId?: string;
     isActive?: boolean;
   }): Promise<ProviderService> {
@@ -239,6 +240,7 @@ export const providersService = {
       basePrice: number;
       durationMin: number;
       description: string;
+      imageUrl: string;
       categoryId: string;
       isActive: boolean;
     }>,

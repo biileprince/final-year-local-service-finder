@@ -320,7 +320,6 @@ export class AdminController {
   @ApiResponse({ status: 200, description: "Category deleted" })
   async deleteCategory(@Param("id") id: string) {
     return this.adminService.deleteCategory(id);
-    return { success: true };
   }
 
   // ============================================================================

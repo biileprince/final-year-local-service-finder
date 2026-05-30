@@ -50,6 +50,32 @@ export interface AdminUser extends User {
   provider?: { id: string; verificationStatus: string; rating: number } | null;
 }
 
+export type ReportReason =
+  | "SPAM"
+  | "HARASSMENT"
+  | "INAPPROPRIATE"
+  | "SCAM"
+  | "OTHER";
+
+export type ReportStatus = "PENDING" | "REVIEWED" | "DISMISSED" | "ACTIONED";
+
+export interface UserReport {
+  id: string;
+  reporterId: string;
+  reportedId: string;
+  conversationId?: string | null;
+  messageId?: string | null;
+  reason: ReportReason;
+  details?: string | null;
+  status: ReportStatus;
+  resolutionNote?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  reporter?: { id: string; name: string; email: string } | null;
+  reported?: { id: string; name: string; email: string } | null;
+  reviewedBy?: { id: string; name: string } | null;
+}
+
 export interface AuditLogEntry {
   id: string;
   tableName: string;
@@ -205,6 +231,24 @@ export const adminService = {
 
   async deleteCategory(id: string): Promise<void> {
     return apiClient.delete(`/admin/categories/${id}`, true);
+  },
+
+  // User reports (chat block & report)
+  async getReports(status?: ReportStatus): Promise<UserReport[]> {
+    const qs = status ? buildQueryString({ status }) : "";
+    return apiClient.get(`/admin/reports${qs}`, true);
+  },
+
+  async resolveReport(
+    id: string,
+    status: Exclude<ReportStatus, "PENDING">,
+    resolutionNote?: string,
+  ): Promise<UserReport> {
+    return apiClient.post(
+      `/admin/reports/${id}/resolve`,
+      { status, resolutionNote },
+      true,
+    );
   },
 
   // Audit logs

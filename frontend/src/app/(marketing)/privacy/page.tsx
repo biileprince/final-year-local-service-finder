@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
     "How Local Service Finder collects, uses, and protects your personal information.",
+  alternates: { canonical: "/privacy" },
 };
 
 const effectiveDate = "May 19, 2026";

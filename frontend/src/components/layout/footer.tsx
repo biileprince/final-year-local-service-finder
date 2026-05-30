@@ -14,7 +14,7 @@ import {
 const footerLinks = {
   services: [
     { label: "Browse service providers", href: "/search" },
-    { label: "All categories", href: "/search#categories" },
+    { label: "All categories", href: "/categories" },
     { label: "For service providers", href: "/register?role=provider" },
   ],
   company: [

@@ -43,6 +43,77 @@ import { ReviewCard } from "@/components/reviews/review-card";
 import { ProvidersMap } from "@/components/providers/providers-map";
 import { FavoriteButton } from "@/components/providers/favorite-button";
 import { queryPermission } from "@/lib/permissions";
+import { JsonLd } from "@/components/seo/json-ld";
+
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+/**
+ * schema.org ProfessionalService for the provider, including AggregateRating
+ * (drives star snippets in search) and a BreadcrumbList. Built from the loaded
+ * provider so it stays in sync with what's on the page.
+ */
+function buildProviderJsonLd(provider: Provider): Record<string, unknown> {
+  const url = `${SITE_URL}/providers/${provider.id}`;
+  const category = provider.categories?.[0]?.category?.name;
+  const data: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "ProfessionalService",
+    name: provider.user.name,
+    url,
+    ...(provider.bio ? { description: provider.bio } : {}),
+    ...(provider.user.profileImage ? { image: provider.user.profileImage } : {}),
+    ...(category ? { serviceType: category } : {}),
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: provider.location || "Ghana",
+      addressCountry: "GH",
+    },
+    ...(typeof provider.latitude === "number" &&
+    typeof provider.longitude === "number"
+      ? {
+          geo: {
+            "@type": "GeoCoordinates",
+            latitude: provider.latitude,
+            longitude: provider.longitude,
+          },
+        }
+      : {}),
+  };
+
+  if (provider.reviewCount > 0 && provider.rating > 0) {
+    data.aggregateRating = {
+      "@type": "AggregateRating",
+      ratingValue: Number(provider.rating).toFixed(1),
+      reviewCount: provider.reviewCount,
+      bestRating: 5,
+      worstRating: 1,
+    };
+  }
+
+  return data;
+}
+
+function buildBreadcrumbJsonLd(provider: Provider): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Find providers",
+        item: `${SITE_URL}/search`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: provider.user.name,
+        item: `${SITE_URL}/providers/${provider.id}`,
+      },
+    ],
+  };
+}
 
 // ─── Work Gallery + Lightbox ─────────────────────────────────────────────────
 
@@ -594,6 +665,8 @@ export default function ProviderDetailPage() {
 
   return (
     <div className="min-h-screen bg-secondary-50">
+      <JsonLd data={buildProviderJsonLd(provider)} />
+      <JsonLd data={buildBreadcrumbJsonLd(provider)} />
       {/* ====== Provider Header ====== */}
       <div className="bg-white shadow-sm">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-8 lg:px-8">
@@ -797,7 +870,18 @@ export default function ProviderDetailPage() {
                     {providerServices
                       .filter((s) => s.isActive)
                       .map((svc) => (
-                        <div key={svc.id} className="flex items-start justify-between py-3 first:pt-0 last:pb-0">
+                        <div key={svc.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                          {svc.imageUrl && (
+                            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-secondary-100">
+                              <Image
+                                src={svc.imageUrl}
+                                alt={svc.name}
+                                fill
+                                sizes="64px"
+                                className="object-cover"
+                              />
+                            </div>
+                          )}
                           <div className="min-w-0 flex-1 pr-4">
                             <p className="font-semibold text-secondary-900">{svc.name}</p>
                             {svc.description && (

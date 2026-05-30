@@ -652,6 +652,17 @@ export default function BookProviderPage() {
                                 : "border-secondary-200 bg-white hover:border-primary-300",
                             )}
                           >
+                            {svc.imageUrl && (
+                              <div className="relative mr-3 h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-secondary-100">
+                                <Image
+                                  src={svc.imageUrl}
+                                  alt={svc.name}
+                                  fill
+                                  sizes="48px"
+                                  className="object-cover"
+                                />
+                              </div>
+                            )}
                             <div className="min-w-0 flex-1 pr-3">
                               <p className="font-semibold text-secondary-900">
                                 {svc.name}

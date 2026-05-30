@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Terms of Service",
   description:
     "The rules that govern your use of Local Service Finder as a customer or service provider.",
+  alternates: { canonical: "/terms" },
 };
 
 const effectiveDate = "May 19, 2026";

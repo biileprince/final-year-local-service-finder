@@ -100,9 +100,11 @@ export default function ProviderServicesPage() {
     basePrice: "",
     durationMin: "60",
     description: "",
+    imageUrl: "",
     categoryId: "",
     isActive: true,
   });
+  const [uploadingServiceImage, setUploadingServiceImage] = useState(false);
 
   useEffect(() => {
     if (!hasRole) return;
@@ -214,12 +216,13 @@ export default function ProviderServicesPage() {
         basePrice: String(svc.basePrice),
         durationMin: String(svc.durationMin),
         description: svc.description ?? "",
+        imageUrl: svc.imageUrl ?? "",
         categoryId: svc.categoryId ?? "",
         isActive: svc.isActive,
       });
     } else {
       setEditingService(null);
-      setServiceForm({ name: "", basePrice: "", durationMin: "60", description: "", categoryId: "", isActive: true });
+      setServiceForm({ name: "", basePrice: "", durationMin: "60", description: "", imageUrl: "", categoryId: "", isActive: true });
     }
     setShowServiceForm(true);
   };
@@ -242,6 +245,8 @@ export default function ProviderServicesPage() {
           basePrice: price,
           durationMin: Number(serviceForm.durationMin) || 60,
           description: serviceForm.description.trim() || undefined,
+          // Send "" to clear an existing image; backend treats empty as null.
+          imageUrl: serviceForm.imageUrl,
           categoryId: serviceForm.categoryId || undefined,
           isActive: serviceForm.isActive,
         });
@@ -253,6 +258,7 @@ export default function ProviderServicesPage() {
           basePrice: price,
           durationMin: Number(serviceForm.durationMin) || 60,
           description: serviceForm.description.trim() || undefined,
+          imageUrl: serviceForm.imageUrl || undefined,
           categoryId: serviceForm.categoryId || undefined,
           isActive: serviceForm.isActive,
         });
@@ -283,6 +289,27 @@ export default function ProviderServicesPage() {
         title: "Couldn't remove service",
         description: err instanceof Error ? err.message : "Try again.",
       });
+    }
+  };
+
+  const handleServiceImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingServiceImage(true);
+    try {
+      const uploaded = await filesService.upload(file, "GALLERY");
+      setServiceForm((p) => ({ ...p, imageUrl: uploaded.url }));
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Image upload failed",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setUploadingServiceImage(false);
+      e.target.value = "";
     }
   };
 
@@ -990,6 +1017,60 @@ export default function ProviderServicesPage() {
                   className="w-full rounded-xl border-2 border-gray-200 px-3 py-2 text-sm text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none"
                 />
               </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-secondary-700">
+                  Service image
+                </label>
+                {serviceForm.imageUrl ? (
+                  <div className="flex items-center gap-3">
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-200">
+                      <Image
+                        src={serviceForm.imageUrl}
+                        alt="Service image"
+                        fill
+                        sizes="80px"
+                        className="object-cover"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-primary-700 hover:text-primary-800">
+                        <ImagePlus className="h-4 w-4" />
+                        {uploadingServiceImage ? "Uploading…" : "Replace"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleServiceImageUpload}
+                          disabled={uploadingServiceImage}
+                          className="hidden"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setServiceForm((p) => ({ ...p, imageUrl: "" }))}
+                        className="inline-flex items-center gap-1.5 text-sm text-error-600 hover:text-error-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed border-gray-300 px-4 py-3 text-sm font-semibold text-secondary-700 hover:border-primary-400 hover:bg-primary-50">
+                    <ImagePlus className="h-4 w-4" />
+                    {uploadingServiceImage ? "Uploading…" : "Upload image"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleServiceImageUpload}
+                      disabled={uploadingServiceImage}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+                <p className="mt-1 text-xs text-secondary-500">
+                  A photo of this service helps customers recognise what you offer.
+                </p>
+              </div>
               <label className="flex cursor-pointer items-center gap-2 text-sm text-secondary-700">
                 <input
                   type="checkbox"
@@ -1030,6 +1111,17 @@ export default function ProviderServicesPage() {
                       : "border-dashed border-secondary-200 bg-gray-50 opacity-70"
                   }`}
                 >
+                  {svc.imageUrl && (
+                    <div className="relative mr-3 h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-gray-200">
+                      <Image
+                        src={svc.imageUrl}
+                        alt={svc.name}
+                        fill
+                        sizes="56px"
+                        className="object-cover"
+                      />
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-secondary-900">{svc.name}</span>
