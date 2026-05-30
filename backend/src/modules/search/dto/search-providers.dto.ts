@@ -17,6 +17,7 @@ import { ApiPropertyOptional } from "@nestjs/swagger";
 export enum ProviderSortBy {
   RELEVANCE = "relevance",
   RATING = "rating",
+  TRUST = "trust",
   REVIEWS = "reviews",
   DISTANCE = "distance",
   NEWEST = "newest",

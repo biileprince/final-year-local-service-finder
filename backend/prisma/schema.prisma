@@ -244,6 +244,7 @@ model Provider {
   featured               Boolean            @default(false)
   isActive               Boolean            @default(true) @map("is_active")
   rating                 Decimal            @default(0) @db.Decimal(3, 2)
+  trustScore             Decimal            @default(0) @map("trust_score") @db.Decimal(4, 1)
   reviewCount            Int                @default(0) @map("review_count")
   totalBookings          Int                @default(0) @map("total_bookings")
   completedBookings      Int                @default(0) @map("completed_bookings")
@@ -276,6 +277,7 @@ model Provider {
   @@index([verificationStatus])
   @@index([featured])
   @@index([rating(sort: Desc)])
+  @@index([trustScore(sort: Desc)])
   @@map("providers")
 }
 

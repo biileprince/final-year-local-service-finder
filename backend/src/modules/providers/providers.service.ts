@@ -204,7 +204,23 @@ export class ProvidersService {
   }
 
   async updateRating(providerId: string) {
-    const updated = await this.providersRepository.updateRating(providerId);
+    // A rating change feeds the review-quality component of the trust score,
+    // so refresh both together (Section 4.6.4).
+    await this.providersRepository.updateRating(providerId);
+    const updated =
+      await this.providersRepository.recomputeTrustScore(providerId);
+    await this.cacheService.invalidateProviderProfile(providerId);
+    return updated;
+  }
+
+  /**
+   * Recompute the provider's composite trust score from its current counters
+   * and invalidate the cached profile. Called by the booking lifecycle when a
+   * completion, cancellation or no-show changes the objective inputs.
+   */
+  async recomputeTrustScore(providerId: string) {
+    const updated =
+      await this.providersRepository.recomputeTrustScore(providerId);
     await this.cacheService.invalidateProviderProfile(providerId);
     return updated;
   }

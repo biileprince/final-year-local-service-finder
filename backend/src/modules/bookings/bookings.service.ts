@@ -16,6 +16,7 @@ import {
   BookingListParams,
 } from "./bookings.repository";
 import { MessagesService } from "../messages/messages.service";
+import { ProvidersService } from "../providers/providers.service";
 import {
   NotificationsService,
   NotificationCategory,
@@ -36,6 +37,7 @@ export class BookingsService {
     private readonly bookingsRepository: BookingsRepository,
     private readonly messagesService: MessagesService,
     private readonly notificationsService: NotificationsService,
+    private readonly providersService: ProvidersService,
   ) {}
 
   /**
@@ -525,6 +527,9 @@ export class BookingsService {
 
       return updated;
     }).then(async (updated) => {
+      // A completion changes the provider's completion rate, so refresh the
+      // composite trust score (Section 4.6.4).
+      await this.providersService.recomputeTrustScore(booking.providerId);
       // Notify the customer the job is done and nudge them to leave a review.
       // Runs after the transaction commits to avoid noisy notifications if the
       // status update rolls back.
@@ -753,6 +758,11 @@ export class BookingsService {
       booking.providerId,
       booking.scheduledDate.toISOString().split("T")[0],
     );
+
+    // A provider no-show lowers the reliability component of the trust score.
+    if (noShowParty === "PROVIDER") {
+      await this.providersService.recomputeTrustScore(booking.providerId);
+    }
 
     this.logger.log(
       `Booking ${booking.bookingNumber} flagged no-show (${noShowParty}) by ${isProvider ? "provider" : "customer"}`,
