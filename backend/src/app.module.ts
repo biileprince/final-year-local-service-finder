@@ -2,7 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { ScheduleModule } from "@nestjs/schedule";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard } from "@nestjs/throttler";
 import { SentryModule } from "@sentry/nestjs/setup";
 import { LoggerModule } from "nestjs-pino";
@@ -11,6 +11,7 @@ import { loggerConfig } from "./config/logger.config";
 import { AuditContextMiddleware } from "./common/audit/audit.middleware";
 import { CsrfGuard } from "./common/security/csrf.guard";
 import { SecurityModule } from "./common/security/security.module";
+import { RateLimitObserverFilter } from "./common/security/rate-limit-observer.filter";
 
 // Core modules
 import { DatabaseModule } from "./database/database.module";
@@ -115,6 +116,12 @@ import { ModerationModule } from "./modules/moderation/moderation.module";
     {
       provide: APP_GUARD,
       useClass: CsrfGuard,
+    },
+    // Records throttle rejections to RateLimitObserverService + structured log
+    // so /admin/rate-limit/* can surface who is being throttled.
+    {
+      provide: APP_FILTER,
+      useClass: RateLimitObserverFilter,
     },
   ],
 })

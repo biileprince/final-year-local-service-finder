@@ -1,5 +1,6 @@
 import { Global, Module } from "@nestjs/common";
 import { PasswordSecurityService } from "./password-security.service";
+import { RateLimitObserverService } from "./rate-limit-observer.service";
 
 /**
  * Holds cross-cutting security utilities that don't belong to any single
@@ -7,7 +8,7 @@ import { PasswordSecurityService } from "./password-security.service";
  */
 @Global()
 @Module({
-  providers: [PasswordSecurityService],
-  exports: [PasswordSecurityService],
+  providers: [PasswordSecurityService, RateLimitObserverService],
+  exports: [PasswordSecurityService, RateLimitObserverService],
 })
 export class SecurityModule {}
