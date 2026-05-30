@@ -33,33 +33,31 @@ const nextConfig = {
 
   // Security headers
   async headers() {
-    return [
+    const baseHeaders = [
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
       {
-        source: "/(.*)",
-        headers: [
-          {
-            key: "X-Frame-Options",
-            value: "DENY",
-          },
-          {
-            key: "X-Content-Type-Options",
-            value: "nosniff",
-          },
-          {
-            key: "Referrer-Policy",
-            value: "strict-origin-when-cross-origin",
-          },
-          {
-            // Allow same-origin to request these. `()` means "no origin may
-            // use it" — that hard-blocks the geolocation prompt and voice
-            // recording, so callers must explicitly opt in. `(self)` keeps
-            // third-party iframes locked out but lets the user-prompt fire.
-            key: "Permissions-Policy",
-            value: "camera=(self), microphone=(self), geolocation=(self)",
-          },
-        ],
+        // Allow same-origin to request these. `()` means "no origin may
+        // use it" — that hard-blocks the geolocation prompt and voice
+        // recording, so callers must explicitly opt in. `(self)` keeps
+        // third-party iframes locked out but lets the user-prompt fire.
+        key: "Permissions-Policy",
+        value: "camera=(self), microphone=(self), geolocation=(self)",
       },
     ];
+
+    // HSTS is prod-only on purpose. Setting it in dev would teach the browser
+    // to refuse http://localhost for two years after a single prod visit,
+    // breaking other local dev work.
+    if (process.env.NODE_ENV === "production") {
+      baseHeaders.push({
+        key: "Strict-Transport-Security",
+        value: "max-age=63072000; includeSubDomains; preload",
+      });
+    }
+
+    return [{ source: "/(.*)", headers: baseHeaders }];
   },
 
   // Redirects

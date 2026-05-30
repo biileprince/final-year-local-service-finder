@@ -13,6 +13,7 @@ import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { MessagesService } from "./messages.service";
 import { MetricsService } from "../../monitoring/metrics.service";
+import { getAllowedOrigins } from "../../common/security/cors";
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -21,7 +22,7 @@ interface AuthenticatedSocket extends Socket {
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: getAllowedOrigins(),
     credentials: true,
   },
   namespace: "messages",

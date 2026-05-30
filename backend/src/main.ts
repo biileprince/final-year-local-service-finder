@@ -6,10 +6,13 @@ import { ValidationPipe, RequestMethod } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import helmet from "helmet";
 import * as cookieParser from "cookie-parser";
+import { json, urlencoded } from "express";
+import type { Express } from "express";
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/http-exception.filter";
 import { MetricsInterceptor, MetricsService } from "./monitoring";
+import { getAllowedOrigins } from "./common/security/cors";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -18,11 +21,31 @@ async function bootstrap() {
   // request-id correlation, sensitive-field redaction (see logger.config.ts).
   app.useLogger(app.get(Logger));
 
+  // Trust the first proxy hop (Heroku / nginx / Cloudflare) so `req.ip` and
+  // `req.protocol` reflect the real client, not the load balancer. Required
+  // for IP-based rate limiting + observability to mean anything in prod.
+  const expressInstance = app.getHttpAdapter().getInstance() as Express;
+  expressInstance.set("trust proxy", 1);
+
   // Security
   app.use(helmet());
   app.use(cookieParser(process.env.COOKIE_SECRET));
+
+  // Cap request bodies. File uploads go through the dedicated multipart
+  // routes, so 1mb is plenty for JSON payloads.
+  app.use(json({ limit: "1mb" }));
+  app.use(urlencoded({ limit: "1mb", extended: true }));
+
+  const allowedOrigins = getAllowedOrigins();
   app.enableCors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (
+      origin: string | undefined,
+      cb: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      // Server-to-server / curl / same-origin requests omit Origin.
+      if (!origin) return cb(null, true);
+      cb(null, allowedOrigins.includes(origin));
+    },
     credentials: true,
   });
 
