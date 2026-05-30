@@ -34,6 +34,10 @@ const envSchema = z.object({
 
   // --- Frontend / CORS ---
   FRONTEND_URL: z.url().default("http://localhost:3000"),
+  // Optional comma-separated allowlist when more than one frontend origin
+  // needs to talk to the API (apex + www, mobile-web, preview deploys, etc).
+  // When set, takes precedence over FRONTEND_URL for CORS / WS origin checks.
+  FRONTEND_URLS: z.string().optional(),
   // Public origin of *this* backend. Used to derive the Google OAuth callback
   // URL when GOOGLE_CALLBACK_URL isn't pinned explicitly. On Heroku set to
   // e.g. https://your-app.herokuapp.com (no trailing slash).
