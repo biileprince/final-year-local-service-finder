@@ -23,6 +23,7 @@ import {
   History,
   MailWarning,
   Heart,
+  Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
@@ -51,6 +52,7 @@ const adminNavItems = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/bookings", label: "Bookings", icon: Calendar },
   { href: "/admin/reviews", label: "Reviews", icon: Star },
+  { href: "/admin/reports", label: "Reports", icon: Flag },
   { href: "/admin/categories", label: "Categories", icon: Folder },
   { href: "/admin/audit-logs", label: "Audit", icon: History },
   { href: "/messages", label: "Messages", icon: MessageSquare },

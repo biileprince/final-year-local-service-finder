@@ -416,6 +416,7 @@ export class ProvidersService {
       basePrice: number;
       durationMin?: number;
       description?: string;
+      imageUrl?: string;
       categoryId?: string;
       isActive?: boolean;
     },
@@ -430,6 +431,7 @@ export class ProvidersService {
         basePrice: data.basePrice,
         durationMin: data.durationMin ?? 60,
         description: data.description,
+        imageUrl: data.imageUrl || null,
         categoryId: data.categoryId ?? null,
         isActive: data.isActive ?? true,
       },
@@ -445,6 +447,7 @@ export class ProvidersService {
       basePrice?: number;
       durationMin?: number;
       description?: string;
+      imageUrl?: string;
       categoryId?: string;
       isActive?: boolean;
     },
@@ -465,6 +468,8 @@ export class ProvidersService {
         ...(data.basePrice !== undefined && { basePrice: data.basePrice }),
         ...(data.durationMin !== undefined && { durationMin: data.durationMin }),
         ...(data.description !== undefined && { description: data.description }),
+        // Empty string clears the image; a URL sets it.
+        ...(data.imageUrl !== undefined && { imageUrl: data.imageUrl || null }),
         ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
       },

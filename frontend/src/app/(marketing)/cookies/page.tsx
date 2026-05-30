@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Cookie Policy",
   description:
     "What cookies and similar storage Local Service Finder uses, and how to control them.",
+  alternates: { canonical: "/cookies" },
 };
 
 const effectiveDate = "May 19, 2026";

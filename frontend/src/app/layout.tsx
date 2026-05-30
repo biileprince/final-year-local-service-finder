@@ -11,6 +11,7 @@ import {
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { PostHogProvider } from "@/components/analytics/posthog-provider";
+import { buildSiteKeywords } from "@/lib/seo";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -24,35 +25,29 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   ),
   title: {
-    default: "Local Service Finder - Find Trusted Service Providers in Ghana",
+    default:
+      "Local Service Finder — Hire Verified Plumbers, Electricians & Cleaners in Ghana",
     template: "%s | Local Service Finder",
   },
   description:
-    "Connect with verified local service providers in Ghana. Book plumbers, electricians, cleaners, and more with ease.",
-  keywords: [
-    "local services",
-    "Ghana",
-    "service providers",
-    "plumber",
-    "electrician",
-    "cleaner",
-    "handyman",
-    "booking",
-  ],
+    "Find and book trusted local service providers in Ghana — plumbers, electricians, cleaners, carpenters, mechanics, AC repair, hairdressers, caterers and more. Verified pros near you in Accra, Kumasi, Tema and across Ghana.",
+  keywords: buildSiteKeywords(),
   authors: [{ name: "Local Service Finder" }],
   creator: "Local Service Finder",
   openGraph: {
     type: "website",
     locale: "en_GH",
     siteName: "Local Service Finder",
-    title: "Local Service Finder - Find Trusted Service Providers in Ghana",
+    title:
+      "Local Service Finder — Hire Verified Local Pros in Ghana",
     description:
-      "Connect with verified local service providers in Ghana. Book plumbers, electricians, cleaners, and more with ease.",
+      "Book trusted plumbers, electricians, cleaners, mechanics, hairdressers and more across Ghana. Verified providers near you.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Local Service Finder",
-    description: "Find trusted service providers in Ghana",
+    title: "Local Service Finder — Verified Local Pros in Ghana",
+    description:
+      "Book trusted plumbers, electricians, cleaners and more across Ghana.",
   },
   robots: {
     index: true,

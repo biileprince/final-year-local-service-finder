@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -9,6 +10,11 @@ import {
   CheckCircle,
   MapPin,
 } from "lucide-react";
+
+export const metadata: Metadata = {
+  // Home owns the brand title; the canonical points at the root.
+  alternates: { canonical: "/" },
+};
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PopularServices } from "@/components/home/popular-services";

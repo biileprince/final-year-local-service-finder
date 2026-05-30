@@ -136,3 +136,19 @@ export function getStarRating(rating: number): { full: number; half: boolean; em
 export function pluralize(count: number, singular: string, plural?: string): string {
   return count === 1 ? singular : (plural || `${singular}s`);
 }
+
+/**
+ * Format a travel duration (in minutes) into a human-readable string.
+ * Under an hour it stays in minutes ("45 min"); an hour or more is shown in
+ * hours and minutes ("1 hr 30 min") rather than a large minute count like
+ * "271 min".
+ */
+export function formatTravelDuration(durationMin: number): string {
+  const totalMinutes = Math.max(1, Math.round(durationMin));
+  if (totalMinutes < 60) return `${totalMinutes} min`;
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const hourLabel = `${hours} ${pluralize(hours, "hr")}`;
+  return minutes === 0 ? hourLabel : `${hourLabel} ${minutes} min`;
+}

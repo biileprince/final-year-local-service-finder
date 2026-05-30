@@ -40,6 +40,15 @@ export class CreateProviderServiceDto {
   @MaxLength(500)
   description?: string;
 
+  @ApiPropertyOptional({
+    example: "https://res.cloudinary.com/demo/image/upload/service.jpg",
+    description: "Image showcasing this service offering",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  imageUrl?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
@@ -79,6 +88,12 @@ export class UpdateProviderServiceDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @ApiPropertyOptional({ description: "Image showcasing this service offering; empty string clears it" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  imageUrl?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

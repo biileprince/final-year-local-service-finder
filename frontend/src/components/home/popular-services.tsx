@@ -83,9 +83,7 @@ export async function PopularServices() {
                         {category.providerCount}+ service providers
                       </p>
                       <Button size="default" asChild>
-                        <Link href={`/search?category=${category.slug}`}>
-                          View
-                        </Link>
+                        <Link href={`/categories/${category.slug}`}>View</Link>
                       </Button>
                     </div>
                   </CardContent>
