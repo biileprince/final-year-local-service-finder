@@ -1,209 +1,730 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { useState, useRef, useEffect } from "react";
 import {
   Menu,
   X,
-  Search,
   Bell,
-  MessageSquare,
   User,
   LogOut,
   Calendar,
   Settings,
   ChevronDown,
+  ChevronRight,
+  Wrench,
+  Zap,
+  Sparkles,
+  Hammer,
+  Wind,
+  Paintbrush,
+  ArrowRight,
+  Shield,
+  Star,
+  Clock,
+  Scissors,
+  Trees,
+  Car,
+  Bug,
+  Truck,
+  Wifi,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Avatar } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks";
+import { useNotificationsSocket } from "@/lib/notifications-socket";
+import { SearchTrigger } from "@/components/search/search-trigger";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
-const publicNavLinks = [
-  { href: "/", label: "Home" },
-  { href: "/search", label: "Find Services" },
-  { href: "/categories", label: "Categories" },
+interface ServiceItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+  description: string;
+}
+
+const servicesPrimary: ServiceItem[] = [
+  {
+    name: "Plumbing",
+    icon: Wrench,
+    href: "/search?category=plumbing",
+    description: "Leaks, installs, drainage and water systems.",
+  },
+  {
+    name: "Electrical",
+    icon: Zap,
+    href: "/search?category=electrical",
+    description: "Wiring, outlets, panels and inspections.",
+  },
+  {
+    name: "Cleaning",
+    icon: Sparkles,
+    href: "/search?category=cleaning",
+    description: "Deep cleans, regular service and move-out.",
+  },
 ];
 
-const userMenuItems = [
-  { href: "/dashboard", label: "Dashboard", icon: Calendar },
-  { href: "/bookings", label: "My Bookings", icon: Calendar },
-  { href: "/messages", label: "Messages", icon: MessageSquare },
-  { href: "/profile", label: "Profile", icon: User },
-  { href: "/settings", label: "Settings", icon: Settings },
+const servicesSecondary: ServiceItem[] = [
+  {
+    name: "Handyman",
+    icon: Hammer,
+    href: "/search?category=handyman",
+    description: "Repairs, mounting, assembly and small fixes.",
+  },
+  {
+    name: "HVAC",
+    icon: Wind,
+    href: "/search?category=hvac",
+    description: "AC service, heating, ventilation and tune-ups.",
+  },
+  {
+    name: "Painting",
+    icon: Paintbrush,
+    href: "/search?category=painting",
+    description: "Interior, exterior and decorative finishes.",
+  },
+];
+
+const servicesExtended: ServiceItem[] = [
+  {
+    name: "Beauty & Grooming",
+    icon: Scissors,
+    href: "/search?category=beauty",
+    description: "Hair, nails, makeup and barbering at home.",
+  },
+  {
+    name: "Landscaping",
+    icon: Trees,
+    href: "/search?category=landscaping",
+    description: "Lawn care, gardening and outdoor maintenance.",
+  },
+  {
+    name: "Auto Services",
+    icon: Car,
+    href: "/search?category=auto",
+    description: "Mobile mechanics, detailing and tyre service.",
+  },
+  {
+    name: "Pest Control",
+    icon: Bug,
+    href: "/search?category=pest-control",
+    description: "Inspections, treatment and prevention.",
+  },
+  {
+    name: "Moving & Hauling",
+    icon: Truck,
+    href: "/search?category=moving",
+    description: "Local moves, packing and delivery.",
+  },
+  {
+    name: "IT & Tech Support",
+    icon: Wifi,
+    href: "/search?category=tech",
+    description: "Devices, Wi-Fi, installations and repairs.",
+  },
+];
+
+const directLinks = [
+  { name: "Browse Services", href: "/search" },
+  { name: "For providers", href: "/register?role=provider" },
 ];
 
 export function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
+  const { unreadCount } = useNotificationsSocket();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [mobileServicesOpen, setMobileServicesOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  const servicesRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (
+        servicesRef.current &&
+        !servicesRef.current.contains(e.target as Node)
+      ) {
+        setServicesOpen(false);
+      }
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(e.target as Node)
+      ) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    setServicesOpen(false);
+    setUserMenuOpen(false);
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   const handleLogout = async () => {
     await logout();
     setUserMenuOpen(false);
+    setMobileMenuOpen(false);
+    router.push("/");
+  };
+
+
+  const isActiveLink = (href: string) => {
+    if (href === "/") return pathname === "/";
+    if (href.startsWith("/#")) return false;
+    if (href.startsWith("/register")) return pathname === "/register";
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
+
+  const openServices = () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    setServicesOpen(true);
+  };
+
+  const queueCloseServices = () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => setServicesOpen(false), 120);
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-secondary-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+    <header
+      className={cn(
+        "sticky top-0 z-50 transition-all duration-300",
+        scrolled
+          ? "border-b border-gray-200/80 bg-white/85 shadow-sm backdrop-blur-md"
+          : "border-b border-transparent bg-white",
+      )}
+    >
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-8 px-4 sm:px-6 lg:h-20 lg:px-8">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600">
-            <span className="text-lg font-bold text-white">L</span>
-          </div>
-          <span className="hidden text-xl font-bold text-secondary-900 sm:block">
-            LocalService
+        <Link
+          href="/"
+          className="group flex shrink-0 items-center gap-2.5"
+          aria-label="Local Service Finder home"
+        >
+          <Image
+            src="/images/local-service-finder-icon.png"
+            alt=""
+            width={40}
+            height={40}
+            priority
+            className="h-10 w-10 shrink-0 rounded-xl object-contain transition-transform group-hover:scale-105"
+          />
+          <span className="flex flex-col leading-tight">
+            <span className="font-sans text-sm font-bold tracking-tight text-gray-900 sm:text-base">
+              Local Service
+            </span>
+            <span className="text-[9px] font-bold tracking-[0.2em] text-primary-500 sm:text-[10px]">
+              FINDER
+            </span>
           </span>
         </Link>
 
-        {/* Desktop Navigation */}
+        {/* Desktop Nav */}
         <nav className="hidden items-center gap-1 md:flex">
-          {publicNavLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
+          <Link
+            href="/"
+            className={cn(
+              "rounded-lg px-4 py-3 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
+              isActiveLink("/")
+                ? "text-primary-600"
+                : "text-gray-700 hover:text-gray-900",
+            )}
+          >
+            Home
+          </Link>
+
+          {/* Services mega menu */}
+          <div
+            className="relative"
+            ref={servicesRef}
+            onMouseEnter={openServices}
+            onMouseLeave={queueCloseServices}
+          >
+            <button
+              type="button"
+              onClick={() => setServicesOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={servicesOpen}
               className={cn(
-                "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                pathname === link.href
-                  ? "bg-primary-50 text-primary-700"
-                  : "text-secondary-600 hover:bg-secondary-50 hover:text-secondary-900"
+                "flex items-center gap-1 rounded-lg px-4 py-3 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
+                servicesOpen
+                  ? "text-primary-600"
+                  : "text-gray-700 hover:text-gray-900",
               )}
             >
-              {link.label}
+              Services
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 transition-transform duration-200",
+                  servicesOpen && "rotate-180 text-primary-500",
+                )}
+              />
+            </button>
+
+            {/* Mega panel */}
+            <div
+              role="menu"
+              onMouseEnter={openServices}
+              onMouseLeave={queueCloseServices}
+              className={cn(
+                "absolute left-0 top-full z-50 mt-3 w-[min(840px,calc(100vw-2rem))] rounded-2xl border border-gray-200/80 bg-white/95 p-2 shadow-2xl backdrop-blur-xl transition-all duration-200",
+                servicesOpen
+                  ? "translate-y-0 opacity-100"
+                  : "pointer-events-none translate-y-1 opacity-0",
+              )}
+            >
+              <div
+                aria-hidden
+                className="absolute -top-2 left-8 h-3 w-3 rotate-45 rounded-tl-sm border-l border-t border-gray-200/80 bg-white"
+              />
+
+              <div className="grid grid-cols-1 gap-1 md:grid-cols-[1fr_1fr_280px]">
+                {/* Primary services column */}
+                <div>
+                  <p className="px-3 pb-2 pt-3 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">
+                    Most booked
+                  </p>
+                  <div className="space-y-0.5">
+                    {servicesPrimary.map((s) => (
+                      <MegaItem key={s.name} item={s} />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Secondary services column */}
+                <div>
+                  <p className="px-3 pb-2 pt-3 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">
+                    More services
+                  </p>
+                  <div className="space-y-0.5">
+                    {servicesSecondary.map((s) => (
+                      <MegaItem key={s.name} item={s} />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Featured promo tile */}
+                <Link
+                  href="/search"
+                  className="group relative flex flex-col justify-between overflow-hidden rounded-xl bg-linear-to-br from-gray-950 via-gray-900 to-primary-950 p-5 text-white transition-all hover:shadow-xl"
+                >
+                  <span
+                    aria-hidden
+                    className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary-500/30 blur-3xl"
+                  />
+                  <span
+                    aria-hidden
+                    className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-amber-500/20 blur-2xl"
+                  />
+                  <div className="relative">
+                    <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-300">
+                      <span className="h-1 w-1 animate-pulse rounded-full bg-primary-400" />
+                      Browse all
+                    </div>
+                    <p className="font-sans text-lg font-bold leading-tight">
+                      Find the right service provider for{" "}
+                      <span className="italic text-primary-300">any job.</span>
+                    </p>
+                    <p className="mt-2 text-xs text-gray-400">
+                      850+ verified service providers across 12 service
+                      categories.
+                    </p>
+                  </div>
+                  <div className="relative mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-primary-300 transition-all group-hover:gap-2.5">
+                    See every category
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
+                </Link>
+              </div>
+
+              {/* Footer trust strip */}
+              <div className="mt-2 grid grid-cols-3 divide-x divide-gray-100 rounded-xl bg-gray-50/60 px-2 py-2">
+                <TrustChip
+                  icon={Shield}
+                  label="All service providers verified"
+                />
+                <TrustChip icon={Star} label="Rated 4.9 average" />
+                <TrustChip icon={Clock} label="Avg. < 2h response" />
+              </div>
+            </div>
+          </div>
+
+          {/* Direct nav links */}
+          {directLinks.map((link) => (
+            <Link
+              key={link.name}
+              href={link.href}
+              className={cn(
+                "rounded-lg px-4 py-3 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
+                isActiveLink(link.href)
+                  ? "text-primary-600"
+                  : "text-gray-700 hover:text-gray-900",
+              )}
+            >
+              {link.name}
             </Link>
           ))}
         </nav>
 
-        {/* Right Section */}
-        <div className="flex items-center gap-2">
-          {/* Search Button */}
-          <Button variant="ghost" size="icon" className="hidden sm:flex" asChild>
-            <Link href="/search">
-              <Search className="h-5 w-5" />
+        {/* Right side */}
+        <div className="hidden items-center gap-2 md:flex">
+          {/* Compact search trigger — opens the typeahead overlay */}
+          <SearchTrigger className="w-48 xl:w-64" placeholder="Search services…" />
+
+          <ThemeToggle />
+
+          {isAuthenticated && (
+            <Link
+              href="/notifications"
+              aria-label="Notifications"
+              className="relative rounded-xl p-2.5 text-gray-700 transition-all hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+            >
+              <Bell className="h-5 w-5" strokeWidth={2} />
+              {unreadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </Link>
-          </Button>
-
-          {isAuthenticated && user ? (
-            <>
-              {/* Notifications */}
-              <Button variant="ghost" size="icon" asChild>
-                <Link href="/notifications">
-                  <Bell className="h-5 w-5" />
-                </Link>
-              </Button>
-
-              {/* Messages */}
-              <Button variant="ghost" size="icon" asChild>
-                <Link href="/messages">
-                  <MessageSquare className="h-5 w-5" />
-                </Link>
-              </Button>
-
-              {/* User Menu */}
-              <div className="relative">
-                <button
-                  onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-secondary-50"
-                >
-                  <Avatar
-                    size="sm"
-                    src={user.profileImage}
-                    name={user.name}
-                  />
-                  <ChevronDown className="hidden h-4 w-4 text-secondary-500 sm:block" />
-                </button>
-
-                {userMenuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setUserMenuOpen(false)}
-                    />
-                    <div className="absolute right-0 z-20 mt-2 w-56 origin-top-right rounded-xl border border-secondary-200 bg-white py-1 shadow-lg">
-                      <div className="border-b border-secondary-100 px-4 py-3">
-                        <p className="text-sm font-medium text-secondary-900">
-                          {user.name}
-                        </p>
-                        <p className="text-xs text-secondary-500">{user.email}</p>
-                      </div>
-                      <div className="py-1">
-                        {userMenuItems.map((item) => (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={() => setUserMenuOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-50"
-                          >
-                            <item.icon className="h-4 w-4" />
-                            {item.label}
-                          </Link>
-                        ))}
-                      </div>
-                      <div className="border-t border-secondary-100 py-1">
-                        <button
-                          onClick={handleLogout}
-                          className="flex w-full items-center gap-3 px-4 py-2 text-sm text-error-600 hover:bg-error-50"
-                        >
-                          <LogOut className="h-4 w-4" />
-                          Sign out
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" asChild>
-                <Link href="/login">Sign in</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/register">Get Started</Link>
-              </Button>
-            </div>
           )}
 
-          {/* Mobile Menu Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          {isAuthenticated && user ? (
+            <div className="relative" ref={userMenuRef}>
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((s) => !s)}
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                aria-label="User menu"
+                className="flex items-center gap-2 rounded-xl p-1.5 pr-2.5 transition-all hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-br from-primary-500 to-primary-600 text-sm font-bold text-white shadow-sm">
+                  {user.name.slice(0, 1).toUpperCase()}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 text-gray-500 transition-transform",
+                    userMenuOpen && "rotate-180",
+                  )}
+                />
+              </button>
+
+              {userMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-2 w-64 overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-2xl"
+                >
+                  <div className="border-b border-gray-100 bg-linear-to-br from-primary-50 to-amber-50 p-4">
+                    <p className="truncate text-sm font-bold text-gray-900">
+                      {user.name}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-gray-600">
+                      {user.email}
+                    </p>
+                  </div>
+                  <div className="space-y-0.5 p-2">
+                    <UserMenuLink
+                      href="/bookings"
+                      icon={Calendar}
+                      label="My bookings"
+                    />
+                    {user.role === "PROVIDER" && (
+                      <UserMenuLink
+                        href="/dashboard"
+                        icon={Settings}
+                        label="Provider dashboard"
+                      />
+                    )}
+                    <UserMenuLink href="/profile" icon={User} label="Profile" />
+                    <UserMenuLink
+                      href="/settings"
+                      icon={Settings}
+                      label="Settings"
+                    />
+                  </div>
+                  <div className="border-t border-gray-100 p-2">
+                    <button
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50"
+                    >
+                      <LogOut className="h-4 w-4" strokeWidth={2} />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/login">Login</Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link href="/register">Register</Link>
+              </Button>
+            </>
+          )}
+        </div>
+
+        {/* Mobile action links and menu button */}
+        <div className="flex items-center gap-2 md:hidden">
+          {/* Quick action link always visible on mobile */}
+          <Button variant="ghost" size="sm" className="px-2 text-primary-600" asChild>
+            <Link href="/search">Browse Services</Link>
+          </Button>
+
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((s) => !s)}
+            className="rounded-xl p-2 text-gray-700 transition-all hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? (
-              <X className="h-5 w-5" />
+              <X className="h-6 w-6" strokeWidth={2.5} />
             ) : (
-              <Menu className="h-5 w-5" />
+              <Menu className="h-6 w-6" strokeWidth={2.5} />
             )}
-          </Button>
+          </button>
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile menu */}
       {mobileMenuOpen && (
-        <div className="border-t border-secondary-200 bg-white md:hidden">
-          <nav className="flex flex-col p-4">
-            {publicNavLinks.map((link) => (
+        <div className="max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-gray-200 bg-white shadow-xl lg:hidden">
+          <div className="space-y-6 px-4 py-5">
+            <SearchTrigger className="w-full px-4 py-3" placeholder="Search services…" showShortcut={false} />
+
+            {/* Authenticated user — relevant links shown first */}
+            {isAuthenticated && user && (
+              <div className="space-y-2">
+                <div className="rounded-xl bg-linear-to-br from-primary-50 to-amber-50 p-4">
+                  <p className="truncate text-sm font-bold text-gray-900">
+                    {user.name}
+                  </p>
+                  <p className="truncate text-xs text-gray-600">
+                    {user.email}
+                  </p>
+                </div>
+                <MobileLink
+                  href="/notifications"
+                  icon={Bell}
+                  label={
+                    unreadCount > 0
+                      ? `Notifications (${unreadCount > 9 ? "9+" : unreadCount})`
+                      : "Notifications"
+                  }
+                />
+                <MobileLink
+                  href="/bookings"
+                  icon={Calendar}
+                  label="My bookings"
+                />
+                {user.role === "PROVIDER" && (
+                  <MobileLink
+                    href="/dashboard"
+                    icon={Settings}
+                    label="Provider dashboard"
+                  />
+                )}
+                <MobileLink href="/profile" icon={User} label="Profile" />
+                <MobileLink
+                  href="/settings"
+                  icon={Settings}
+                  label="Settings"
+                />
+              </div>
+            )}
+
+            <nav className={cn("space-y-1", isAuthenticated && "border-t border-gray-100 pt-5")}>
               <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
+                href="/"
                 className={cn(
-                  "rounded-lg px-3 py-2 text-sm font-medium",
-                  pathname === link.href
-                    ? "bg-primary-50 text-primary-700"
-                    : "text-secondary-600"
+                  "flex min-h-12 items-center rounded-xl px-4 py-4 font-sans text-base font-semibold transition-all",
+                  isActiveLink("/")
+                    ? "bg-primary-50 text-primary-600"
+                    : "text-gray-700 hover:bg-gray-50",
                 )}
               >
-                {link.label}
+                Home
               </Link>
-            ))}
-          </nav>
+              {directLinks.map((link) => (
+                <Link
+                  key={link.name}
+                  href={link.href}
+                  className={cn(
+                    "flex min-h-12 items-center rounded-xl px-4 py-4 font-sans text-base font-semibold transition-all",
+                    isActiveLink(link.href)
+                      ? "bg-primary-50 text-primary-600"
+                      : "text-gray-700 hover:bg-gray-50",
+                  )}
+                >
+                  {link.name}
+                </Link>
+              ))}
+            </nav>
+
+            {/* Services — collapsible, with full category list */}
+            <div className="border-t border-gray-100 pt-5">
+              <button
+                type="button"
+                onClick={() => setMobileServicesOpen((v) => !v)}
+                aria-expanded={mobileServicesOpen}
+                aria-controls="mobile-services-list"
+                className="flex w-full items-center justify-between rounded-xl px-2 py-2 text-left transition-colors hover:bg-gray-50"
+              >
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">
+                  Services
+                </span>
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 text-gray-500 transition-transform",
+                    mobileServicesOpen && "rotate-90",
+                  )}
+                />
+              </button>
+              {mobileServicesOpen && (
+                <div
+                  id="mobile-services-list"
+                  className="mt-3 grid grid-cols-2 gap-2"
+                >
+                  {[
+                    ...servicesPrimary,
+                    ...servicesSecondary,
+                    ...servicesExtended,
+                  ].map((s) => (
+                    <Link
+                      key={s.name}
+                      href={s.href}
+                      className="flex min-h-12 items-center gap-2 rounded-xl border-2 border-transparent bg-gray-50 px-4 py-4 transition-all hover:border-primary-200 hover:bg-primary-50"
+                    >
+                      <s.icon
+                        className="h-5 w-5 shrink-0 text-primary-500"
+                        strokeWidth={2}
+                      />
+                      <span className="text-sm font-semibold text-gray-900">
+                        {s.name}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 pt-5">
+              {isAuthenticated && user ? (
+                <button
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 font-semibold text-red-600 transition-colors hover:bg-red-50"
+                >
+                  <LogOut className="h-5 w-5" />
+                  Logout
+                </button>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="outline" asChild className="w-full">
+                    <Link href="/login">Login</Link>
+                  </Button>
+                  <Button asChild className="w-full">
+                    <Link href="/register">Register</Link>
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </header>
+  );
+}
+
+function MegaItem({ item }: { item: ServiceItem }) {
+  return (
+    <Link
+      href={item.href}
+      role="menuitem"
+      className="group flex items-start gap-3 rounded-xl px-3 py-3 transition-all hover:bg-gray-50"
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-primary-50 to-amber-50 text-primary-600 transition-all group-hover:from-primary-500 group-hover:to-primary-600 group-hover:text-white group-hover:shadow-md group-hover:shadow-primary-500/30">
+        <item.icon className="h-5 w-5" strokeWidth={2} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold text-gray-900 transition-colors group-hover:text-primary-600">
+          {item.name}
+        </span>
+        <span className="mt-0.5 line-clamp-2 block text-xs text-gray-500">
+          {item.description}
+        </span>
+      </span>
+    </Link>
+  );
+}
+
+function TrustChip({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  return (
+    <div className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold text-gray-600">
+      <Icon className="h-3.5 w-3.5 text-primary-500" />
+      {label}
+    </div>
+  );
+}
+
+function UserMenuLink({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      role="menuitem"
+      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 hover:text-primary-600"
+    >
+      <Icon className="h-4 w-4 text-gray-400" />
+      {label}
+    </Link>
+  );
+}
+
+function MobileLink({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-3 rounded-xl px-4 py-3 font-semibold text-gray-700 transition-all hover:bg-gray-50"
+    >
+      <Icon className="h-5 w-5 text-primary-500" />
+      {label}
+    </Link>
   );
 }

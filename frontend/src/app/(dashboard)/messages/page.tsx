@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { MessageSquare, Search, Send, ArrowLeft, MoreVertical } from "lucide-react";
+import { MessageSquare, Search, ChevronRight, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks";
 import { messagesService } from "@/lib/api";
-import type { Conversation, Message } from "@/types";
+import { useMessagesSocket } from "@/lib/messages-socket";
+import type { Conversation } from "@/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
 export default function MessagesPage() {
@@ -18,23 +18,56 @@ export default function MessagesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    loadConversations();
-  }, []);
+  const { onNewMessage } = useMessagesSocket();
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await messagesService.getConversations();
       setConversations(data);
-    } catch (error) {
-      console.error("Failed to load conversations:", error);
+    } catch {
+      // ignore
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  // When a new message arrives, bump that conversation to the top and update its preview
+  useEffect(() => {
+    const unsubscribe = onNewMessage((msg) => {
+      setConversations((prev) => {
+        const idx = prev.findIndex((c) => c.id === msg.conversationId);
+        const base = idx >= 0 ? prev[idx] : undefined;
+        if (!base) {
+          loadConversations();
+          return prev;
+        }
+        const isProvider = user?.role === "PROVIDER";
+        const notSelf = msg.senderId !== user?.id;
+        const updated: Conversation = {
+          ...base,
+          lastMessageAt: msg.createdAt,
+          lastMessagePreview: msg.content,
+          providerUnreadCount: notSelf && isProvider
+            ? base.providerUnreadCount + 1
+            : base.providerUnreadCount,
+          customerUnreadCount: notSelf && !isProvider
+            ? base.customerUnreadCount + 1
+            : base.customerUnreadCount,
+        };
+        const rest = prev.filter((_, i) => i !== idx);
+        return [updated, ...rest];
+      });
+    });
+    return unsubscribe;
+  }, [onNewMessage, user, loadConversations]);
 
   const filteredConversations = conversations.filter((conv) => {
+    if (!searchQuery) return true;
     const otherUser =
       user?.role === "PROVIDER" ? conv.customer : conv.provider?.user;
     return otherUser?.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -42,19 +75,38 @@ export default function MessagesPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-32" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <Skeleton className="h-11 w-full rounded-lg" />
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-soft"
+            >
+              <Skeleton className="h-12 w-12 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+              <Skeleton className="h-3 w-12" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-secondary-900">Messages</h1>
         <p className="mt-1 text-secondary-600">
-          Communicate with your {user?.role === "PROVIDER" ? "customers" : "service providers"}
+          Communicate with your{" "}
+          {user?.role === "PROVIDER" ? "customers" : "service providers"}
         </p>
       </div>
 
@@ -66,11 +118,10 @@ export default function MessagesPage() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search conversations..."
-          className="h-11 w-full rounded-lg border border-secondary-300 bg-white pl-10 pr-4 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+          className="h-11 w-full rounded-lg border border-secondary-300 bg-white pl-10 pr-4 text-secondary-900 placeholder:text-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
         />
       </div>
 
-      {/* Conversations List */}
       {filteredConversations.length === 0 ? (
         <div className="rounded-xl bg-white p-16 text-center shadow-soft">
           <MessageSquare className="mx-auto h-16 w-16 text-secondary-300" />
@@ -123,10 +174,19 @@ function ConversationItem({
   return (
     <Link
       href={`/messages/${conversation.id}`}
-      className="flex items-center gap-4 p-4 transition-colors hover:bg-secondary-50"
+      aria-label={`Open conversation with ${otherUser?.name ?? "user"}`}
+      className={cn(
+        "group flex items-center gap-4 p-4 transition-all",
+        "hover:bg-primary-50/60 focus-visible:bg-primary-50/60 focus-visible:outline-none",
+        unreadCount > 0 && "bg-primary-50/30",
+      )}
     >
       <div className="relative">
-        <Avatar size="lg" src={otherUser?.profileImage} name={otherUser?.name} />
+        <Avatar
+          size="lg"
+          src={otherUser?.profileImage}
+          name={otherUser?.name}
+        />
         {unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-xs font-medium text-white">
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -134,18 +194,18 @@ function ConversationItem({
         )}
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <div className="flex items-center justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
           <h3
             className={cn(
-              "font-medium",
-              unreadCount > 0 ? "text-secondary-900" : "text-secondary-700"
+              "truncate font-medium",
+              unreadCount > 0 ? "text-secondary-900" : "text-secondary-700",
             )}
           >
             {otherUser?.name}
           </h3>
           {conversation.lastMessageAt && (
-            <span className="text-xs text-secondary-500">
+            <span className="shrink-0 text-xs text-secondary-500">
               {formatRelativeTime(conversation.lastMessageAt)}
             </span>
           )}
@@ -153,11 +213,24 @@ function ConversationItem({
         <p
           className={cn(
             "mt-1 truncate text-sm",
-            unreadCount > 0 ? "font-medium text-secondary-900" : "text-secondary-500"
+            unreadCount > 0
+              ? "font-medium text-secondary-900"
+              : "text-secondary-500",
           )}
         >
           {conversation.lastMessagePreview || "No messages yet"}
         </p>
+      </div>
+
+      {/* Trailing affordance — makes it visually obvious the row is clickable
+          and tells the user what tapping does. Hidden visually on mobile but
+          the chevron stays so the row reads as a navigable list item. */}
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="hidden items-center gap-1.5 rounded-full bg-primary-100 px-3 py-1 text-xs font-bold text-primary-700 transition-colors group-hover:bg-primary-200 sm:inline-flex">
+          <MessageCircle className="h-3.5 w-3.5" />
+          {unreadCount > 0 ? "Reply" : "Open chat"}
+        </span>
+        <ChevronRight className="h-5 w-5 text-secondary-400 transition-transform group-hover:translate-x-0.5 group-hover:text-primary-600" />
       </div>
     </Link>
   );

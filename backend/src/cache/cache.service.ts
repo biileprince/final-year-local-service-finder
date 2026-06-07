@@ -7,6 +7,15 @@ import {
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
 
+export interface SessionMeta {
+  sessionId: string;
+  tokenId: string; // the *current* (rotating) refresh token id for this session
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+  lastActiveAt: string;
+}
+
 @Injectable()
 export class CacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CacheService.name);
@@ -25,15 +34,23 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   constructor(private configService: ConfigService) {}
 
   async onModuleInit() {
-    this.redis = new Redis({
-      host: this.configService.get("REDIS_HOST", "localhost"),
-      port: this.configService.get("REDIS_PORT", 6379),
-      password: this.configService.get("REDIS_PASSWORD"),
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
-    });
+    // Prefer REDIS_URL (Upstash/Heroku Redis style). Falls back to discrete
+    // host/port/password for local docker-compose. rediss:// in the URL flips
+    // ioredis into TLS mode automatically.
+    const redisUrl = this.configService.get<string>("REDIS_URL");
+    const retryStrategy = (times: number) => Math.min(times * 50, 2000);
+
+    this.redis = redisUrl
+      ? new Redis(redisUrl, {
+          retryStrategy,
+          maxRetriesPerRequest: 3,
+        })
+      : new Redis({
+          host: this.configService.get("REDIS_HOST", "localhost"),
+          port: this.configService.get("REDIS_PORT", 6379),
+          password: this.configService.get("REDIS_PASSWORD"),
+          retryStrategy,
+        });
 
     this.redis.on("connect", () => {
       this.logger.log("Redis connection established");
@@ -219,6 +236,40 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     await this.delByPattern(`refresh:${userId}:*`);
   }
 
+  // --- Session metadata (parallel to the refresh token, for the sessions UI) ---
+  // Keyed by a stable sessionId that survives refresh-token rotation, so the
+  // user sees one entry per device rather than one per rotated token.
+
+  async setSession(
+    userId: string,
+    sessionId: string,
+    data: SessionMeta,
+  ): Promise<void> {
+    await this.set(
+      `session:${userId}:${sessionId}`,
+      data,
+      CacheService.TTL.USER_SESSION,
+    );
+  }
+
+  async getSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<SessionMeta | null> {
+    return this.get<SessionMeta>(`session:${userId}:${sessionId}`);
+  }
+
+  async listSessions(userId: string): Promise<SessionMeta[]> {
+    const keys = await this.getKeys(`session:${userId}:*`);
+    if (keys.length === 0) return [];
+    const values = await Promise.all(keys.map((k) => this.get<SessionMeta>(k)));
+    return values.filter((v): v is SessionMeta => v !== null);
+  }
+
+  async deleteSession(userId: string, sessionId: string): Promise<void> {
+    await this.del(`session:${userId}:${sessionId}`);
+  }
+
   // ============================================================================
   // Rate Limiting
   // ============================================================================
@@ -237,5 +288,44 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   async getRateLimitCount(key: string): Promise<number> {
     const count = await this.redis.get(key);
     return count ? parseInt(count, 10) : 0;
+  }
+
+  // ============================================================================
+  // Search analytics (sorted-set of recent queries, used by /search/trending)
+  // ============================================================================
+
+  /**
+   * Bumps the score of `term` in a sorted set keyed by hour-bucket so the
+   * window naturally rolls forward without explicit eviction. Older buckets
+   * fall out via TTL on each bucket key.
+   */
+  async recordSearchTerm(term: string): Promise<void> {
+    const cleaned = term.trim().toLowerCase().slice(0, 64);
+    if (cleaned.length < 2) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `search:terms:${today}`;
+    await this.redis.zincrby(key, 1, cleaned);
+    // 8-day TTL means we always have ≥7 full days of data on hand even if
+    // recordings happen unevenly.
+    await this.redis.expire(key, 8 * 86400);
+  }
+
+  /** Returns the top N popular search terms aggregated across the last 7 days. */
+  async getTopSearchTerms(limit: number): Promise<string[]> {
+    const buckets: string[] = [];
+    const now = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now.getTime() - i * 86400 * 1000);
+      buckets.push(`search:terms:${d.toISOString().slice(0, 10)}`);
+    }
+    // ZUNIONSTORE the buckets into a temp key, then ZREVRANGE.
+    const aggKey = `search:terms:agg:tmp:${Math.random().toString(36).slice(2)}`;
+    try {
+      await this.redis.zunionstore(aggKey, buckets.length, ...buckets);
+      const top = await this.redis.zrevrange(aggKey, 0, limit - 1);
+      return top;
+    } finally {
+      await this.redis.del(aggKey).catch(() => undefined);
+    }
   }
 }

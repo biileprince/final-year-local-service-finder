@@ -1,41 +1,82 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, Check, CheckCheck, Trash2, Settings } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, Check, CheckCheck, Trash2, Settings, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/spinner";
 import { notificationsService } from "@/lib/api";
+import { useNotificationsSocket } from "@/lib/notifications-socket";
 import type { Notification } from "@/types";
 import { formatRelativeTime, cn } from "@/lib/utils";
 
+// Keys match the backend `referenceType` values (NotificationCategory enum,
+// stored lowercase). Older uppercase keys never matched, so every icon fell
+// back to the generic envelope.
 const notificationIcons: Record<string, string> = {
-  BOOKING_CREATED: "📅",
-  BOOKING_CONFIRMED: "✅",
-  BOOKING_CANCELLED: "❌",
-  BOOKING_COMPLETED: "🎉",
-  NEW_MESSAGE: "💬",
-  NEW_REVIEW: "⭐",
-  PAYMENT_RECEIVED: "💰",
-  REMINDER: "⏰",
+  booking_confirmed: "✅",
+  booking_cancelled: "❌",
+  booking_reminder: "⏰",
+  booking_completed: "🎉",
+  new_message: "💬",
+  new_review: "⭐",
+  review_response: "💬",
+  provider_verified: "🛡️",
+  provider_suspended: "⚠️",
+  system: "📢",
 };
 
+/**
+ * Resolve the in-app destination for a notification from its category +
+ * referenceId. Returns null when there's no meaningful page to open (the row
+ * is still clickable to mark it read). Booking/message types deep-link; review
+ * and provider-status types have no dedicated detail page yet.
+ */
+function notificationHref(n: Notification): string | null {
+  const id = n.referenceId;
+  switch (n.referenceType) {
+    case "booking_confirmed":
+    case "booking_cancelled":
+    case "booking_reminder":
+    case "booking_completed":
+      return id ? `/bookings/${id}` : "/bookings";
+    case "new_message":
+      return id ? `/messages/${id}` : "/messages";
+    case "provider_verified":
+    case "provider_suspended":
+      return "/services";
+    default:
+      return null;
+  }
+}
+
 export default function NotificationsPage() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const { onNewNotification, markRead, markAllRead } = useNotificationsSocket();
 
   useEffect(() => {
     loadNotifications();
   }, []);
 
+  useEffect(() => {
+    return onNewNotification((n) => {
+      setNotifications((prev) =>
+        prev.some((existing) => existing.id === n.id) ? prev : [n, ...prev],
+      );
+    });
+  }, [onNewNotification]);
+
   const loadNotifications = async () => {
     setIsLoading(true);
     try {
       const data = await notificationsService.getAll();
-      setNotifications(data.data || []);
+      setNotifications(data);
     } catch (error) {
       console.error("Failed to load notifications:", error);
     } finally {
@@ -53,6 +94,7 @@ export default function NotificationsPage() {
             : n,
         ),
       );
+      markRead(id);
     } catch (error) {
       console.error("Failed to mark as read:", error);
     }
@@ -68,9 +110,16 @@ export default function NotificationsPage() {
           readAt: new Date().toISOString(),
         })),
       );
+      markAllRead();
     } catch (error) {
       console.error("Failed to mark all as read:", error);
     }
+  };
+
+  const handleOpen = (notification: Notification) => {
+    if (!notification.isRead) void handleMarkAsRead(notification.id);
+    const href = notificationHref(notification);
+    if (href) router.push(href);
   };
 
   const handleDelete = async (id: string) => {
@@ -91,8 +140,31 @@ export default function NotificationsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-40" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-32 rounded-lg" />
+            <Skeleton className="h-10 w-36 rounded-lg" />
+          </div>
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="flex items-start gap-4 p-4">
+                <Skeleton className="h-10 w-10 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-1/2" />
+                  <Skeleton className="h-3 w-5/6" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
@@ -176,60 +248,91 @@ export default function NotificationsPage() {
       ) : (
         <Card>
           <CardContent className="divide-y divide-secondary-100 p-0">
-            {filteredNotifications.map((notification) => (
-              <div
-                key={notification.id}
-                className={cn(
-                  "flex items-start gap-4 p-4 transition-colors",
-                  !notification.isRead && "bg-primary-50/50",
-                )}
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-100 text-xl">
-                  {notificationIcons[notification.referenceType || ""] || "📬"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4
-                        className={cn(
-                          "text-secondary-900",
-                          !notification.isRead && "font-semibold",
-                        )}
-                      >
-                        {notification.title}
-                      </h4>
-                      <p className="mt-1 text-sm text-secondary-600">
-                        {notification.body}
-                      </p>
-                      <p className="mt-2 text-xs text-secondary-400">
-                        {formatRelativeTime(notification.createdAt)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {!notification.isRead && (
-                        <button
-                          onClick={() => handleMarkAsRead(notification.id)}
-                          className="rounded p-1 text-secondary-400 hover:bg-secondary-100 hover:text-secondary-600"
-                          title="Mark as read"
+            {filteredNotifications.map((notification) => {
+              const href = notificationHref(notification);
+              const clickable = href !== null;
+              return (
+                <div
+                  key={notification.id}
+                  role={clickable ? "button" : undefined}
+                  tabIndex={clickable ? 0 : undefined}
+                  onClick={clickable ? () => handleOpen(notification) : undefined}
+                  onKeyDown={
+                    clickable
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleOpen(notification);
+                          }
+                        }
+                      : undefined
+                  }
+                  className={cn(
+                    "flex items-start gap-4 p-4 transition-colors",
+                    !notification.isRead && "bg-primary-50/50",
+                    clickable &&
+                      "cursor-pointer hover:bg-secondary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500",
+                  )}
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary-100 text-xl">
+                    {notificationIcons[notification.referenceType || ""] || "📬"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4
+                          className={cn(
+                            "text-secondary-900",
+                            !notification.isRead && "font-semibold",
+                          )}
                         >
-                          <Check className="h-4 w-4" />
+                          {notification.title}
+                        </h4>
+                        <p className="mt-1 text-sm text-secondary-600">
+                          {notification.body}
+                        </p>
+                        <p className="mt-2 flex items-center gap-1 text-xs text-secondary-500">
+                          {formatRelativeTime(notification.createdAt)}
+                          {clickable && (
+                            <span className="inline-flex items-center font-medium text-primary-600">
+                              · View
+                              <ChevronRight className="h-3 w-3" />
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {!notification.isRead && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkAsRead(notification.id);
+                            }}
+                            className="rounded p-1 text-secondary-400 hover:bg-secondary-100 hover:text-secondary-600"
+                            title="Mark as read"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(notification.id);
+                          }}
+                          className="rounded p-1 text-secondary-400 hover:bg-error-50 hover:text-error-600"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </button>
-                      )}
-                      <button
-                        onClick={() => handleDelete(notification.id)}
-                        className="rounded p-1 text-secondary-400 hover:bg-error-50 hover:text-error-600"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      </div>
                     </div>
                   </div>
+                  {!notification.isRead && (
+                    <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary-600" />
+                  )}
                 </div>
-                {!notification.isRead && (
-                  <div className="h-2 w-2 rounded-full bg-primary-600" />
-                )}
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}

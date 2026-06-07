@@ -14,6 +14,15 @@ export interface RegisterDto {
   role?: "CUSTOMER" | "PROVIDER";
 }
 
+export interface SessionInfo {
+  id: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  lastActiveAt: string;
+  current: boolean;
+}
+
 export const authService = {
   async login(data: LoginDto): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>("/auth/login", data);
@@ -24,7 +33,10 @@ export const authService = {
   },
 
   async register(data: RegisterDto): Promise<RegisterResponse> {
-    const response = await apiClient.post<RegisterResponse>("/auth/register", data);
+    const response = await apiClient.post<RegisterResponse>(
+      "/auth/register",
+      data,
+    );
     if (response.accessToken) {
       apiClient.setTokens(response.accessToken, response.refreshToken);
     }
@@ -40,10 +52,13 @@ export const authService = {
   },
 
   async getCurrentUser(): Promise<User> {
-    return apiClient.get<User>("/auth/me", true);
+    return apiClient.get<User>("/users/me", true);
   },
 
-  async changePassword(data: { currentPassword: string; newPassword: string }): Promise<void> {
+  async changePassword(data: {
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<void> {
     return apiClient.post("/auth/change-password", data, true);
   },
 
@@ -51,8 +66,95 @@ export const authService = {
     return apiClient.post("/auth/forgot-password", { email });
   },
 
-  async resetPassword(token: string, password: string): Promise<void> {
-    return apiClient.post("/auth/reset-password", { token, password });
+  async resetPassword(
+    email: string,
+    code: string,
+    newPassword: string,
+  ): Promise<void> {
+    return apiClient.post("/auth/reset-password", {
+      email,
+      code,
+      newPassword,
+    });
+  },
+
+  async verifyEmail(code: string): Promise<void> {
+    return apiClient.post("/auth/verify-email", { code }, true);
+  },
+
+  /** Build the URL to start the Google OAuth flow, with an optional role
+   *  hint signed into state on the backend. */
+  googleStartUrl(opts: {
+    role?: "CUSTOMER" | "PROVIDER";
+    returnUrl?: string;
+  } = {}): string {
+    const params = new URLSearchParams();
+    if (opts.role) params.set("role", opts.role);
+    if (opts.returnUrl) params.set("returnUrl", opts.returnUrl);
+    const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+    const qs = params.toString();
+    return qs ? `${base}/auth/google?${qs}` : `${base}/auth/google`;
+  },
+
+  async googleExchange(code: string): Promise<LoginResponse> {
+    const response = await apiClient.post<LoginResponse>(
+      "/auth/google/exchange",
+      { code },
+    );
+    if (response.accessToken) {
+      apiClient.setTokens(response.accessToken, response.refreshToken);
+    }
+    return response;
+  },
+
+  async googleComplete(
+    signup: string,
+    role: "CUSTOMER" | "PROVIDER",
+  ): Promise<LoginResponse> {
+    const response = await apiClient.post<LoginResponse>(
+      "/auth/google/complete",
+      { signup, role },
+    );
+    if (response.accessToken) {
+      apiClient.setTokens(response.accessToken, response.refreshToken);
+    }
+    return response;
+  },
+
+  async sendVerification(): Promise<void> {
+    return apiClient.post("/auth/send-verification", {}, true);
+  },
+
+  async sendOtp(phone: string): Promise<void> {
+    return apiClient.post("/auth/send-otp", { phone }, true);
+  },
+
+  async verifyOtp(phone: string, code: string): Promise<void> {
+    return apiClient.post("/auth/verify-otp", { phone, code }, true);
+  },
+
+  async updateUser(data: {
+    name?: string;
+    phone?: string;
+    profileImage?: string;
+  }): Promise<import("@/types").User> {
+    return apiClient.put<import("@/types").User>("/users/me", data, true);
+  },
+
+  async listSessions(): Promise<SessionInfo[]> {
+    return apiClient.get<SessionInfo[]>("/auth/sessions", true);
+  },
+
+  async revokeSession(sessionId: string): Promise<void> {
+    await apiClient.delete(`/auth/sessions/${sessionId}`, true);
+  },
+
+  async revokeOtherSessions(): Promise<{ revoked: number }> {
+    return apiClient.post<{ revoked: number }>(
+      "/auth/sessions/revoke-others",
+      {},
+      true,
+    );
   },
 
   isAuthenticated(): boolean {

@@ -1,0 +1,335 @@
+import { Injectable, Logger } from "@nestjs/common";
+import { VerificationPurpose } from "@prisma/client";
+import { randomBytes, createHash } from "crypto";
+import * as bcrypt from "bcrypt";
+import { PrismaService } from "../../database/prisma.service";
+import { EmailService } from "../notifications/services/email.service";
+import { UsersService } from "../users/users.service";
+import { PasswordSecurityService } from "../../common/security/password-security.service";
+import {
+  DomainError,
+  ErrorCode,
+  UnprocessableDomainError,
+} from "../../common/errors";
+
+const RESET_CODE_TTL_MIN = 15;
+const VERIFY_EMAIL_CODE_TTL_MIN = 15;
+
+/**
+ * Owns the "long URL token" verification flows: password reset and email
+ * verification. Phone OTP lives in OtpService (Redis-backed).
+ *
+ * Token storage strategy:
+ *  - We generate a 32-byte random token and email the raw value to the user.
+ *  - Only the SHA-256 hash is persisted, so a leaked DB dump cannot be used to
+ *    impersonate password-reset or email-verification flows.
+ *  - On consume, we re-hash the inbound token and look it up.
+ */
+@Injectable()
+export class VerificationService {
+  private readonly logger = new Logger(VerificationService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly usersService: UsersService,
+    private readonly emailService: EmailService,
+    private readonly passwordSecurityService: PasswordSecurityService,
+  ) {}
+
+  // -- Password reset ---------------------------------------------------------
+
+  async requestPasswordReset(
+    email: string,
+    actor?: { ipAddress?: string; userAgent?: string },
+  ): Promise<void> {
+    const user = await this.usersService.findByEmail(email);
+
+    // Important: never reveal whether the email exists. Always return success
+    // shape; only actually issue + email a code if the user exists.
+    if (!user) {
+      this.logger.debug(
+        `Password reset requested for unknown email (no code issued)`,
+      );
+      return;
+    }
+
+    // Invalidate any outstanding reset codes for this user so an attacker
+    // who has briefly captured an old code can't use it after a new request.
+    await this.prisma.verificationToken.updateMany({
+      where: {
+        userId: user.id,
+        purpose: VerificationPurpose.PASSWORD_RESET,
+        usedAt: null,
+      },
+      data: { usedAt: new Date() },
+    });
+
+    const code = this.generateNumericCode(6);
+    const tokenHash = this.hashCode(user.id, code);
+    const expiresAt = new Date(Date.now() + RESET_CODE_TTL_MIN * 60 * 1000);
+
+    await this.prisma.verificationToken.create({
+      data: {
+        userId: user.id,
+        purpose: VerificationPurpose.PASSWORD_RESET,
+        tokenHash,
+        expiresAt,
+        ipAddress: actor?.ipAddress,
+        userAgent: actor?.userAgent,
+      },
+    });
+
+    try {
+      await this.emailService.send({
+        to: user.email,
+        subject: "Reset your password",
+        template: "password-reset",
+        data: {
+          name: user.name,
+          code,
+          ttlMinutes: RESET_CODE_TTL_MIN,
+        },
+      });
+    } catch (err) {
+      // Email failure is logged but not surfaced — see the "don't reveal
+      // existence" comment above. The user can request again.
+      this.logger.error(
+        `Failed to send password-reset email to ${user.email}`,
+        err as Error,
+      );
+    }
+  }
+
+  async resetPassword(
+    email: string,
+    code: string,
+    newPassword: string,
+  ): Promise<void> {
+    const trimmed = code.replace(/\s+/g, "");
+    if (!/^\d{6}$/.test(trimmed)) {
+      throw new UnprocessableDomainError(
+        ErrorCode.PASSWORD_RESET_TOKEN_INVALID,
+        "Enter the 6-digit code from your email.",
+      );
+    }
+
+    // Look up user by email. To avoid account enumeration we return the same
+    // generic error whether the user doesn't exist or the code is wrong.
+    const user = await this.usersService.findByEmail(email);
+    const record = user
+      ? await this.prisma.verificationToken.findUnique({
+          where: { tokenHash: this.hashCode(user.id, trimmed) },
+        })
+      : null;
+
+    if (
+      !user ||
+      !record ||
+      record.userId !== user.id ||
+      record.purpose !== VerificationPurpose.PASSWORD_RESET ||
+      record.usedAt ||
+      record.expiresAt < new Date()
+    ) {
+      throw new UnprocessableDomainError(
+        ErrorCode.PASSWORD_RESET_TOKEN_INVALID,
+        "That code is invalid or has expired. Request a new one.",
+      );
+    }
+
+    // Reject passwords that appear in known breach corpora.
+    await this.passwordSecurityService.assertNotBreached(newPassword);
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { password: hashed },
+      }),
+      this.prisma.verificationToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+      // Revoke any existing refresh tokens for the user — successful reset
+      // implies all prior sessions should be terminated.
+      this.prisma.refreshToken.updateMany({
+        where: { userId: record.userId, revokedAt: null },
+        data: { revokedAt: new Date(), revokedReason: "password_reset" },
+      }),
+    ]);
+
+    this.logger.log(`Password reset completed for user ${record.userId}`);
+  }
+
+  // -- Email verification (6-digit code) -------------------------------------
+  //
+  // We store the SHA-256 of `userId:code` (not the code itself) so a leaked DB
+  // dump can't be used to forge verifications. The userId-namespacing also
+  // guarantees uniqueness across users — two people who happen to mint the
+  // same 6-digit code at the same moment won't collide on the @unique
+  // tokenHash column.
+
+  async sendEmailVerification(
+    userId: string,
+    actor?: { ipAddress?: string; userAgent?: string },
+  ): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (user.emailVerifiedAt) {
+      // Idempotent — don't error, don't email.
+      return;
+    }
+
+    await this.prisma.verificationToken.updateMany({
+      where: {
+        userId,
+        purpose: VerificationPurpose.EMAIL_VERIFICATION,
+        usedAt: null,
+      },
+      data: { usedAt: new Date() },
+    });
+
+    const code = this.generateNumericCode(6);
+    const tokenHash = this.hashCode(userId, code);
+    const expiresAt = new Date(
+      Date.now() + VERIFY_EMAIL_CODE_TTL_MIN * 60 * 1000,
+    );
+
+    await this.prisma.verificationToken.create({
+      data: {
+        userId,
+        purpose: VerificationPurpose.EMAIL_VERIFICATION,
+        tokenHash,
+        expiresAt,
+        ipAddress: actor?.ipAddress,
+        userAgent: actor?.userAgent,
+      },
+    });
+
+    try {
+      const delivered = await this.emailService.send({
+        to: user.email,
+        subject: "Verify your email",
+        template: "email-verification",
+        data: {
+          name: user.name,
+          code,
+          ttlMinutes: VERIFY_EMAIL_CODE_TTL_MIN,
+        },
+      });
+      // `send` returns false when RESEND_API_KEY isn't configured. We don't
+      // want users clicking "Resend" and seeing a silent 202 while nothing
+      // hits their inbox, so surface a clear error from the controller.
+      if (!delivered) {
+        this.logger.warn(
+          `Verification email for ${user.email} skipped — RESEND_API_KEY is not configured.`,
+        );
+        throw new DomainError(
+          ErrorCode.INTERNAL_ERROR,
+          "Email delivery is not configured on this server. Set RESEND_API_KEY in the backend env to enable verification emails.",
+        );
+      }
+    } catch (err) {
+      // Re-throw our domain errors as-is.
+      if (err instanceof DomainError) throw err;
+      this.logger.error(
+        `Failed to send verification email to ${user.email}`,
+        err as Error,
+      );
+      throw new DomainError(
+        ErrorCode.INTERNAL_ERROR,
+        "Could not send verification email. Please try again.",
+      );
+    }
+  }
+
+  async verifyEmailByCode(
+    userId: string,
+    code: string,
+  ): Promise<{ userId: string }> {
+    const trimmed = code.replace(/\s+/g, "");
+    if (!/^\d{6}$/.test(trimmed)) {
+      throw new UnprocessableDomainError(
+        ErrorCode.TOKEN_INVALID,
+        "Enter the 6-digit code from your email.",
+      );
+    }
+
+    // If the user is already verified, treat as success. This makes the UI
+    // idempotent (e.g. someone hits submit twice in quick succession).
+    const user = await this.usersService.findById(userId);
+    if (user.emailVerifiedAt) {
+      return { userId };
+    }
+
+    const tokenHash = this.hashCode(userId, trimmed);
+    const record = await this.prisma.verificationToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (
+      !record ||
+      record.userId !== userId ||
+      record.purpose !== VerificationPurpose.EMAIL_VERIFICATION ||
+      record.usedAt ||
+      record.expiresAt < new Date()
+    ) {
+      throw new UnprocessableDomainError(
+        ErrorCode.TOKEN_INVALID,
+        "That code is invalid or has expired. Tap 'Resend code' to get a new one.",
+      );
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { emailVerifiedAt: new Date() },
+      }),
+      this.prisma.verificationToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    this.logger.log(`Email verified for user ${userId}`);
+
+    // Fire the welcome email now that verification is confirmed. We moved it
+    // off of registration because two transactional emails landing at the same
+    // time made the verification code easy to miss.
+    void this.emailService
+      .send({
+        to: user.email,
+        template: "welcome",
+        data: {
+          name: user.name,
+          role: (user.role as "CUSTOMER" | "PROVIDER") ?? "CUSTOMER",
+        },
+      })
+      .catch((err) =>
+        this.logger.warn(
+          `Welcome email after verification failed for ${user.email}: ${(err as Error).message}`,
+        ),
+      );
+
+    return { userId };
+  }
+
+  // -- Helpers ----------------------------------------------------------------
+
+  /** Per-user hash so two users with the same code never collide. */
+  private hashCode(userId: string, code: string): string {
+    return createHash("sha256").update(`${userId}:${code}`).digest("hex");
+  }
+
+  /** Cryptographically random N-digit numeric code. */
+  private generateNumericCode(length: number): string {
+    let out = "";
+    while (out.length < length) {
+      const buf = randomBytes(length);
+      for (let i = 0; i < buf.length && out.length < length; i++) {
+        const digit = buf[i]! % 10;
+        out += digit.toString();
+      }
+    }
+    return out;
+  }
+}

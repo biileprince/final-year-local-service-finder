@@ -3,6 +3,8 @@ import {
   IsNumber,
   IsOptional,
   IsDateString,
+  IsArray,
+  ArrayMaxSize,
   Matches,
   MinLength,
   MaxLength,
@@ -11,7 +13,7 @@ import {
   Min,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type, Transform } from "class-transformer";
+import { Type } from "class-transformer";
 
 export class CreateBookingDto {
   @ApiProperty({ example: "provider-uuid" })
@@ -20,15 +22,19 @@ export class CreateBookingDto {
 
   @ApiProperty({ example: "2026-04-15" })
   @IsDateString()
-  @Transform(({ value }) => new Date(value))
-  scheduledDate: Date;
+  scheduledDate: string;
 
-  @ApiProperty({ example: "09:00:00", description: "Time in HH:MM:SS format" })
+  @ApiPropertyOptional({
+    example: "09:00:00",
+    description:
+      "Time in HH:MM:SS format. Optional — when omitted the booking is treated as flexible-time and the provider confirms a slot via messaging.",
+  })
+  @IsOptional()
   @IsString()
   @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/, {
     message: "scheduledStartTime must be in HH:MM:SS format",
   })
-  scheduledStartTime: string;
+  scheduledStartTime?: string;
 
   @ApiPropertyOptional({ example: "10:00:00" })
   @IsOptional()
@@ -70,4 +76,14 @@ export class CreateBookingDto {
   @Type(() => Number)
   @Min(0)
   estimatedAmount?: number;
+
+  @ApiPropertyOptional({
+    description: "File IDs to attach to the booking (max 10)",
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  attachmentIds?: string[];
 }

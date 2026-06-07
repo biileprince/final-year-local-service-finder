@@ -1,11 +1,13 @@
 import { apiClient, buildQueryString } from "./client";
-import type { Review } from "@/types";
+import type { Review, PaginatedResponse } from "@/types";
 
 export interface CreateReviewDto {
-  bookingId: string;
+  providerId: string;
+  bookingId?: string;
   rating: number;
   title?: string;
   comment: string;
+  imageIds?: string[];
 }
 
 export const reviewsService = {
@@ -27,5 +29,33 @@ export const reviewsService = {
 
   async markHelpful(id: string): Promise<void> {
     return apiClient.post(`/reviews/${id}/helpful`, {}, true);
+  },
+
+  async getByProvider(
+    providerId: string,
+    params?: {
+      page?: number;
+      limit?: number;
+      sortBy?: "rating" | "createdAt" | "helpfulCount";
+      sortOrder?: "asc" | "desc";
+    },
+  ): Promise<PaginatedResponse<Review>> {
+    const qs = buildQueryString(params || {});
+    const raw = await apiClient.get<{
+      items: Review[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    }>(`/reviews/provider/${providerId}${qs}`);
+    return {
+      data: raw.items ?? [],
+      pagination: {
+        page: raw.page ?? 1,
+        limit: raw.limit ?? (raw.items?.length ?? 0),
+        total: raw.total ?? 0,
+        totalPages: raw.totalPages ?? 1,
+      },
+    };
   },
 };

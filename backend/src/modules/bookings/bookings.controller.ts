@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -19,7 +20,10 @@ import { BookingsService } from "./bookings.service";
 import { CreateBookingDto } from "./dto/create-booking.dto";
 import { UpdateBookingDto } from "./dto/update-booking.dto";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
+import { FlagNoShowDto } from "./dto/flag-no-show.dto";
 import { RecordPaymentDto } from "./dto/record-payment.dto";
+import { RescheduleBookingDto } from "./dto/reschedule-booking.dto";
+import { ConfirmBookingDto } from "./dto/confirm-booking.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import {
   CurrentUser,
@@ -44,6 +48,7 @@ export class BookingsController {
   ) {
     return this.bookingsService.create({
       ...createBookingDto,
+      scheduledDate: new Date(createBookingDto.scheduledDate),
       customerId: user.id,
     });
   }
@@ -131,8 +136,9 @@ export class BookingsController {
   async confirm(
     @Param("id") id: string,
     @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: ConfirmBookingDto,
   ) {
-    return this.bookingsService.confirm(id, user.id);
+    return this.bookingsService.confirm(id, user.id, dto?.scheduledStartTime);
   }
 
   @Put(":id/start")
@@ -156,6 +162,17 @@ export class BookingsController {
     return this.bookingsService.complete(id, user.id, finalAmount);
   }
 
+  @Put(":id/reschedule")
+  @ApiOperation({ summary: "Reschedule a booking (customer or provider)" })
+  @ApiResponse({ status: 200, description: "Booking rescheduled" })
+  async reschedule(
+    @Param("id") id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: RescheduleBookingDto,
+  ) {
+    return this.bookingsService.reschedule(id, user.id, dto);
+  }
+
   @Put(":id/cancel")
   @ApiOperation({ summary: "Cancel the booking" })
   @ApiResponse({ status: 200, description: "Booking cancelled" })
@@ -165,6 +182,48 @@ export class BookingsController {
     @Body() cancelBookingDto: CancelBookingDto,
   ) {
     return this.bookingsService.cancel(id, user.id, cancelBookingDto.reason);
+  }
+
+  @Put(":id/no-show")
+  @ApiOperation({
+    summary: "Flag a confirmed booking as a no-show (customer or provider)",
+  })
+  @ApiResponse({ status: 200, description: "Booking flagged as no-show" })
+  async flagNoShow(
+    @Param("id") id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: FlagNoShowDto,
+  ) {
+    return this.bookingsService.flagNoShow(id, user.id, dto?.reason);
+  }
+
+  @Post(":id/attachments")
+  @ApiOperation({
+    summary: "Attach a file (image or document) to a booking",
+  })
+  @ApiResponse({ status: 201, description: "Attachment added" })
+  async addAttachment(
+    @Param("id") id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() body: { fileId: string; description?: string },
+  ) {
+    return this.bookingsService.addAttachment(
+      id,
+      user.id,
+      body.fileId,
+      body.description,
+    );
+  }
+
+  @Delete(":id/attachments/:attachmentId")
+  @ApiOperation({ summary: "Remove an attachment from a booking" })
+  @ApiResponse({ status: 200, description: "Attachment removed" })
+  async removeAttachment(
+    @Param("id") id: string,
+    @Param("attachmentId") attachmentId: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.bookingsService.removeAttachment(id, user.id, attachmentId);
   }
 
   @Put(":id/record-payment")

@@ -27,6 +27,21 @@ enum BookingStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  NO_SHOW
+}
+
+// Which party failed to show up for a confirmed appointment. The flagging party
+// reports the *other* side: a provider flags a CUSTOMER no-show, a customer
+// flags a PROVIDER no-show.
+enum NoShowParty {
+  CUSTOMER
+  PROVIDER
+}
+
+enum RecurrenceFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
 }
 
 enum VerificationStatus {
@@ -124,6 +139,8 @@ model User {
   phone           String?
   profileImage    String?   @map("avatar_url")
   role            UserRole  @default(CUSTOMER)
+  googleId        String?   @unique @map("google_id")
+  calendarToken   String?   @unique @map("calendar_token")
   emailVerifiedAt DateTime? @map("email_verified_at")
   phoneVerifiedAt DateTime? @map("phone_verified_at")
   lastLoginAt     DateTime? @map("last_login_at")
@@ -154,10 +171,18 @@ model User {
   notifications           Notification[]
   notificationPreferences NotificationPreference?
   refreshTokens           RefreshToken[]
+  verificationTokens      VerificationToken[]
   auditLogs               AuditLog[]
   applicationLogs         ApplicationLog[]
   apiRequestLogs          ApiRequestLog[]
   providersVerified       Provider[]              @relation("VerifiedProviders")
+  favorites               Favorite[]
+  recurringBookings       RecurringBooking[]      @relation("CustomerRecurringBookings")
+  blocksMade              UserBlock[]             @relation("BlocksMade")
+  blocksReceived          UserBlock[]             @relation("BlocksReceived")
+  reportsMade             UserReport[]            @relation("ReportsMade")
+  reportsReceived         UserReport[]            @relation("ReportsReceived")
+  reportsReviewed         UserReport[]            @relation("ReportsReviewed")
 
   @@index([email])
   @@index([role])
@@ -185,10 +210,11 @@ model Category {
   deletedAt     DateTime? @map("deleted_at")
 
   // Relations
-  image     File?              @relation("CategoryImage", fields: [imageId], references: [id], onDelete: SetNull)
-  parent    Category?          @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children  Category[]         @relation("CategoryHierarchy")
-  providers ProviderCategory[]
+  image            File?              @relation("CategoryImage", fields: [imageId], references: [id], onDelete: SetNull)
+  parent           Category?          @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children         Category[]         @relation("CategoryHierarchy")
+  providers        ProviderCategory[]
+  providerServices ProviderService[]
 
   @@index([slug])
   @@index([isActive, displayOrder])
@@ -209,6 +235,7 @@ model Provider {
   latitude               Decimal?           @db.Decimal(10, 8)
   longitude              Decimal?           @db.Decimal(11, 8)
   serviceRadiusKm        Int                @default(50) @map("service_radius_km")
+  cancellationPolicy     String?            @map("cancellation_policy")
   verificationStatus     VerificationStatus @default(PENDING) @map("verification_status")
   verifiedAt             DateTime?          @map("verified_at")
   verifiedById           String?            @map("verified_by")
@@ -217,9 +244,11 @@ model Provider {
   featured               Boolean            @default(false)
   isActive               Boolean            @default(true) @map("is_active")
   rating                 Decimal            @default(0) @db.Decimal(3, 2)
+  trustScore             Decimal            @default(0) @map("trust_score") @db.Decimal(4, 1)
   reviewCount            Int                @default(0) @map("review_count")
   totalBookings          Int                @default(0) @map("total_bookings")
   completedBookings      Int                @default(0) @map("completed_bookings")
+  noShowCount            Int                @default(0) @map("no_show_count")
   galleryCount           Int                @default(0) @map("gallery_count")
   responseRate           Decimal            @default(0) @map("response_rate") @db.Decimal(5, 2)
   avgResponseTimeMinutes Int?               @map("avg_response_time_minutes")
@@ -239,12 +268,32 @@ model Provider {
   bookings                Booking[]
   reviews                 Review[]
   conversationsAsProvider Conversation[]
+  favoritedBy             Favorite[]
+  hours                   ProviderHours[]
+  services                ProviderService[]
+  recurringBookings       RecurringBooking[]
 
   @@index([userId])
   @@index([verificationStatus])
   @@index([featured])
   @@index([rating(sort: Desc)])
+  @@index([trustScore(sort: Desc)])
   @@map("providers")
+}
+
+model Favorite {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  providerId String   @map("provider_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, providerId])
+  @@index([userId])
+  @@index([providerId])
+  @@map("favorites")
 }
 
 model ProviderCategory {
@@ -294,6 +343,44 @@ model ProviderGallery {
   @@unique([providerId, fileId])
   @@index([providerId, displayOrder])
   @@map("provider_gallery")
+}
+
+model ProviderHours {
+  id           String   @id @default(uuid())
+  providerId   String   @map("provider_id")
+  dayOfWeek    Int      @map("day_of_week") // 0 = Sunday … 6 = Saturday
+  openMinutes  Int      @default(540) @map("open_minutes") // minutes since midnight; 540 = 09:00
+  closeMinutes Int      @default(1020) @map("close_minutes") // 1020 = 17:00
+  isClosed     Boolean  @default(false) @map("is_closed")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, dayOfWeek])
+  @@index([providerId])
+  @@map("provider_hours")
+}
+
+model ProviderService {
+  id          String   @id @default(uuid())
+  providerId  String   @map("provider_id")
+  categoryId  String?  @map("category_id")
+  name        String
+  basePrice   Decimal  @map("base_price") @db.Decimal(10, 2)
+  durationMin Int      @default(60) @map("duration_min")
+  description String?
+  imageUrl    String?  @map("image_url")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  provider Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([providerId])
+  @@index([providerId, isActive])
+  @@map("provider_services")
 }
 
 // =============================================================================
@@ -367,6 +454,10 @@ model Booking {
   cancellationReason String?       @map("cancellation_reason")
   cancelledAt        DateTime?     @map("cancelled_at")
   cancelledById      String?       @map("cancelled_by")
+  recurringBookingId String?       @map("recurring_booking_id")
+  noShowParty        NoShowParty?  @map("no_show_party")
+  noShowReason       String?       @map("no_show_reason")
+  noShowFlaggedAt    DateTime?     @map("no_show_flagged_at")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
   createdById        String?       @map("created_by")
@@ -378,16 +469,53 @@ model Booking {
   statusChangedBy User?               @relation("BookingStatusChangedBy", fields: [statusChangedById], references: [id])
   cancelledBy     User?               @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
   createdBy       User?               @relation("BookingCreatedBy", fields: [createdById], references: [id])
-  review          Review?
-  attachments     BookingAttachment[]
-  conversations   Conversation[]
+  review           Review?
+  attachments      BookingAttachment[]
+  conversations    Conversation[]
+  recurringBooking RecurringBooking?   @relation(fields: [recurringBookingId], references: [id], onDelete: SetNull)
 
   @@index([customerId])
   @@index([providerId])
   @@index([status])
   @@index([scheduledDate])
   @@index([bookingNumber])
+  @@index([recurringBookingId])
   @@map("bookings")
+}
+
+// A recurring booking series. Acts as a template: a daily cron materializes the
+// next upcoming instance (a real Booking, status PENDING) within a lead window,
+// so we never create hundreds of future rows up front. The series ends when
+// endDate passes or maxOccurrences is reached.
+model RecurringBooking {
+  id                 String              @id @default(uuid())
+  customerId         String              @map("customer_id")
+  providerId         String              @map("provider_id")
+  frequency          RecurrenceFrequency
+  scheduledStartTime DateTime?           @map("scheduled_start_time") @db.Time
+  scheduledEndTime   DateTime?           @map("scheduled_end_time") @db.Time
+  serviceAddress     String              @map("service_address")
+  serviceLatitude    Decimal?            @map("service_latitude") @db.Decimal(10, 8)
+  serviceLongitude   Decimal?            @map("service_longitude") @db.Decimal(11, 8)
+  problemDescription String              @map("problem_description")
+  estimatedAmount    Decimal?            @map("estimated_amount") @db.Decimal(10, 2)
+  startDate          DateTime            @map("start_date") @db.Date
+  endDate            DateTime?           @map("end_date") @db.Date
+  maxOccurrences     Int?                @map("max_occurrences")
+  occurrencesCreated Int                 @default(0) @map("occurrences_created")
+  nextOccurrenceDate DateTime?           @map("next_occurrence_date") @db.Date
+  isActive           Boolean             @default(true) @map("is_active")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  customer User      @relation("CustomerRecurringBookings", fields: [customerId], references: [id], onDelete: Cascade)
+  provider Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([isActive, nextOccurrenceDate])
+  @@map("recurring_bookings")
 }
 
 model BookingAttachment {
@@ -582,6 +710,32 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+enum VerificationPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+/// One-time tokens for email verification + password reset. Phone OTP lives
+/// in Redis (short TTL, attempt counters) and intentionally not modeled here.
+model VerificationToken {
+  id        String              @id @default(uuid())
+  userId    String              @map("user_id")
+  purpose   VerificationPurpose
+  tokenHash String              @unique @map("token_hash")
+  expiresAt DateTime            @map("expires_at")
+  usedAt    DateTime?           @map("used_at")
+  ipAddress String?             @map("ip_address")
+  userAgent String?             @map("user_agent")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
 // =============================================================================
 // LOGGING & AUDIT
 // =============================================================================
@@ -659,4 +813,65 @@ model ApiRequestLog {
   @@index([path, method])
   @@index([statusCode])
   @@map("api_request_logs")
+}
+
+// =============================================================================
+// MODERATION — chat blocks & user reports
+// =============================================================================
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  INAPPROPRIATE
+  SCAM
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  DISMISSED
+  ACTIONED
+}
+
+/// One user blocking another. Mutual lookups gate messaging in both directions.
+model UserBlock {
+  id        String   @id @default(uuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker User @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@map("user_blocks")
+}
+
+/// A report filed against a user, optionally tied to a conversation/message.
+/// conversationId/messageId are plain columns (no FK) so a report survives the
+/// deletion of the offending message.
+model UserReport {
+  id             String       @id @default(uuid())
+  reporterId     String       @map("reporter_id")
+  reportedId     String       @map("reported_id")
+  conversationId String?      @map("conversation_id")
+  messageId      String?      @map("message_id")
+  reason         ReportReason
+  details        String?
+  status         ReportStatus @default(PENDING)
+  reviewedById   String?      @map("reviewed_by")
+  reviewedAt     DateTime?    @map("reviewed_at")
+  resolutionNote String?      @map("resolution_note")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  reporter   User  @relation("ReportsMade", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported   User  @relation("ReportsReceived", fields: [reportedId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("ReportsReviewed", fields: [reviewedById], references: [id])
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([reportedId])
+  @@map("user_reports")
 }

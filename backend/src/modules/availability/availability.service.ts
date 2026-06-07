@@ -20,6 +20,121 @@ export class AvailabilityService {
     private readonly availabilityRepository: AvailabilityRepository,
   ) {}
 
+  async resolveProviderIdForUser(userId: string): Promise<string> {
+    const provider = await this.prisma.provider.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!provider) {
+      throw new NotFoundException("Provider profile not found for this user");
+    }
+
+    return provider.id;
+  }
+
+  async getMyAvailabilityRange(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+  ) {
+    const providerId = await this.resolveProviderIdForUser(userId);
+    const items = await this.availabilityRepository.findByProviderAndDateRange(
+      providerId,
+      startDate,
+      endDate,
+    );
+    return items.map((item) => this.formatAvailability(item));
+  }
+
+  async setMyAvailabilityBulk(
+    userId: string,
+    items: {
+      date: string;
+      isAvailable?: boolean;
+      timeSlots?: { startTime: string; endTime: string; isAvailable?: boolean }[];
+    }[],
+  ) {
+    const providerId = await this.resolveProviderIdForUser(userId);
+
+    const results = [];
+    for (const item of items) {
+      const date = new Date(item.date);
+      const normalizedSlots = (item.timeSlots ?? []).map((slot) => ({
+        startTime: this.normalizeTime(slot.startTime),
+        endTime: this.normalizeTime(slot.endTime),
+        isAvailable: slot.isAvailable ?? true,
+      }));
+
+      let availability =
+        await this.availabilityRepository.findByProviderAndDate(providerId, date);
+
+      if (!availability) {
+        availability = await this.availabilityRepository.create({
+          providerId,
+          date,
+          isAvailable: item.isAvailable ?? true,
+          timeSlots: normalizedSlots,
+        });
+      } else {
+        await this.availabilityRepository.update(availability.id, {
+          isAvailable: item.isAvailable ?? availability.isAvailable,
+        });
+        await this.availabilityRepository.deleteTimeSlotsByAvailability(
+          availability.id,
+        );
+        if (normalizedSlots.length > 0) {
+          await this.availabilityRepository.createTimeSlots(
+            availability.id,
+            normalizedSlots,
+          );
+        }
+        availability = await this.availabilityRepository.findByProviderAndDate(
+          providerId,
+          date,
+        );
+      }
+
+      const dateStr = date.toISOString().split("T")[0];
+      if (dateStr) {
+        await this.cacheService.invalidateAvailability(providerId, dateStr);
+      }
+
+      if (availability) {
+        results.push(this.formatAvailability(availability));
+      }
+    }
+
+    return results;
+  }
+
+  private normalizeTime(value: string): string {
+    return /^\d{2}:\d{2}$/.test(value) ? `${value}:00` : value;
+  }
+
+  private formatAvailability(availability: {
+    id: string;
+    providerId: string;
+    date: Date;
+    isAvailable: boolean;
+    notes: string | null;
+    timeSlots: { id: string; startTime: Date; endTime: Date; isAvailable: boolean }[];
+  }) {
+    return {
+      id: availability.id,
+      providerId: availability.providerId,
+      date: availability.date.toISOString().split("T")[0],
+      isAvailable: availability.isAvailable,
+      notes: availability.notes,
+      timeSlots: availability.timeSlots.map((slot) => ({
+        id: slot.id,
+        startTime: slot.startTime.toISOString().slice(11, 16),
+        endTime: slot.endTime.toISOString().slice(11, 16),
+        isAvailable: slot.isAvailable,
+      })),
+    };
+  }
+
   async setAvailability(
     providerId: string,
     userId: string,

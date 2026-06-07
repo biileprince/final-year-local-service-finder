@@ -46,6 +46,11 @@ export class UpdateCategoryDto {
   @Matches(/^#[0-9A-Fa-f]{6}$/, { message: "Color must be a valid hex color" })
   color?: string;
 
+  @ApiPropertyOptional({ description: "File ID for the category image" })
+  @IsOptional()
+  @IsString()
+  imageId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

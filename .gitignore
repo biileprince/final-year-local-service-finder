@@ -49,3 +49,12 @@ Thumbs.db
 
 # Local-only
 *.local
+session_handoff.md
+.claude/
+SUBMISSION_GUIDE.md
+SUBMISSION_GUIDE.pdf
+docs
+
+# AI instruction files
+GEMINI.md
+.github/instructions/

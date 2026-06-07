@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Calendar,
+  Calendar as CalendarIcon,
   Clock,
   Plus,
   Trash2,
   Save,
   ChevronLeft,
   ChevronRight,
+  Wand2,
 } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/spinner";
 import { useAuth, useRequireRole } from "@/hooks";
 import { availabilityService } from "@/lib/api";
 import type { Availability, TimeSlot } from "@/types";
@@ -44,7 +48,7 @@ const TIME_SLOTS = [
 ];
 
 export default function AvailabilityPage() {
-  useRequireRole("PROVIDER");
+  useRequireRole(["PROVIDER"]);
   const { user } = useAuth();
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,10 +65,14 @@ export default function AvailabilityPage() {
     {},
   );
   const [viewMode, setViewMode] = useState<"week" | "recurring">("week");
+  const [applyingPreset, setApplyingPreset] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadAvailability();
   }, [currentWeekStart]);
+
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   const loadAvailability = async () => {
     setIsLoading(true);
@@ -88,7 +96,15 @@ export default function AvailabilityPage() {
       });
       setSelectedSlots(slots);
     } catch (error) {
-      console.error("Failed to load availability:", error);
+      // New providers who haven't finished onboarding have no provider row
+      // yet — `/availability/me` returns 404. Route them to onboarding instead
+      // of bubbling the error to the Next.js error overlay.
+      const msg = error instanceof Error ? error.message.toLowerCase() : "";
+      if (msg.includes("not found") || msg.includes("404")) {
+        setNeedsOnboarding(true);
+      } else {
+        console.error("Failed to load availability:", error);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -127,6 +143,58 @@ export default function AvailabilityPage() {
     }));
   };
 
+  const applyPreset = async (
+    preset: "weekdays-9-5" | "weekends" | "clear",
+    weeksAhead = 4,
+  ) => {
+    setApplyingPreset(true);
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const data: { date: string; timeSlots: { startTime: string; endTime: string }[] }[] = [];
+
+      const weekdaySlots = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"];
+      const weekendSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00"];
+
+      for (let i = 0; i < weeksAhead * 7; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const day = d.getDay();
+        const dateKey = d.toISOString().split("T")[0]!;
+        let times: string[] = [];
+        if (preset === "weekdays-9-5" && day >= 1 && day <= 5) {
+          times = weekdaySlots;
+        } else if (preset === "weekends" && (day === 0 || day === 6)) {
+          times = weekendSlots;
+        }
+        // For clear preset, all days get []
+        data.push({
+          date: dateKey,
+          timeSlots: times.map((t) => ({
+            startTime: t,
+            endTime: `${(parseInt(t.split(":")[0]!, 10) + 1).toString().padStart(2, "0")}:00`,
+          })),
+        });
+      }
+
+      await availabilityService.setAvailability(data);
+      await loadAvailability();
+      toast({
+        variant: "success",
+        title: "Schedule applied",
+        description: `Applied to the next ${weeksAhead} weeks.`,
+      });
+    } catch (err) {
+      toast({
+        variant: "error",
+        title: "Failed to apply preset",
+        description: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setApplyingPreset(false);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -136,7 +204,7 @@ export default function AvailabilityPage() {
           date,
           timeSlots: times.map((time) => ({
             startTime: time,
-            endTime: `${parseInt(time.split(":")[0]) + 1}:00`,
+            endTime: `${parseInt(time.split(":")[0] ?? "0") + 1}:00`,
           })),
         }),
       );
@@ -164,9 +232,48 @@ export default function AvailabilityPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <Card>
+          <CardContent className="p-5">
+            <div className="grid grid-cols-7 gap-2">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  {Array.from({ length: 4 }).map((__, j) => (
+                    <Skeleton key={j} className="h-10 w-full rounded-md" />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
+    );
+  }
+
+  if (needsOnboarding) {
+    return (
+      <Card>
+        <CardContent className="py-16 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-100">
+            <CalendarIcon className="h-7 w-7 text-primary-600" />
+          </div>
+          <h2 className="mt-5 text-xl font-bold text-secondary-900">
+            Finish onboarding to set your hours
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-secondary-600">
+            Availability lives on your provider profile — complete onboarding
+            and we&apos;ll bring you back here to schedule.
+          </p>
+          <Button asChild className="mt-6">
+            <Link href="/onboarding">Continue onboarding</Link>
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -229,8 +336,8 @@ export default function AvailabilityPage() {
               </Button>
               <div className="text-center">
                 <p className="font-semibold text-secondary-900">
-                  {formatDate(weekDates[0].toISOString())} -{" "}
-                  {formatDate(weekDates[6].toISOString())}
+                  {formatDate(weekDates[0]!.toISOString())} -{" "}
+                  {formatDate(weekDates[6]!.toISOString())}
                 </p>
               </div>
               <Button
@@ -247,7 +354,7 @@ export default function AvailabilityPage() {
           {/* Weekly Calendar */}
           <div className="grid gap-4 lg:grid-cols-7">
             {weekDates.map((date) => {
-              const dateKey = date.toISOString().split("T")[0];
+              const dateKey = date.toISOString().split("T")[0] ?? "";
               const isToday = new Date().toDateString() === date.toDateString();
               const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
               const daySlots = selectedSlots[dateKey] || [];
@@ -318,38 +425,54 @@ export default function AvailabilityPage() {
           </div>
         </>
       ) : (
-        /* Recurring Schedule */
+        /* Recurring Schedule — quick presets that expand into the next 4 weeks */
         <Card>
           <CardHeader>
-            <CardTitle>Recurring Weekly Schedule</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5" />
+              Quick presets
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="mb-4 text-sm text-secondary-600">
-              Set your default weekly availability. This will be applied to
-              future weeks.
+          <CardContent className="space-y-4">
+            <p className="text-sm text-secondary-600">
+              Apply a recurring schedule to the next 4 weeks. You can still
+              tweak individual days from the Weekly View afterwards.
             </p>
-            <div className="space-y-4">
-              {DAYS_OF_WEEK.map((day, index) => (
-                <div
-                  key={day}
-                  className="flex items-center gap-4 rounded-lg border border-secondary-200 p-4"
-                >
-                  <div className="w-24 font-medium text-secondary-900">
-                    {day}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {TIME_SLOTS.map((time) => (
-                      <button
-                        key={time}
-                        className="rounded bg-secondary-100 px-2 py-1 text-xs font-medium text-secondary-600 hover:bg-primary-100 hover:text-primary-700"
-                      >
-                        {time}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <button
+                onClick={() => applyPreset("weekdays-9-5")}
+                disabled={applyingPreset}
+                className="rounded-xl border-2 border-gray-200 bg-white p-4 text-left transition-all hover:border-primary-400 hover:bg-primary-50 disabled:opacity-50"
+              >
+                <p className="font-bold text-secondary-900">9–5 weekdays</p>
+                <p className="mt-1 text-xs text-secondary-500">
+                  Mon–Fri, 09:00–17:00 hourly slots.
+                </p>
+              </button>
+              <button
+                onClick={() => applyPreset("weekends")}
+                disabled={applyingPreset}
+                className="rounded-xl border-2 border-gray-200 bg-white p-4 text-left transition-all hover:border-primary-400 hover:bg-primary-50 disabled:opacity-50"
+              >
+                <p className="font-bold text-secondary-900">Weekends only</p>
+                <p className="mt-1 text-xs text-secondary-500">
+                  Sat–Sun, 10:00–16:00 hourly slots.
+                </p>
+              </button>
+              <button
+                onClick={() => applyPreset("clear")}
+                disabled={applyingPreset}
+                className="rounded-xl border-2 border-gray-200 bg-white p-4 text-left transition-all hover:border-error-300 hover:bg-error-50 disabled:opacity-50"
+              >
+                <p className="font-bold text-secondary-900">Clear schedule</p>
+                <p className="mt-1 text-xs text-secondary-500">
+                  Wipe availability for the next 4 weeks.
+                </p>
+              </button>
             </div>
+            {applyingPreset && (
+              <p className="text-sm text-secondary-500">Applying preset…</p>
+            )}
           </CardContent>
         </Card>
       )}

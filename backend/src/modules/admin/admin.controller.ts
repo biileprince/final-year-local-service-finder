@@ -32,6 +32,10 @@ import { ModerateReviewDto } from "./dto/moderate-review.dto";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { CancelBookingDto } from "./dto/cancel-booking.dto";
+import { ResolveReportDto } from "./dto/resolve-report.dto";
+import { ModerationService } from "../moderation/moderation.service";
+import { ReportStatus } from "@prisma/client";
+import { RateLimitObserverService } from "../../common/security/rate-limit-observer.service";
 
 @Controller("admin")
 @ApiTags("admin")
@@ -39,7 +43,11 @@ import { CancelBookingDto } from "./dto/cancel-booking.dto";
 @Roles(UserRole.ADMIN)
 @ApiBearerAuth()
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly moderationService: ModerationService,
+    private readonly rateLimitObserver: RateLimitObserverService,
+  ) {}
 
   // ============================================================================
   // Dashboard & Analytics
@@ -124,6 +132,19 @@ export class AdminController {
     @CurrentUser() admin: CurrentUserPayload,
   ) {
     return this.adminService.reactivateUser(id, admin.id);
+  }
+
+  @Post("users/:id/message")
+  @ApiOperation({
+    summary: "Send an admin in-app message to any user (delivered via the notifications pipeline)",
+  })
+  @ApiResponse({ status: 200, description: "Message delivered" })
+  async messageUser(
+    @Param("id") id: string,
+    @Body() body: { subject: string; message: string },
+    @CurrentUser() admin: CurrentUserPayload,
+  ) {
+    return this.adminService.messageUser(id, body.subject, body.message, admin.id);
   }
 
   // ============================================================================
@@ -246,6 +267,34 @@ export class AdminController {
   }
 
   // ============================================================================
+  // User Reports (chat block & report)
+  // ============================================================================
+
+  @Get("reports")
+  @ApiOperation({ summary: "List user reports filed from chat" })
+  @ApiQuery({ name: "status", required: false, enum: ReportStatus })
+  @ApiResponse({ status: 200, description: "Returns user reports" })
+  async getReports(@Query("status") status?: ReportStatus) {
+    return this.moderationService.listReports(status);
+  }
+
+  @Post("reports/:id/resolve")
+  @ApiOperation({ summary: "Resolve a user report" })
+  @ApiResponse({ status: 200, description: "Report resolved" })
+  async resolveReport(
+    @Param("id") id: string,
+    @Body() dto: ResolveReportDto,
+    @CurrentUser() admin: CurrentUserPayload,
+  ) {
+    return this.moderationService.resolveReport(
+      id,
+      admin.id,
+      dto.status,
+      dto.resolutionNote,
+    );
+  }
+
+  // ============================================================================
   // Category Management
   // ============================================================================
 
@@ -271,7 +320,6 @@ export class AdminController {
   @ApiResponse({ status: 200, description: "Category deleted" })
   async deleteCategory(@Param("id") id: string) {
     return this.adminService.deleteCategory(id);
-    return { success: true };
   }
 
   // ============================================================================
@@ -283,6 +331,26 @@ export class AdminController {
   @ApiResponse({ status: 200, description: "Returns system health" })
   async getSystemHealth() {
     return this.adminService.getSystemHealth();
+  }
+
+  @Get("system/rate-limit/stats")
+  @ApiOperation({
+    summary:
+      "Get rate-limit hit counters (in-memory, since last process start)",
+  })
+  getRateLimitStats() {
+    return this.rateLimitObserver.stats();
+  }
+
+  @Get("system/rate-limit/recent")
+  @ApiOperation({ summary: "Get recent throttled requests" })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  getRateLimitRecent(@Query("limit") limit?: string) {
+    return {
+      events: this.rateLimitObserver.recent(
+        limit ? parseInt(limit, 10) : undefined,
+      ),
+    };
   }
 
   @Get("system/audit-logs")

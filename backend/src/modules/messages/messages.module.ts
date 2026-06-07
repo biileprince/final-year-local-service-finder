@@ -5,9 +5,11 @@ import { MessagesService } from "./messages.service";
 import { MessagesGateway } from "./messages.gateway";
 import { MessagesController } from "./messages.controller";
 import { MessagesRepository } from "./messages.repository";
+import { ModerationModule } from "../moderation/moderation.module";
 
 @Module({
   imports: [
+    ModerationModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Mail } from "lucide-react";
+import { Eye, EyeOff, Mail, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/hooks";
+import { ContinueWithGoogleButton } from "@/components/auth/google-button";
+import { useAuth, useRedirectIfAuthenticated } from "@/hooks";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -19,9 +20,19 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnUrl = searchParams.get("returnUrl") || "/dashboard";
+  const returnUrl = searchParams.get("returnUrl") ?? "/dashboard";
+  const reason = searchParams.get("reason");
+  useRedirectIfAuthenticated(returnUrl);
   const { login, isLoading, error, clearError } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
 
@@ -39,30 +50,49 @@ export default function LoginPage() {
       await login(data);
       router.push(returnUrl);
     } catch {
-      // Error is handled by the auth store
+      // handled by store
     }
   };
 
   return (
-    <div className="mx-auto w-full max-w-sm">
-      <div className="mb-8">
-        <Link href="/" className="flex items-center gap-2 lg:hidden">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600">
-            <span className="text-lg font-bold text-white">L</span>
-          </div>
-          <span className="text-xl font-bold text-secondary-900">LocalService</span>
-        </Link>
-        <h1 className="mt-6 text-2xl font-bold text-secondary-900 lg:mt-0">
-          Welcome back
-        </h1>
-        <p className="mt-2 text-secondary-600">
-          Sign in to your account to continue
-        </p>
+    <div className="mx-auto w-full max-w-md">
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-600">
+        Welcome back
+      </p>
+      <h1 className="mt-2 font-sans text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+        Login to <span className="italic text-primary-600">your</span> account.
+      </h1>
+      <p className="mt-3 text-gray-600">
+        Enter your email and password to continue and manage your bookings.
+      </p>
+
+      {reason === "session-expired" && !error && (
+        <div
+          role="status"
+          className="mt-6 rounded-xl border-2 border-amber-100 bg-amber-50 p-3 text-sm font-semibold text-amber-800"
+        >
+          Your session expired. Please log in again to continue.
+        </div>
+      )}
+
+      <div className="mt-8 space-y-3">
+        <ContinueWithGoogleButton
+          returnUrl={returnUrl !== "/dashboard" ? returnUrl : undefined}
+        />
+      </div>
+
+      <div className="my-6 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.15em] text-gray-400">
+        <span className="h-px flex-1 bg-gray-200" />
+        Or with email
+        <span className="h-px flex-1 bg-gray-200" />
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         {error && (
-          <div className="rounded-lg bg-error-50 p-4 text-sm text-error-600">
+          <div
+            role="alert"
+            className="rounded-xl border-2 border-red-100 bg-red-50 p-3 text-sm font-semibold text-red-700"
+          >
             {error}
           </div>
         )}
@@ -70,63 +100,70 @@ export default function LoginPage() {
         <Input
           label="Email address"
           type="email"
-          placeholder="you@example.com"
+          autoComplete="email"
+          placeholder="Enter your email address"
           leftIcon={<Mail className="h-5 w-5" />}
           error={errors.email?.message}
           {...register("email")}
         />
 
-        <div className="relative">
-          <Input
-            label="Password"
-            type={showPassword ? "text" : "password"}
-            placeholder="Enter your password"
-            error={errors.password?.message}
-            rightIcon={
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="text-secondary-400 hover:text-secondary-600"
-              >
-                {showPassword ? (
-                  <EyeOff className="h-5 w-5" />
-                ) : (
-                  <Eye className="h-5 w-5" />
-                )}
-              </button>
-            }
-            {...register("password")}
-          />
-        </div>
+        <Input
+          label="Password"
+          type={showPassword ? "text" : "password"}
+          autoComplete="current-password"
+          placeholder="Enter your password"
+          error={errors.password?.message}
+          rightIcon={
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="text-gray-400 transition-colors hover:text-gray-700"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? (
+                <EyeOff className="h-5 w-5" />
+              ) : (
+                <Eye className="h-5 w-5" />
+              )}
+            </button>
+          }
+          {...register("password")}
+        />
 
         <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
             <input
               type="checkbox"
-              className="h-4 w-4 rounded border-secondary-300 text-primary-600 focus:ring-primary-500"
+              className="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-500 focus:ring-2 focus:ring-primary-500/30"
             />
-            <span className="text-sm text-secondary-600">Remember me</span>
+            Remember me
           </label>
           <Link
             href="/forgot-password"
-            className="text-sm font-medium text-primary-600 hover:text-primary-700"
+            className="text-sm font-semibold text-primary-600 transition-colors hover:text-primary-700"
           >
             Forgot password?
           </Link>
         </div>
 
-        <Button type="submit" className="w-full" size="lg" isLoading={isLoading}>
-          Sign in
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full"
+          isLoading={isLoading}
+        >
+          Login
+          <ArrowRight className="h-4 w-4" />
         </Button>
       </form>
 
-      <p className="mt-8 text-center text-sm text-secondary-600">
-        Don't have an account?{" "}
+      <p className="mt-8 text-center text-sm text-gray-600">
+        New here?{" "}
         <Link
           href="/register"
-          className="font-medium text-primary-600 hover:text-primary-700"
+          className="font-bold text-primary-600 underline-offset-4 transition-colors hover:underline"
         >
-          Create an account
+          Register
         </Link>
       </p>
     </div>

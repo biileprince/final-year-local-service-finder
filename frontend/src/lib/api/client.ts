@@ -4,12 +4,34 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 type RequestMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+const CSRF_COOKIE_NAME = "lsf_csrf_token";
+const MUTATING_METHODS: ReadonlySet<RequestMethod> = new Set([
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+]);
+
+/**
+ * Reads the double-submit CSRF cookie set by the backend on login/refresh.
+ * The value is echoed in the `x-csrf-token` header on mutating requests; the
+ * backend's CsrfGuard validates the two match when CSRF_ENABLED is on.
+ */
+function readCsrfCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(
+    new RegExp(`(?:^|;\\s*)${CSRF_COOKIE_NAME}=([^;]+)`),
+  );
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
 interface RequestOptions {
   method?: RequestMethod;
   body?: any;
   headers?: Record<string, string>;
   cache?: RequestCache;
   next?: NextFetchRequestConfig;
+  signal?: AbortSignal;
 }
 
 class ApiClient {
@@ -39,31 +61,73 @@ class ApiClient {
     if (typeof window === "undefined") return;
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
+    // Also wipe the persisted Zustand auth-storage so isAuthenticated/user
+    // don't survive a token-only clear. Leaving them behind makes
+    // useRedirectIfAuthenticated on /login bounce the user back to /dashboard
+    // and create a redirect loop after the session expires.
+    localStorage.removeItem("auth-storage");
   }
 
+  /**
+   * Coalesces concurrent refresh attempts so a single 401 burst (many parallel
+   * requests after the access token expires) results in ONE refresh call.
+   */
+  private refreshPromise: Promise<boolean> | null = null;
+
   private async refreshTokens(): Promise<boolean> {
-    const refreshToken = this.getRefreshToken();
-    if (!refreshToken) return false;
+    if (this.refreshPromise) return this.refreshPromise;
 
-    try {
-      const response = await fetch(`${this.baseUrl}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
-      });
+    this.refreshPromise = (async () => {
+      const refreshToken = this.getRefreshToken();
+      if (!refreshToken) return false;
 
-      if (!response.ok) {
+      try {
+        const response = await fetch(`${this.baseUrl}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken }),
+        });
+
+        if (!response.ok) {
+          this.clearTokens();
+          return false;
+        }
+
+        const data = await response.json();
+        this.setTokens(data.accessToken, data.refreshToken);
+        return true;
+      } catch {
         this.clearTokens();
         return false;
+      } finally {
+        // Allow the next 401 (well after this refresh) to try again.
+        setTimeout(() => {
+          this.refreshPromise = null;
+        }, 0);
       }
+    })();
 
-      const data = await response.json();
-      this.setTokens(data.accessToken, data.refreshToken);
-      return true;
-    } catch {
-      this.clearTokens();
-      return false;
+    return this.refreshPromise;
+  }
+
+  /**
+   * Called when both the access token request and a refresh attempt have
+   * failed. Clears storage and bounces the user to /login with a returnUrl so
+   * they land back where they were after logging in. We use window.location
+   * (not next/router) because this runs outside any React render and we want a
+   * hard reload — that also resets any in-memory zustand state that might be
+   * holding stale auth flags.
+   */
+  private handleAuthFailure(): void {
+    if (typeof window === "undefined") return;
+    this.clearTokens();
+    const current = window.location.pathname + window.location.search;
+    // Avoid redirect loop if we're already on an auth page.
+    if (/^\/(login|register|forgot-password|reset-password|verify-email)/.test(window.location.pathname)) {
+      return;
     }
+    const returnUrl = encodeURIComponent(current);
+    window.location.href = `/login?returnUrl=${returnUrl}&reason=session-expired`;
   }
 
   async request<T>(
@@ -71,7 +135,7 @@ class ApiClient {
     options: RequestOptions = {},
     requiresAuth = false
   ): Promise<T> {
-    const { method = "GET", body, headers = {}, cache, next } = options;
+    const { method = "GET", body, headers = {}, cache, next, signal } = options;
 
     const requestHeaders: Record<string, string> = {
       "Content-Type": "application/json",
@@ -85,11 +149,23 @@ class ApiClient {
       }
     }
 
+    // Echo the double-submit CSRF token on mutating requests so the backend
+    // CsrfGuard can validate it when CSRF_ENABLED is on. No-op when the cookie
+    // isn't present (e.g., before login, in tests).
+    if (MUTATING_METHODS.has(method)) {
+      const csrfToken = readCsrfCookie();
+      if (csrfToken) {
+        requestHeaders["x-csrf-token"] = csrfToken;
+      }
+    }
+
     const fetchOptions: RequestInit = {
       method,
       headers: requestHeaders,
       cache,
       next,
+      signal,
+      credentials: "include",
     };
 
     if (body && method !== "GET") {
@@ -110,6 +186,12 @@ class ApiClient {
           ...fetchOptions,
           headers: requestHeaders,
         });
+        // If the retry is also unauthorized, the session is truly gone.
+        if (response.status === 401) {
+          this.handleAuthFailure();
+        }
+      } else {
+        this.handleAuthFailure();
       }
     }
 
@@ -148,19 +230,43 @@ class ApiClient {
   }
 
   async uploadFile(endpoint: string, file: File, context?: string): Promise<any> {
-    const formData = new FormData();
-    formData.append("file", file);
-    if (context) formData.append("context", context);
+    const sendOnce = async (token: string | null) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (context) formData.append("context", context);
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const csrfToken = readCsrfCookie();
+      if (csrfToken) headers["x-csrf-token"] = csrfToken;
+      return fetch(`${this.baseUrl}${endpoint}`, {
+        method: "POST",
+        headers,
+        body: formData,
+        credentials: "include",
+      });
+    };
 
-    const token = this.getToken();
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
+    let token = this.getToken();
+    let response = await sendOnce(token);
+
+    if (response.status === 401) {
+      const refreshed = await this.refreshTokens();
+      if (refreshed) {
+        token = this.getToken();
+        response = await sendOnce(token);
+        if (response.status === 401) {
+          this.handleAuthFailure();
+        }
+      } else {
+        this.handleAuthFailure();
+      }
+    }
 
     if (!response.ok) {
-      throw new Error("File upload failed");
+      const error = await response.json().catch(() => ({
+        message: "File upload failed",
+      }));
+      throw new Error(error.message || "File upload failed");
     }
 
     return response.json();

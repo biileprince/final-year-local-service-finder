@@ -1,8 +1,17 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
-import { APP_GUARD } from "@nestjs/core";
+import { ScheduleModule } from "@nestjs/schedule";
+import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard } from "@nestjs/throttler";
+import { SentryModule } from "@sentry/nestjs/setup";
+import { LoggerModule } from "nestjs-pino";
+import { validateEnv } from "./config/env.validation";
+import { loggerConfig } from "./config/logger.config";
+import { AuditContextMiddleware } from "./common/audit/audit.middleware";
+import { CsrfGuard } from "./common/security/csrf.guard";
+import { SecurityModule } from "./common/security/security.module";
+import { RateLimitObserverFilter } from "./common/security/rate-limit-observer.filter";
 
 // Core modules
 import { DatabaseModule } from "./database/database.module";
@@ -22,38 +31,63 @@ import { HealthModule } from "./modules/health/health.module";
 import { FilesModule } from "./modules/files/files.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { AdminModule } from "./modules/admin/admin.module";
+import { SearchModule } from "./modules/search/search.module";
+import { FavoritesModule } from "./modules/favorites/favorites.module";
+import { CalendarModule } from "./modules/calendar/calendar.module";
+import { ModerationModule } from "./modules/moderation/moderation.module";
 
 @Module({
   imports: [
+    // Sentry — error + performance monitoring. No-op unless SENTRY_DSN is set
+    // (see instrument.ts). Must be first so it wraps the other modules.
+    SentryModule.forRoot(),
+
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [".env.local", ".env"],
+      // Env file precedence: the FIRST file that defines a key wins. When
+      // NODE_ENV=production we load `.env.production.local` (local overrides
+      // for URLs/CORS so prod code can run against localhost frontends) on
+      // top of `.env.production` (real prod secrets — gitignored).
+      envFilePath:
+        process.env.NODE_ENV === "production"
+          ? [".env.production.local", ".env.production"]
+          : [".env.local", ".env"],
+      validate: validateEnv,
     }),
 
-    // Rate limiting
+    // Structured logging (Pino) — JSON in prod, pretty in dev
+    LoggerModule.forRoot(loggerConfig),
+
+    // Rate limiting. Per-route @Throttle() overrides on auth-sensitive
+    // endpoints handle abuse cases; these defaults are intentionally loose
+    // because dashboards fan out 5+ parallel calls per page load.
     ThrottlerModule.forRoot([
       {
         name: "short",
         ttl: 1000,
-        limit: 3,
+        limit: 30,
       },
       {
         name: "medium",
         ttl: 10000,
-        limit: 20,
+        limit: 200,
       },
       {
         name: "long",
         ttl: 60000,
-        limit: 100,
+        limit: 1000,
       },
     ]),
+
+    // Cron scheduling
+    ScheduleModule.forRoot(),
 
     // Core infrastructure
     DatabaseModule,
     CacheModule,
     MonitoringModule,
+    SecurityModule,
 
     // Feature modules
     AuthModule,
@@ -68,12 +102,31 @@ import { AdminModule } from "./modules/admin/admin.module";
     FilesModule,
     NotificationsModule,
     AdminModule,
+    SearchModule,
+    FavoritesModule,
+    CalendarModule,
+    ModerationModule,
   ],
   providers: [
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    // CSRF guard is no-op unless CSRF_ENABLED=true (see CsrfGuard).
+    {
+      provide: APP_GUARD,
+      useClass: CsrfGuard,
+    },
+    // Records throttle rejections to RateLimitObserverService + structured log
+    // so /admin/rate-limit/* can surface who is being throttled.
+    {
+      provide: APP_FILTER,
+      useClass: RateLimitObserverFilter,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(AuditContextMiddleware).forRoutes("*");
+  }
+}

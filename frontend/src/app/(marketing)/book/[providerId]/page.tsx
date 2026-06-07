@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Calendar,
   Clock,
@@ -11,6 +12,11 @@ import {
   ChevronRight,
   Star,
   CheckCircle,
+  Paperclip,
+  X,
+  FileText,
+  Navigation,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,11 +29,25 @@ import {
   providersService,
   availabilityService,
   bookingsService,
+  filesService,
 } from "@/lib/api";
-import type { Provider, TimeSlot } from "@/types";
-import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import type {
+  Provider,
+  TimeSlot,
+  ProviderService,
+  RecurrenceFrequency,
+} from "@/types";
+import { formatCurrency, formatDate, formatTime, cn } from "@/lib/utils";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Slot startTime can arrive as a full ISO string ("1970-01-01T09:00:00.000Z")
+// from Prisma. The backend DTO expects HH:MM:SS — extract it.
+function extractHHMMSS(time: string): string {
+  const match = time.match(/(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return time;
+  return `${match[1]}:${match[2]}:${match[3] ?? "00"}`;
+}
 
 export default function BookProviderPage() {
   const params = useParams();
@@ -42,11 +62,31 @@ export default function BookProviderPage() {
   const [step, setStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+  const [flexibleTime, setFlexibleTime] = useState(false);
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [serviceAddress, setServiceAddress] = useState("");
   const [problemDescription, setProblemDescription] = useState("");
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [attachments, setAttachments] = useState<
+    {
+      id: string;
+      url: string;
+      fileName: string;
+      mimeType: string;
+    }[]
+  >([]);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [providerServices, setProviderServices] = useState<ProviderService[]>([]);
+  const [selectedServiceId, setSelectedServiceId] = useState<string>("");
+  const [serviceLatitude, setServiceLatitude] = useState<number | null>(null);
+  const [serviceLongitude, setServiceLongitude] = useState<number | null>(null);
+  const [detectingLocation, setDetectingLocation] = useState(false);
+  // Recurrence: "" = one-time. When set, an end condition is required.
+  const [repeat, setRepeat] = useState<"" | RecurrenceFrequency>("");
+  const [repeatEndMode, setRepeatEndMode] = useState<"count" | "date">("count");
+  const [repeatCount, setRepeatCount] = useState("4");
+  const [repeatUntil, setRepeatUntil] = useState("");
 
   useEffect(() => {
     if (params.providerId) {
@@ -63,8 +103,12 @@ export default function BookProviderPage() {
   const loadProvider = async (id: string) => {
     setIsLoading(true);
     try {
-      const data = await providersService.getById(id);
+      const [data, services] = await Promise.all([
+        providersService.getById(id),
+        providersService.getProviderServices(id).catch(() => [] as ProviderService[]),
+      ]);
       setProvider(data);
+      setProviderServices(services.filter((s) => s.isActive));
     } catch (error) {
       console.error("Failed to load provider:", error);
       setError("Failed to load provider");
@@ -78,7 +122,7 @@ export default function BookProviderPage() {
 
     setLoadingSlots(true);
     try {
-      const dateStr = selectedDate.toISOString().split("T")[0];
+      const dateStr = selectedDate.toISOString().split("T")[0] ?? "";
       const slots = await availabilityService.getAvailableSlots(
         provider.id,
         dateStr,
@@ -92,11 +136,43 @@ export default function BookProviderPage() {
     }
   };
 
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) return;
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setServiceLatitude(lat);
+        setServiceLongitude(lng);
+        // Reverse-geocode to pre-fill the address field only when empty.
+        if (!serviceAddress.trim()) {
+          const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+          if (token) {
+            try {
+              const res = await fetch(
+                `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=address&access_token=${token}`,
+              );
+              const json = await res.json();
+              const place = json?.features?.[0]?.place_name;
+              if (place) setServiceAddress(place);
+            } catch {
+              // Silent — address remains empty for the user to fill.
+            }
+          }
+        }
+        setDetectingLocation(false);
+      },
+      () => setDetectingLocation(false),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 5 * 60 * 1000 },
+    );
+  };
+
   const handleBooking = async () => {
     if (
       !provider ||
       !selectedDate ||
-      !selectedSlot ||
+      (!selectedSlot && !flexibleTime) ||
       !serviceAddress ||
       !problemDescription
     ) {
@@ -106,14 +182,51 @@ export default function BookProviderPage() {
     setIsBooking(true);
     setError(null);
 
+    const scheduledDate = selectedDate.toISOString().split("T")[0] ?? "";
+    const scheduledStartTime =
+      flexibleTime || !selectedSlot
+        ? undefined
+        : extractHHMMSS(selectedSlot.startTime);
+
     try {
+      if (repeat) {
+        const count = Number(repeatCount);
+        if (repeatEndMode === "count" && (!count || count < 1)) {
+          setError("Enter how many times this booking should repeat.");
+          setIsBooking(false);
+          return;
+        }
+        if (repeatEndMode === "date" && !repeatUntil) {
+          setError("Choose a date for the recurring booking to end.");
+          setIsBooking(false);
+          return;
+        }
+        await bookingsService.createRecurring({
+          providerId: provider.id,
+          frequency: repeat,
+          startDate: scheduledDate,
+          scheduledStartTime,
+          ...(repeatEndMode === "count"
+            ? { maxOccurrences: count }
+            : { endDate: repeatUntil }),
+          serviceAddress,
+          serviceLatitude: serviceLatitude ?? undefined,
+          serviceLongitude: serviceLongitude ?? undefined,
+          problemDescription,
+        });
+        router.push(`/bookings?recurring=created`);
+        return;
+      }
+
       const booking = await bookingsService.create({
         providerId: provider.id,
-        scheduledDate: selectedDate.toISOString().split("T")[0],
-        scheduledStartTime: selectedSlot.startTime,
-        scheduledEndTime: selectedSlot.endTime,
+        scheduledDate,
+        scheduledStartTime,
         serviceAddress,
+        serviceLatitude: serviceLatitude ?? undefined,
+        serviceLongitude: serviceLongitude ?? undefined,
         problemDescription,
+        attachmentIds: attachments.map((a) => a.id),
       });
 
       router.push(`/bookings/${booking.id}?success=true`);
@@ -169,11 +282,14 @@ export default function BookProviderPage() {
 
   if (!provider) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center">
-        <h1 className="text-2xl font-bold text-secondary-900">
+      <div className="flex min-h-screen flex-col items-center justify-center px-4">
+        <h1 className="text-3xl font-bold text-secondary-900">
           Provider not found
         </h1>
-        <Button asChild className="mt-4">
+        <p className="mt-4 text-lg text-secondary-600">
+          We could not find this service provider.
+        </p>
+        <Button asChild className="mt-6" size="lg">
           <Link href="/search">Back to Search</Link>
         </Button>
       </div>
@@ -184,39 +300,39 @@ export default function BookProviderPage() {
 
   return (
     <div className="min-h-screen bg-secondary-50 py-8">
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl px-4 sm:px-8 lg:px-8">
         {/* Header */}
         <Link
           href={`/providers/${provider.id}`}
-          className="mb-6 inline-flex items-center text-sm text-secondary-600 hover:text-secondary-900"
+          className="mb-8 inline-flex items-center gap-2 text-base font-medium text-secondary-600 hover:text-secondary-900"
         >
-          <ChevronLeft className="mr-1 h-4 w-4" />
+          <ChevronLeft className="h-5 w-5" />
           Back to provider
         </Link>
 
-        <h1 className="mb-8 text-2xl font-bold text-secondary-900">
+        <h1 className="mb-8 text-3xl font-bold text-secondary-900">
           Book a Service
         </h1>
 
         {/* Progress Steps */}
-        <div className="mb-8 flex items-center justify-center gap-4">
+        <div className="mb-8 flex items-center justify-center gap-2 sm:gap-4">
           {[1, 2, 3].map((s) => (
-            <div key={s} className="flex items-center gap-2">
+            <div key={s} className="flex items-center gap-2 sm:gap-3">
               <div
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium",
+                  "flex h-10 w-10 items-center justify-center rounded-full text-base font-bold sm:h-12 sm:w-12",
                   step >= s
                     ? "bg-primary-600 text-white"
                     : "bg-secondary-200 text-secondary-600",
                 )}
               >
-                {step > s ? <CheckCircle className="h-5 w-5" /> : s}
+                {step > s ? <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6" /> : s}
               </div>
               <span
                 className={cn(
-                  "text-sm",
+                  "hidden text-sm sm:inline sm:text-base",
                   step >= s
-                    ? "font-medium text-secondary-900"
+                    ? "font-bold text-secondary-900"
                     : "text-secondary-500",
                 )}
               >
@@ -225,7 +341,7 @@ export default function BookProviderPage() {
               {s < 3 && (
                 <div
                   className={cn(
-                    "h-0.5 w-8",
+                    "h-0.5 w-6 sm:w-8",
                     step > s ? "bg-primary-600" : "bg-secondary-200",
                   )}
                 />
@@ -235,33 +351,34 @@ export default function BookProviderPage() {
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg bg-error-50 p-4 text-error-700">
+          <div className="mb-8 rounded-xl bg-error-50 p-6 text-base font-medium text-error-700">
             {error}
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-8 lg:grid-cols-3">
           {/* Main Content */}
           <div className="lg:col-span-2">
             {step === 1 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <Calendar className="h-6 w-6 text-primary-600" />
                     Select a Date
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {/* Calendar Navigation */}
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-6 flex items-center justify-between">
                     <Button
                       variant="outline"
-                      size="sm"
+                      size="icon"
                       onClick={() => navigateMonth("prev")}
+                      aria-label="Previous month"
                     >
-                      <ChevronLeft className="h-4 w-4" />
+                      <ChevronLeft className="h-5 w-5" />
                     </Button>
-                    <h3 className="font-semibold text-secondary-900">
+                    <h3 className="text-lg font-bold text-secondary-900">
                       {currentMonth.toLocaleDateString("en-US", {
                         month: "long",
                         year: "numeric",
@@ -269,10 +386,11 @@ export default function BookProviderPage() {
                     </h3>
                     <Button
                       variant="outline"
-                      size="sm"
+                      size="icon"
                       onClick={() => navigateMonth("next")}
+                      aria-label="Next month"
                     >
-                      <ChevronRight className="h-4 w-4" />
+                      <ChevronRight className="h-5 w-5" />
                     </Button>
                   </div>
 
@@ -281,7 +399,7 @@ export default function BookProviderPage() {
                     {DAYS.map((day) => (
                       <div
                         key={day}
-                        className="py-2 text-center text-xs font-medium text-secondary-500"
+                        className="py-2 text-center text-sm font-semibold text-secondary-500"
                       >
                         {day}
                       </div>
@@ -307,13 +425,13 @@ export default function BookProviderPage() {
                           onClick={() => !isDisabled && setSelectedDate(date)}
                           disabled={isDisabled}
                           className={cn(
-                            "rounded-lg p-2 text-sm transition-colors",
+                            "flex min-h-[48px] items-center justify-center rounded-xl text-base font-medium transition-colors",
                             isDisabled
                               ? "cursor-not-allowed text-secondary-300"
                               : isSelected
                                 ? "bg-primary-600 text-white"
                                 : isToday
-                                  ? "bg-primary-100 text-primary-700"
+                                  ? "bg-primary-100 font-bold text-primary-700"
                                   : "text-secondary-900 hover:bg-secondary-100",
                           )}
                         >
@@ -323,8 +441,8 @@ export default function BookProviderPage() {
                     })}
                   </div>
 
-                  <div className="mt-6 flex justify-end">
-                    <Button onClick={() => setStep(2)} disabled={!selectedDate}>
+                  <div className="mt-8 flex justify-end">
+                    <Button size="lg" onClick={() => setStep(2)} disabled={!selectedDate}>
                       Continue
                     </Button>
                   </div>
@@ -335,59 +453,166 @@ export default function BookProviderPage() {
             {step === 2 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <Clock className="h-6 w-6 text-primary-600" />
                     Choose a Time Slot
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="mb-4 text-secondary-600">
+                  <p className="mb-6 text-base text-secondary-600">
                     Available times for{" "}
                     {selectedDate && formatDate(selectedDate.toISOString())}
                   </p>
 
                   {loadingSlots ? (
-                    <div className="flex justify-center py-8">
+                    <div className="flex justify-center py-12">
                       <Spinner />
                     </div>
                   ) : availableSlots.length === 0 ? (
-                    <div className="py-8 text-center">
+                    <div className="rounded-xl border border-dashed border-secondary-200 p-8 text-center">
                       <Clock className="mx-auto h-12 w-12 text-secondary-300" />
-                      <p className="mt-4 text-secondary-600">
-                        No available time slots for this date.
+                      <p className="mt-4 text-lg font-bold text-secondary-900">
+                        No fixed time slots published for this date.
                       </p>
-                      <Button
-                        variant="outline"
-                        onClick={() => setStep(1)}
-                        className="mt-4"
-                      >
-                        Choose Another Date
-                      </Button>
+                      <p className="mt-2 text-base text-secondary-600">
+                        You can request a flexible booking — the provider will
+                        confirm the exact time with you via messaging.
+                      </p>
+                      <div className="mt-6 flex flex-wrap justify-center gap-4">
+                        <Button
+                          variant="outline"
+                          size="lg"
+                          onClick={() => setStep(1)}
+                        >
+                          Choose Another Date
+                        </Button>
+                        <Button
+                          size="lg"
+                          onClick={() => {
+                            setFlexibleTime(true);
+                            setSelectedSlot(null);
+                            setStep(3);
+                          }}
+                        >
+                          Request Flexible Time
+                        </Button>
+                      </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {availableSlots.map((slot) => (
-                        <button
-                          key={slot.id}
-                          onClick={() => setSelectedSlot(slot)}
-                          className={cn(
-                            "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-                            selectedSlot?.id === slot.id
-                              ? "border-primary-600 bg-primary-50 text-primary-700"
-                              : "border-secondary-200 text-secondary-700 hover:border-primary-300 hover:bg-primary-50",
-                          )}
-                        >
-                          {slot.startTime}
-                        </button>
-                      ))}
-                    </div>
+                    <>
+                      <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                        {availableSlots.map((slot) => (
+                          <button
+                            key={slot.id}
+                            onClick={() => {
+                              setSelectedSlot(slot);
+                              setFlexibleTime(false);
+                            }}
+                            className={cn(
+                              "flex min-h-[48px] items-center justify-center rounded-xl border-2 px-4 py-3 text-base font-semibold transition-colors",
+                              selectedSlot?.id === slot.id
+                                ? "border-primary-600 bg-primary-50 text-primary-700"
+                                : "border-secondary-200 text-secondary-700 hover:border-primary-300 hover:bg-primary-50",
+                            )}
+                          >
+                            {formatTime(slot.startTime)}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFlexibleTime(true);
+                          setSelectedSlot(null);
+                        }}
+                        className={cn(
+                          "mt-4 flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 px-4 py-3 text-base font-semibold transition-colors",
+                          flexibleTime
+                            ? "border-primary-600 bg-primary-50 text-primary-700"
+                            : "border-dashed border-secondary-300 text-secondary-600 hover:border-primary-300 hover:bg-primary-50",
+                        )}
+                      >
+                        I&apos;m flexible — let the provider confirm a time
+                      </button>
+                    </>
                   )}
 
-                  <div className="mt-6 flex justify-between">
-                    <Button variant="outline" onClick={() => setStep(1)}>
+                  <div className="mt-6 rounded-xl border-2 border-gray-200 p-4">
+                    <label className="mb-1.5 block text-sm font-medium text-secondary-700">
+                      Repeat this booking
+                    </label>
+                    <select
+                      value={repeat}
+                      onChange={(e) =>
+                        setRepeat(e.target.value as "" | RecurrenceFrequency)
+                      }
+                      className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none"
+                    >
+                      <option value="">One-time only</option>
+                      <option value="WEEKLY">Weekly</option>
+                      <option value="BIWEEKLY">Every 2 weeks</option>
+                      <option value="MONTHLY">Monthly</option>
+                    </select>
+
+                    {repeat && (
+                      <div className="mt-3 space-y-3">
+                        <div className="flex flex-wrap gap-4 text-sm">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="repeatEndMode"
+                              checked={repeatEndMode === "count"}
+                              onChange={() => setRepeatEndMode("count")}
+                            />
+                            End after
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="repeatEndMode"
+                              checked={repeatEndMode === "date"}
+                              onChange={() => setRepeatEndMode("date")}
+                            />
+                            End on date
+                          </label>
+                        </div>
+                        {repeatEndMode === "count" ? (
+                          <div className="flex items-center gap-2 text-sm">
+                            <input
+                              type="number"
+                              min={1}
+                              max={104}
+                              value={repeatCount}
+                              onChange={(e) => setRepeatCount(e.target.value)}
+                              className="w-20 rounded-lg border-2 border-gray-200 px-3 py-2 text-secondary-900 focus:border-primary-500 focus:outline-none"
+                            />
+                            <span className="text-secondary-600">bookings</span>
+                          </div>
+                        ) : (
+                          <input
+                            type="date"
+                            value={repeatUntil}
+                            onChange={(e) => setRepeatUntil(e.target.value)}
+                            className="rounded-lg border-2 border-gray-200 px-3 py-2 text-sm text-secondary-900 focus:border-primary-500 focus:outline-none"
+                          />
+                        )}
+                        <p className="text-xs text-secondary-500">
+                          The provider confirms each booking. You can stop the
+                          series anytime from your bookings.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-8 flex justify-between">
+                    <Button variant="outline" size="lg" onClick={() => setStep(1)}>
                       Back
                     </Button>
-                    <Button onClick={() => setStep(3)} disabled={!selectedSlot}>
+                    <Button
+                      size="lg"
+                      onClick={() => setStep(3)}
+                      disabled={!selectedSlot && !flexibleTime}
+                    >
                       Continue
                     </Button>
                   </div>
@@ -398,41 +623,223 @@ export default function BookProviderPage() {
             {step === 3 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <MapPin className="h-6 w-6 text-primary-600" />
                     Service Details
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
+                  {providerServices.length > 0 && (
+                    <div>
+                      <label className="mb-2 block text-base font-semibold text-secondary-700">
+                        Select a service{" "}
+                        <span className="font-normal text-secondary-500">(optional)</span>
+                      </label>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {providerServices.map((svc) => (
+                          <button
+                            key={svc.id}
+                            type="button"
+                            onClick={() =>
+                              setSelectedServiceId((prev) =>
+                                prev === svc.id ? "" : svc.id,
+                              )
+                            }
+                            className={cn(
+                              "flex items-start justify-between rounded-xl border-2 px-4 py-3 text-left transition-colors",
+                              selectedServiceId === svc.id
+                                ? "border-primary-500 bg-primary-50"
+                                : "border-secondary-200 bg-white hover:border-primary-300",
+                            )}
+                          >
+                            {svc.imageUrl && (
+                              <div className="relative mr-3 h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-secondary-100">
+                                <Image
+                                  src={svc.imageUrl}
+                                  alt={svc.name}
+                                  fill
+                                  sizes="48px"
+                                  className="object-cover"
+                                />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1 pr-3">
+                              <p className="font-semibold text-secondary-900">
+                                {svc.name}
+                              </p>
+                              {svc.durationMin > 0 && (
+                                <p className="mt-0.5 flex items-center gap-1 text-sm text-secondary-500">
+                                  <Clock className="h-3.5 w-3.5" />
+                                  {svc.durationMin} min
+                                </p>
+                              )}
+                            </div>
+                            <p className="shrink-0 font-bold text-secondary-900">
+                              GH₵ {Number(svc.basePrice).toFixed(2)}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-secondary-700">
-                      Service Address *
-                    </label>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="text-base font-semibold text-secondary-700">
+                        Service Address *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleDetectLocation}
+                        disabled={detectingLocation}
+                        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 disabled:opacity-60"
+                      >
+                        {detectingLocation ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Navigation className="h-3.5 w-3.5" />
+                        )}
+                        Use my location
+                      </button>
+                    </div>
                     <Input
                       value={serviceAddress}
-                      onChange={(e) => setServiceAddress(e.target.value)}
+                      onChange={(e) => {
+                        setServiceAddress(e.target.value);
+                        // Clear stored coords when user manually edits the address.
+                        setServiceLatitude(null);
+                        setServiceLongitude(null);
+                      }}
                       placeholder="Enter your address"
                     />
+                    {serviceLatitude && serviceLongitude && (
+                      <p className="mt-1 flex items-center gap-1 text-xs text-primary-600">
+                        <Navigation className="h-3 w-3" />
+                        Location pinned — provider will see your exact location on the map.
+                      </p>
+                    )}
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-secondary-700">
+                    <label className="mb-2 block text-base font-semibold text-secondary-700">
                       Describe the issue or service needed *
                     </label>
                     <textarea
                       value={problemDescription}
                       onChange={(e) => setProblemDescription(e.target.value)}
                       rows={4}
-                      className="w-full rounded-lg border border-secondary-300 px-3 py-2 text-secondary-900 placeholder:text-secondary-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                      className="w-full rounded-xl border-2 border-secondary-200 bg-white px-4 py-3 text-base text-secondary-900 placeholder:text-secondary-500 transition-all hover:border-secondary-300 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                       placeholder="Please describe what you need help with..."
                     />
                   </div>
 
-                  <div className="mt-6 flex justify-between">
-                    <Button variant="outline" onClick={() => setStep(2)}>
+                  <div>
+                    <label className="mb-2 block text-base font-semibold text-secondary-700">
+                      Photos or documents{" "}
+                      <span className="font-normal text-secondary-500">
+                        (optional, up to 10)
+                      </span>
+                    </label>
+                    <p className="mb-3 text-sm text-secondary-500">
+                      Attach photos of the issue or any reference documents to
+                      help the provider prepare.
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      {attachments.map((a) => {
+                        const isImage = (a.mimeType || "").startsWith("image/");
+                        return (
+                          <div
+                            key={a.id}
+                            className="relative h-24 w-24 overflow-hidden rounded-lg border border-secondary-200 bg-secondary-50"
+                          >
+                            {isImage ? (
+                              <Image
+                                src={a.url}
+                                alt={a.fileName}
+                                fill
+                                sizes="96px"
+                                className="object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full flex-col items-center justify-center px-1 text-center">
+                                <FileText className="h-6 w-6 text-secondary-400" />
+                                <span className="mt-1 truncate text-[10px] text-secondary-600">
+                                  {a.fileName}
+                                </span>
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setAttachments((prev) =>
+                                  prev.filter((p) => p.id !== a.id),
+                                )
+                              }
+                              className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white"
+                              aria-label="Remove attachment"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {attachments.length < 10 && (
+                        <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-secondary-300 text-secondary-500 hover:border-primary-400 hover:text-primary-600">
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              e.target.value = "";
+                              if (!file) return;
+                              setAttachmentUploading(true);
+                              try {
+                                const uploaded = await filesService.upload(
+                                  file,
+                                  "BOOKING",
+                                );
+                                setAttachments((prev) => [
+                                  ...prev,
+                                  {
+                                    id: uploaded.id,
+                                    url: uploaded.url,
+                                    fileName: uploaded.fileName,
+                                    mimeType: uploaded.mimeType,
+                                  },
+                                ]);
+                              } catch (err) {
+                                setError(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Upload failed",
+                                );
+                              } finally {
+                                setAttachmentUploading(false);
+                              }
+                            }}
+                          />
+                          {attachmentUploading ? (
+                            <Spinner size="sm" />
+                          ) : (
+                            <>
+                              <Paperclip className="h-5 w-5" />
+                              <span className="mt-1 text-[11px] font-medium">
+                                Add file
+                              </span>
+                            </>
+                          )}
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-8 flex justify-between">
+                    <Button variant="outline" size="lg" onClick={() => setStep(2)}>
                       Back
                     </Button>
                     <Button
+                      size="lg"
                       onClick={handleBooking}
                       disabled={!serviceAddress || !problemDescription}
                       isLoading={isBooking}
@@ -446,29 +853,30 @@ export default function BookProviderPage() {
           </div>
 
           {/* Sidebar - Provider Info */}
-          <div className="space-y-4">
+          <div className="space-y-6">
             <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
                   <Avatar
                     size="lg"
                     src={provider.user.profileImage}
                     name={provider.user.name}
+                    className="h-16 w-16"
                   />
                   <div>
-                    <h3 className="font-semibold text-secondary-900">
+                    <h3 className="text-lg font-bold text-secondary-900">
                       {provider.user.name}
                     </h3>
-                    <div className="flex items-center gap-1 text-sm text-secondary-500">
-                      <Star className="h-4 w-4 fill-warning-500 text-warning-500" />
-                      <span>{Number(provider.rating).toFixed(1)}</span>
+                    <div className="mt-1 flex items-center gap-2 text-base text-secondary-500">
+                      <Star className="h-5 w-5 fill-warning-500 text-warning-500" />
+                      <span className="font-semibold">{Number(provider.rating).toFixed(1)}</span>
                       <span>({provider.reviewCount} reviews)</span>
                     </div>
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {provider.categories.slice(0, 2).map((pc) => (
-                    <Badge key={pc.id} variant="secondary">
+                    <Badge key={pc.id} variant="secondary" className="px-3 py-1.5 text-sm">
                       {pc.category.name}
                     </Badge>
                   ))}
@@ -478,31 +886,76 @@ export default function BookProviderPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Booking Summary</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Calendar className="h-5 w-5 text-primary-600" />
+                  Booking Summary
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
+              <CardContent className="space-y-4 text-base">
                 {selectedDate && (
                   <div className="flex justify-between">
-                    <span className="text-secondary-500">Date</span>
-                    <span className="font-medium text-secondary-900">
+                    <span className="flex items-center gap-2 text-secondary-500">
+                      <Calendar className="h-5 w-5" />
+                      Date
+                    </span>
+                    <span className="font-bold text-secondary-900">
                       {formatDate(selectedDate.toISOString())}
                     </span>
                   </div>
                 )}
                 {selectedSlot && (
                   <div className="flex justify-between">
-                    <span className="text-secondary-500">Time</span>
-                    <span className="font-medium text-secondary-900">
-                      {selectedSlot.startTime} - {selectedSlot.endTime}
+                    <span className="flex items-center gap-2 text-secondary-500">
+                      <Clock className="h-5 w-5" />
+                      Time
+                    </span>
+                    <span className="font-bold text-secondary-900">
+                      {formatTime(selectedSlot.startTime)} - {formatTime(selectedSlot.endTime)}
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between border-t pt-2">
-                  <span className="text-secondary-500">Hourly Rate</span>
-                  <span className="font-bold text-primary-600">
-                    {formatCurrency(Number(provider.hourlyRate))}
-                  </span>
-                </div>
+                {flexibleTime && !selectedSlot && (
+                  <div className="flex justify-between">
+                    <span className="flex items-center gap-2 text-secondary-500">
+                      <Clock className="h-5 w-5" />
+                      Time
+                    </span>
+                    <span className="font-bold text-secondary-900">
+                      Flexible (provider confirms)
+                    </span>
+                  </div>
+                )}
+                {selectedServiceId && (() => {
+                  const svc = providerServices.find((s) => s.id === selectedServiceId);
+                  return svc ? (
+                    <div className="flex justify-between">
+                      <span className="flex items-center gap-2 text-secondary-500">
+                        <Star className="h-5 w-5" />
+                        Service
+                      </span>
+                      <div className="text-right">
+                        <p className="font-bold text-secondary-900">{svc.name}</p>
+                        <p className="text-sm text-secondary-500">
+                          GH₵ {Number(svc.basePrice).toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+                <p className="border-t border-secondary-200 pt-4 text-sm text-secondary-500">
+                  Final amount is agreed with the provider after the job and
+                  paid offline.
+                </p>
+                {provider.cancellationPolicy?.trim() && (
+                  <div className="border-t border-secondary-200 pt-4">
+                    <p className="mb-1 text-sm font-semibold text-secondary-700">
+                      Cancellation policy
+                    </p>
+                    <p className="whitespace-pre-line text-sm text-secondary-500">
+                      {provider.cancellationPolicy}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

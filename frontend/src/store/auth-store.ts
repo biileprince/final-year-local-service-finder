@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { User } from "@/types";
-import { authService, type LoginDto, type RegisterDto } from "@/lib/api";
+import { authService, apiClient, type LoginDto, type RegisterDto } from "@/lib/api";
+import { useFavoritesStore } from "./favorites-store";
+import { analytics } from "@/lib/analytics";
 
 interface AuthState {
   user: User | null;
@@ -30,11 +32,19 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await authService.login(data);
+          // The login response may carry the user, but older/other backends
+          // return tokens only — hydrate from /users/me in that case so we
+          // never read `.id` off undefined.
+          const user = response.user ?? (await authService.getCurrentUser());
           set({
-            user: response.user,
+            user,
             isAuthenticated: true,
             isLoading: false,
           });
+          if (user) {
+            analytics.identify(user.id, { role: user.role });
+          }
+          analytics.capture("user_logged_in", { method: "password" });
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Login failed",
@@ -48,11 +58,16 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await authService.register(data);
+          const user = response.user ?? (await authService.getCurrentUser());
           set({
-            user: response.user,
+            user,
             isAuthenticated: true,
             isLoading: false,
           });
+          if (user) {
+            analytics.identify(user.id, { role: user.role });
+            analytics.capture("user_signed_up", { role: user.role });
+          }
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Registration failed",
@@ -73,6 +88,9 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             error: null,
           });
+          // Clear per-user caches that leak across accounts.
+          useFavoritesStore.getState().reset();
+          analytics.reset();
         }
       },
 
@@ -90,7 +108,10 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
-        } catch (error) {
+          analytics.identify(user.id, { role: user.role });
+        } catch {
+          // Token is invalid/expired — clear it so the redirect guard unblocks
+          apiClient.clearTokens();
           set({
             user: null,
             isAuthenticated: false,

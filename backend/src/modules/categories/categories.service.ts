@@ -12,6 +12,7 @@ export interface CreateCategoryData {
   description?: string;
   icon?: string;
   color?: string;
+  imageId?: string;
   parentId?: string;
   displayOrder?: number;
 }
@@ -22,6 +23,7 @@ export interface UpdateCategoryData {
   description?: string;
   icon?: string;
   color?: string;
+  imageId?: string | null;
   parentId?: string;
   displayOrder?: number;
   isActive?: boolean;
@@ -47,6 +49,7 @@ export class CategoriesService {
     const category = await this.prisma.category.create({
       data,
       include: {
+        image: { select: { id: true, url: true, thumbnailUrl: true } },
         parent: {
           select: {
             id: true,
@@ -85,6 +88,7 @@ export class CategoriesService {
       where,
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       include: {
+        image: { select: { id: true, url: true, thumbnailUrl: true } },
         parent: {
           select: {
             id: true,
@@ -123,6 +127,7 @@ export class CategoriesService {
     const category = await this.prisma.category.findUnique({
       where: { id },
       include: {
+        image: { select: { id: true, url: true, thumbnailUrl: true } },
         parent: {
           select: {
             id: true,
@@ -160,6 +165,7 @@ export class CategoriesService {
     const category = await this.prisma.category.findUnique({
       where: { slug },
       include: {
+        image: { select: { id: true, url: true, thumbnailUrl: true } },
         parent: {
           select: {
             id: true,
@@ -214,6 +220,7 @@ export class CategoriesService {
       where: { id },
       data,
       include: {
+        image: { select: { id: true, url: true, thumbnailUrl: true } },
         parent: {
           select: {
             id: true,
@@ -284,9 +291,11 @@ export class CategoriesService {
         id: true,
         name: true,
         slug: true,
+        description: true,
         icon: true,
         color: true,
         providerCount: true,
+        image: { select: { id: true, url: true, thumbnailUrl: true } },
       },
     });
   }

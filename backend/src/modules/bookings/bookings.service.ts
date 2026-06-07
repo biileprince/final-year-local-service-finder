@@ -15,25 +15,113 @@ import {
   UpdateBookingData,
   BookingListParams,
 } from "./bookings.repository";
+import { MessagesService } from "../messages/messages.service";
+import { ProvidersService } from "../providers/providers.service";
+import {
+  NotificationsService,
+  NotificationCategory,
+  NotificationPriority,
+} from "../notifications/notifications.service";
 import { BookingStatus } from "@prisma/client";
 
 @Injectable()
 export class BookingsService {
   private readonly logger = new Logger(BookingsService.name);
+  /** Time string used to mark "customer didn't pick a slot" bookings. */
+  private static readonly FLEXIBLE_TIME = "00:00:00";
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly metricsService: MetricsService,
     private readonly cacheService: CacheService,
     private readonly bookingsRepository: BookingsRepository,
+    private readonly messagesService: MessagesService,
+    private readonly notificationsService: NotificationsService,
+    private readonly providersService: ProvidersService,
   ) {}
+
+  /**
+   * Fire-and-forget notification helper. Lifecycle events (create/confirm/
+   * cancel/complete) MUST NOT fail if the notification pipeline is degraded,
+   * so we swallow + log here rather than throwing into the caller's flow.
+   * The websocket gateway pushes the new_notification event to any connected
+   * client, which surfaces the toast in the dashboard layout.
+   */
+  private async notify(
+    userId: string,
+    category: NotificationCategory,
+    title: string,
+    body: string,
+    referenceId?: string,
+    priority: NotificationPriority = NotificationPriority.NORMAL,
+  ) {
+    try {
+      await this.notificationsService.send({
+        userId,
+        category,
+        title,
+        body,
+        referenceId,
+        priority,
+        channels: ["in_app"],
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Notification (${category}) for ${userId} failed: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  /**
+   * Throws ConflictException if another non-cancelled booking already occupies
+   * (providerId, scheduledDate, scheduledStartTime). Pass `excludeBookingId`
+   * when rescheduling so the booking being moved doesn't collide with itself.
+   * No-op for flexible-time bookings since the sentinel "00:00:00" is shared
+   * by design.
+   *
+   * The `client` parameter is typed `any` because callers pass either the
+   * top-level extended PrismaService or a `$transaction` tx client — Prisma's
+   * generated types treat those as structurally incompatible despite both
+   * exposing `booking.findFirst`. The shape is enforced by the call below.
+   */
+  private async assertSlotAvailable(
+    client: any,
+    providerId: string,
+    scheduledDate: Date,
+    scheduledStartTime: string,
+    excludeBookingId?: string,
+  ): Promise<void> {
+    if (scheduledStartTime === BookingsService.FLEXIBLE_TIME) return;
+
+    const conflict = await client.booking.findFirst({
+      where: {
+        providerId,
+        scheduledDate,
+        scheduledStartTime: new Date(`1970-01-01T${scheduledStartTime}`),
+        status: { notIn: ["CANCELLED"] },
+        deletedAt: null,
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (conflict) {
+      throw new ConflictException("This time slot is already booked");
+    }
+  }
 
   /**
    * Create a booking with atomic transaction
    * This ensures slot locking and booking creation happen together
    */
   async create(data: CreateBookingData) {
-    return this.prisma.executeInTransaction(async (tx) => {
+    // Sentinel "00:00:00" represents a flexible-time booking — the customer
+    // didn't pick a slot and the provider will confirm the time via messaging.
+    const isFlexibleTime = !data.scheduledStartTime;
+    const scheduledStartTime =
+      data.scheduledStartTime ?? BookingsService.FLEXIBLE_TIME;
+
+    const booking = await this.prisma.executeInTransaction(async (tx) => {
       // 1. Verify provider exists and is active
       const provider = await tx.provider.findUnique({
         where: { id: data.providerId },
@@ -53,21 +141,15 @@ export class BookingsService {
         throw new BadRequestException("Provider is not currently accepting bookings");
       }
 
-      // 2. Check for conflicting bookings
-      const existingBooking = await tx.booking.findFirst({
-        where: {
-          providerId: data.providerId,
-          scheduledDate: data.scheduledDate,
-          scheduledStartTime: new Date(`1970-01-01T${data.scheduledStartTime}`),
-          status: {
-            notIn: ["CANCELLED"],
-          },
-          deletedAt: null,
-        },
-      });
-
-      if (existingBooking) {
-        throw new ConflictException("This time slot is already booked");
+      // 2. Conflict detection only applies to fixed-time bookings.
+      //    Flexible bookings won't collide on the sentinel time.
+      if (!isFlexibleTime) {
+        await this.assertSlotAvailable(
+          tx,
+          data.providerId,
+          data.scheduledDate,
+          scheduledStartTime,
+        );
       }
 
       // 3. Check availability if it exists
@@ -87,11 +169,11 @@ export class BookingsService {
         throw new BadRequestException("Provider is not available on this date");
       }
 
-      // 4. Lock the time slot if it exists
-      if (availability) {
+      // 4. Lock the time slot if it exists (skip for flexible bookings).
+      if (availability && !isFlexibleTime) {
         const timeSlot = availability.timeSlots.find(
           (slot) =>
-            slot.startTime.toISOString().slice(11, 19) === data.scheduledStartTime &&
+            slot.startTime.toISOString().slice(11, 19) === scheduledStartTime &&
             slot.isAvailable,
         );
 
@@ -111,7 +193,7 @@ export class BookingsService {
           customerId: data.customerId,
           providerId: data.providerId,
           scheduledDate: data.scheduledDate,
-          scheduledStartTime: new Date(`1970-01-01T${data.scheduledStartTime}`),
+          scheduledStartTime: new Date(`1970-01-01T${scheduledStartTime}`),
           scheduledEndTime: data.scheduledEndTime
             ? new Date(`1970-01-01T${data.scheduledEndTime}`)
             : null,
@@ -119,6 +201,16 @@ export class BookingsService {
           problemDescription: data.problemDescription,
           estimatedAmount: data.estimatedAmount,
           createdById: data.customerId,
+          attachments:
+            data.attachmentIds && data.attachmentIds.length > 0
+              ? {
+                  create: data.attachmentIds.map((fileId) => ({
+                    fileId,
+                    attachmentType: "INITIAL",
+                    uploadedById: data.customerId,
+                  })),
+                }
+              : undefined,
         },
         include: {
           customer: {
@@ -154,6 +246,37 @@ export class BookingsService {
 
       return booking;
     });
+
+    // Auto-create a conversation linked to this booking so both the customer
+    // and the provider discover each other in their messages list immediately.
+    try {
+      await this.messagesService.getOrCreateConversation(
+        data.customerId,
+        data.providerId,
+        booking.id,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to create conversation for booking ${booking.bookingNumber}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+
+    // Notify the PROVIDER (their user record) that a new booking arrived.
+    // The notifications gateway will push this to any connected dashboard
+    // session and surface a toast via the layout-level listener.
+    if (booking.provider?.user?.id) {
+      const customerName = booking.customer?.name || "A customer";
+      await this.notify(
+        booking.provider.user.id,
+        NotificationCategory.BOOKING_CONFIRMED,
+        "New booking request",
+        `${customerName} just requested a booking (#${booking.bookingNumber}). Open it to confirm a time.`,
+        booking.id,
+        NotificationPriority.HIGH,
+      );
+    }
+
+    return booking;
   }
 
   private generateBookingNumber(): string {
@@ -180,6 +303,54 @@ export class BookingsService {
     }
 
     return booking;
+  }
+
+  async addAttachment(
+    bookingId: string,
+    userId: string,
+    fileId: string,
+    description?: string,
+  ) {
+    const booking = await this.findById(bookingId, userId);
+    const isCustomer = booking.customerId === userId;
+    const isProvider = booking.provider.userId === userId;
+    if (!isCustomer && !isProvider) {
+      throw new ForbiddenException(
+        "Only the customer or provider can attach files to this booking",
+      );
+    }
+    return this.prisma.bookingAttachment.create({
+      data: {
+        bookingId,
+        fileId,
+        attachmentType: isProvider ? "PROVIDER" : "CUSTOMER",
+        description,
+        uploadedById: userId,
+      },
+      include: {
+        file: true,
+        uploadedBy: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  async removeAttachment(
+    bookingId: string,
+    userId: string,
+    attachmentId: string,
+  ) {
+    const attachment = await this.prisma.bookingAttachment.findUnique({
+      where: { id: attachmentId },
+      select: { id: true, bookingId: true, uploadedById: true },
+    });
+    if (!attachment || attachment.bookingId !== bookingId) {
+      throw new NotFoundException("Attachment not found");
+    }
+    if (attachment.uploadedById !== userId) {
+      throw new ForbiddenException("You can only remove your own attachments");
+    }
+    await this.prisma.bookingAttachment.delete({ where: { id: attachmentId } });
+    return { success: true };
   }
 
   async findByBookingNumber(bookingNumber: string) {
@@ -216,7 +387,7 @@ export class BookingsService {
     }
   }
 
-  async confirm(id: string, userId: string) {
+  async confirm(id: string, userId: string, scheduledStartTime?: string) {
     const booking = await this.findById(id);
 
     // Only provider can confirm
@@ -226,6 +397,21 @@ export class BookingsService {
 
     if (booking.status !== "PENDING") {
       throw new BadRequestException("Can only confirm pending bookings");
+    }
+
+    // If the booking was created flexible (sentinel 00:00:00) and the provider
+    // confirmed a concrete time via messaging, lock it in here.
+    const isFlexibleSentinel =
+      booking.scheduledStartTime?.toISOString().slice(11, 19) === "00:00:00";
+    if (scheduledStartTime && isFlexibleSentinel) {
+      await this.prisma.booking.update({
+        where: { id, version: booking.version },
+        data: {
+          scheduledStartTime: new Date(`1970-01-01T${scheduledStartTime}`),
+          version: { increment: 1 },
+        },
+      });
+      booking.version += 1;
     }
 
     const updated = await this.bookingsRepository.updateStatus(
@@ -245,6 +431,16 @@ export class BookingsService {
     );
 
     this.logger.log(`Booking ${booking.bookingNumber} confirmed`);
+
+    // Notify the customer that their booking is confirmed.
+    await this.notify(
+      booking.customerId,
+      NotificationCategory.BOOKING_CONFIRMED,
+      "Booking confirmed",
+      `${booking.provider?.user?.name || "Your provider"} confirmed booking #${booking.bookingNumber}.`,
+      booking.id,
+      NotificationPriority.HIGH,
+    );
 
     return updated;
   }
@@ -330,7 +526,111 @@ export class BookingsService {
       this.logger.log(`Booking ${booking.bookingNumber} completed`);
 
       return updated;
+    }).then(async (updated) => {
+      // A completion changes the provider's completion rate, so refresh the
+      // composite trust score (Section 4.6.4).
+      await this.providersService.recomputeTrustScore(booking.providerId);
+      // Notify the customer the job is done and nudge them to leave a review.
+      // Runs after the transaction commits to avoid noisy notifications if the
+      // status update rolls back.
+      await this.notify(
+        booking.customerId,
+        NotificationCategory.BOOKING_COMPLETED,
+        "Service completed",
+        `${booking.provider?.user?.name || "Your provider"} marked booking #${booking.bookingNumber} as completed. Tap to leave a review.`,
+        booking.id,
+        NotificationPriority.NORMAL,
+      );
+      return updated;
     });
+  }
+
+  async reschedule(
+    id: string,
+    userId: string,
+    data: { scheduledDate: string; scheduledStartTime?: string },
+  ) {
+    const booking = await this.findById(id);
+
+    const isCustomer = booking.customerId === userId;
+    const isProvider = booking.provider.userId === userId;
+
+    if (!isCustomer && !isProvider) {
+      throw new ForbiddenException("Not authorized to reschedule this booking");
+    }
+
+    if (!["PENDING", "CONFIRMED"].includes(booking.status)) {
+      throw new BadRequestException(
+        "Only pending or confirmed bookings can be rescheduled",
+      );
+    }
+
+    // Guard against double-booking: previously `create` checked this but
+    // `reschedule` didn't, so a provider could be moved into a slot another
+    // booking already owned. We exclude the current booking from the check
+    // since it's the one being moved.
+    if (
+      data.scheduledStartTime &&
+      data.scheduledStartTime !== BookingsService.FLEXIBLE_TIME
+    ) {
+      await this.assertSlotAvailable(
+        this.prisma,
+        booking.providerId,
+        new Date(data.scheduledDate),
+        data.scheduledStartTime,
+        id,
+      );
+    }
+
+    // A reschedule by the customer pushes the booking back to PENDING so the
+    // provider re-confirms; provider reschedules stay confirmed if already so.
+    const updated = await this.bookingsRepository.update(
+      id,
+      {
+        scheduledDate: new Date(data.scheduledDate),
+        scheduledStartTime: data.scheduledStartTime,
+      },
+      booking.version,
+    );
+
+    if (isCustomer && booking.status === "CONFIRMED") {
+      await this.bookingsRepository.updateStatus(
+        id,
+        "PENDING",
+        userId,
+        booking.version + 1,
+      );
+    }
+
+    await this.cacheService.invalidateAvailability(
+      booking.providerId,
+      booking.scheduledDate.toISOString().split("T")[0],
+    );
+    await this.cacheService.invalidateAvailability(
+      booking.providerId,
+      data.scheduledDate,
+    );
+
+    this.logger.log(
+      `Booking ${booking.bookingNumber} rescheduled by ${isCustomer ? "customer" : "provider"}`,
+    );
+
+    // Notify the OTHER party (whoever didn't trigger the reschedule).
+    const targetUserId = isCustomer
+      ? booking.provider?.user?.id
+      : booking.customerId;
+    if (targetUserId) {
+      await this.notify(
+        targetUserId,
+        NotificationCategory.BOOKING_REMINDER,
+        "Booking rescheduled",
+        `Booking #${booking.bookingNumber} was moved to ${data.scheduledDate}${data.scheduledStartTime ? ` at ${data.scheduledStartTime}` : ""}.`,
+        booking.id,
+        NotificationPriority.HIGH,
+      );
+    }
+
+    return updated;
   }
 
   async cancel(id: string, userId: string, reason: string) {
@@ -366,7 +666,145 @@ export class BookingsService {
 
     this.logger.log(`Booking ${booking.bookingNumber} cancelled by ${isCustomer ? "customer" : "provider"}`);
 
+    // Notify the OTHER party. Whoever clicked Cancel already knows.
+    const targetUserId = isCustomer
+      ? booking.provider?.user?.id
+      : booking.customerId;
+    if (targetUserId) {
+      await this.notify(
+        targetUserId,
+        NotificationCategory.BOOKING_CANCELLED,
+        "Booking cancelled",
+        `Booking #${booking.bookingNumber} was cancelled${reason ? `: ${reason}` : "."}.`,
+        booking.id,
+        NotificationPriority.HIGH,
+      );
+    }
+
     return updated;
+  }
+
+  /**
+   * Flag a confirmed booking as a no-show. Either party may flag the *other*
+   * one: a provider reports a CUSTOMER no-show, a customer reports a PROVIDER
+   * no-show. Only allowed once the scheduled start time has passed, so it can't
+   * be used to pre-emptively bail on an upcoming appointment (use cancel for
+   * that). Provider-side no-shows increment the provider's reliability counter.
+   */
+  async flagNoShow(id: string, userId: string, reason?: string) {
+    const booking = await this.findById(id);
+
+    const isCustomer = booking.customerId === userId;
+    const isProvider = booking.provider.userId === userId;
+
+    if (!isCustomer && !isProvider) {
+      throw new ForbiddenException("Not authorized to flag this booking");
+    }
+
+    if (booking.status !== "CONFIRMED") {
+      throw new BadRequestException(
+        "Only confirmed bookings can be marked as a no-show",
+      );
+    }
+
+    if (this.scheduledMoment(booking) > new Date()) {
+      throw new BadRequestException(
+        "Cannot flag a no-show before the scheduled time",
+      );
+    }
+
+    // The flagger reports the other side. Provider → customer didn't show.
+    const noShowParty = isProvider ? "CUSTOMER" : "PROVIDER";
+
+    const updated = await this.prisma.executeInTransaction(async (tx) => {
+      const result = await tx.booking.update({
+        where: { id, version: booking.version },
+        data: {
+          status: "NO_SHOW",
+          statusChangedAt: new Date(),
+          statusChangedById: userId,
+          noShowParty,
+          noShowReason: reason,
+          noShowFlaggedAt: new Date(),
+          version: { increment: 1 },
+        },
+        include: {
+          customer: {
+            select: { id: true, name: true, email: true, phone: true },
+          },
+          provider: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true, phone: true },
+              },
+            },
+          },
+        },
+      });
+
+      // Only provider no-shows count against provider reliability.
+      if (noShowParty === "PROVIDER") {
+        await tx.provider.update({
+          where: { id: booking.providerId },
+          data: { noShowCount: { increment: 1 } },
+        });
+      }
+
+      return result;
+    });
+
+    // Free the slot back up.
+    await this.cacheService.invalidateAvailability(
+      booking.providerId,
+      booking.scheduledDate.toISOString().split("T")[0],
+    );
+
+    // A provider no-show lowers the reliability component of the trust score.
+    if (noShowParty === "PROVIDER") {
+      await this.providersService.recomputeTrustScore(booking.providerId);
+    }
+
+    this.logger.log(
+      `Booking ${booking.bookingNumber} flagged no-show (${noShowParty}) by ${isProvider ? "provider" : "customer"}`,
+    );
+
+    // Notify the party who was flagged.
+    const targetUserId =
+      noShowParty === "CUSTOMER"
+        ? booking.customerId
+        : booking.provider?.user?.id;
+    if (targetUserId) {
+      await this.notify(
+        targetUserId,
+        NotificationCategory.BOOKING_CANCELLED,
+        "Marked as a no-show",
+        `Booking #${booking.bookingNumber} was marked as a no-show${reason ? `: ${reason}` : "."}.`,
+        booking.id,
+        NotificationPriority.HIGH,
+      );
+    }
+
+    return updated;
+  }
+
+  /**
+   * Combine a booking's scheduled date + start time into a single Date. For
+   * flexible-time bookings (sentinel "00:00:00") we anchor to end-of-day so a
+   * no-show can only be flagged after that whole day has passed.
+   */
+  private scheduledMoment(booking: {
+    scheduledDate: Date;
+    scheduledStartTime: Date | null;
+  }): Date {
+    const date = new Date(booking.scheduledDate);
+    const time = booking.scheduledStartTime?.toISOString().slice(11, 19);
+    if (!time || time === BookingsService.FLEXIBLE_TIME) {
+      date.setUTCHours(23, 59, 59, 999);
+      return date;
+    }
+    const [h, m, s] = time.split(":").map(Number);
+    date.setUTCHours(h, m, s ?? 0, 0);
+    return date;
   }
 
   async getCustomerBookings(customerId: string, params: Partial<BookingListParams>) {

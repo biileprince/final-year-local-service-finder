@@ -64,6 +64,13 @@ export class UsersController {
     );
   }
 
+  @Get("me/export")
+  @ApiOperation({ summary: "Export all personal data (GDPR)" })
+  @ApiResponse({ status: 200, description: "Returns a full copy of user data" })
+  async exportData(@CurrentUser() user: CurrentUserPayload) {
+    return this.usersService.exportData(user.id);
+  }
+
   @Delete("me")
   @ApiOperation({ summary: "Delete current user account" })
   @ApiResponse({ status: 200, description: "Account deleted successfully" })

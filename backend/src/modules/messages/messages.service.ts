@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from "@nestjs/common";
 import { PrismaService } from "../../database/prisma.service";
 import {
@@ -9,16 +11,21 @@ import {
   CreateMessageData,
   MessageListParams,
 } from "./messages.repository";
+import { MessagesGateway } from "./messages.gateway";
+import { ModerationService } from "../moderation/moderation.service";
 
 @Injectable()
 export class MessagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly messagesRepository: MessagesRepository,
+    @Inject(forwardRef(() => MessagesGateway))
+    private readonly messagesGateway: MessagesGateway,
+    private readonly moderationService: ModerationService,
   ) {}
 
   async getOrCreateConversation(
-    customerId: string,
+    callerUserId: string,
     providerId: string,
     bookingId?: string,
   ) {
@@ -30,6 +37,43 @@ export class MessagesService {
 
     if (!provider) {
       throw new NotFoundException("Provider not found");
+    }
+
+    // Determine the conversation's customerId.
+    // - If the caller is the provider's owner, derive it from the booking
+    //   (so a provider clicking "Message" on a booking opens the chat with
+    //   that booking's customer).
+    // - Otherwise the caller IS the customer.
+    let customerId = callerUserId;
+    const callerIsProvider = provider.userId === callerUserId;
+
+    if (callerIsProvider) {
+      if (!bookingId) {
+        throw new ForbiddenException(
+          "Providers can only start conversations from a booking",
+        );
+      }
+      const booking = await this.prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { customerId: true, providerId: true },
+      });
+      if (!booking || booking.providerId !== providerId) {
+        throw new NotFoundException("Booking not found for this provider");
+      }
+      customerId = booking.customerId;
+    } else if (bookingId) {
+      // Validate booking belongs to caller and provider
+      const booking = await this.prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { customerId: true, providerId: true },
+      });
+      if (
+        !booking ||
+        booking.providerId !== providerId ||
+        booking.customerId !== callerUserId
+      ) {
+        throw new ForbiddenException("Booking does not match conversation");
+      }
     }
 
     return this.messagesRepository.findOrCreateConversation({
@@ -58,6 +102,13 @@ export class MessagesService {
   }
 
   async getUserConversations(userId: string) {
+    // Backfill: ensure every booking the user is part of has a conversation.
+    // Older bookings created before the auto-create flow won't have one, and
+    // a transient failure during booking creation could also leave a gap.
+    // findOrCreateConversation is idempotent thanks to the unique
+    // (customerId, providerId) constraint, so this is safe to run on every load.
+    await this.backfillConversationsForUser(userId);
+
     // Get conversations where user is customer
     const customerConversations =
       await this.messagesRepository.getUserConversations(userId, "customer");
@@ -89,6 +140,17 @@ export class MessagesService {
     // Verify conversation exists and user is participant
     const conversation = await this.getConversation(conversationId, senderId);
 
+    // Block gate: refuse to deliver if either participant has blocked the other.
+    const otherUserId =
+      conversation.customerId === senderId
+        ? conversation.provider.userId
+        : conversation.customerId;
+    if (await this.moderationService.isBlockedBetween(senderId, otherUserId)) {
+      throw new ForbiddenException(
+        "You can't message this user because of a block",
+      );
+    }
+
     // Create message
     const message = await this.messagesRepository.createMessage({
       conversationId,
@@ -104,6 +166,18 @@ export class MessagesService {
       content,
       senderId,
     );
+
+    // Real-time fan-out (room + per-user notification + unread count).
+    // Wrapped so a transient socket failure can't roll back a persisted message.
+    try {
+      await this.messagesGateway.broadcastNewMessage(
+        message,
+        conversationId,
+        senderId,
+      );
+    } catch {
+      // ignore — message is persisted; client will pick it up on next load.
+    }
 
     return message;
   }
@@ -183,6 +257,39 @@ export class MessagesService {
     }
 
     return this.messagesRepository.editMessage(messageId, content);
+  }
+
+  private async backfillConversationsForUser(userId: string) {
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        OR: [{ customerId: userId }, { provider: { userId } }],
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        customerId: true,
+        providerId: true,
+      },
+    });
+
+    if (bookings.length === 0) return;
+
+    const seen = new Set<string>();
+    for (const b of bookings) {
+      const key = `${b.customerId}:${b.providerId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      try {
+        await this.messagesRepository.findOrCreateConversation({
+          customerId: b.customerId,
+          providerId: b.providerId,
+          bookingId: b.id,
+        });
+      } catch {
+        // ignore — race against unique constraint is fine, next call will find it
+      }
+    }
   }
 
   // For WebSocket notifications

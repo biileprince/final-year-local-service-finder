@@ -9,6 +9,7 @@ export interface CreateReviewData {
   rating: number;
   title?: string;
   comment: string;
+  imageIds?: string[];
 }
 
 export interface UpdateReviewData {
@@ -41,6 +42,15 @@ export class ReviewsRepository {
         rating: data.rating,
         title: data.title,
         comment: data.comment,
+        images:
+          data.imageIds && data.imageIds.length > 0
+            ? {
+                create: data.imageIds.map((fileId, idx) => ({
+                  fileId,
+                  displayOrder: idx,
+                })),
+              }
+            : undefined,
       },
       include: {
         customer: {
@@ -66,6 +76,14 @@ export class ReviewsRepository {
             bookingNumber: true,
             scheduledDate: true,
           },
+        },
+        images: {
+          include: {
+            file: {
+              select: { id: true, url: true, thumbnailUrl: true },
+            },
+          },
+          orderBy: { displayOrder: "asc" },
         },
       },
     });

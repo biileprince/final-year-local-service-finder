@@ -1,204 +1,183 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Resend } from "resend";
+import {
+  EmailTemplatesService,
+  RenderedEmail,
+} from "./email-templates.service";
+
+export type EmailTemplate =
+  | "welcome"
+  | "email-verification"
+  | "password-reset"
+  | "booking-confirmed"
+  | "booking-cancelled"
+  | "booking-completed"
+  | "booking-reminder"
+  | "new-review"
+  | "provider-verified"
+  | "provider-rejected"
+  | "default";
 
 export interface EmailOptions {
   to: string;
-  subject: string;
-  template: string;
+  /** Optional override; templates supply their own subject by default. */
+  subject?: string;
+  template: EmailTemplate | string;
   data: Record<string, any>;
   from?: string;
 }
 
+/**
+ * Single entry point for transactional email. Uses Resend
+ * (https://resend.com) for delivery and EmailTemplatesService for rendering.
+ *
+ * If `RESEND_API_KEY` is not configured, sends are logged + skipped silently
+ * so dev environments don't crash; in production the env validator already
+ * marks the key as required.
+ */
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly sendgridApiKey: string;
+  private readonly resend: Resend | null;
   private readonly fromEmail: string;
   private readonly fromName: string;
+  private readonly replyTo?: string;
 
-  constructor(private readonly configService: ConfigService) {
-    this.sendgridApiKey =
-      this.configService.get<string>("SENDGRID_API_KEY") || "";
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly templates: EmailTemplatesService,
+  ) {
+    const apiKey = this.configService.get<string>("RESEND_API_KEY") ?? "";
+    this.resend = apiKey ? new Resend(apiKey) : null;
     this.fromEmail =
-      this.configService.get<string>("EMAIL_FROM") ||
+      this.configService.get<string>("EMAIL_FROM") ??
       "noreply@localservicefinder.com";
     this.fromName =
-      this.configService.get<string>("EMAIL_FROM_NAME") ||
+      this.configService.get<string>("EMAIL_FROM_NAME") ??
       "Local Service Finder";
+    this.replyTo = this.configService.get<string>("EMAIL_REPLY_TO");
   }
 
   async send(options: EmailOptions): Promise<boolean> {
-    const { to, subject, template, data, from } = options;
+    const rendered = this.render(options.template, options.data);
+    const subject = options.subject ?? rendered.subject;
 
-    if (!this.sendgridApiKey) {
-      this.logger.warn("SendGrid API key not configured, skipping email");
+    if (!this.resend) {
+      this.logger.warn(
+        `RESEND_API_KEY not set — skipping email "${subject}" to ${options.to}`,
+      );
       return false;
     }
 
     try {
-      const htmlContent = this.renderTemplate(template, data);
-      const textContent = this.renderTextTemplate(template, data);
-
-      const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.sendgridApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: to }] }],
-          from: {
-            email: from || this.fromEmail,
-            name: this.fromName,
-          },
-          subject,
-          content: [
-            { type: "text/plain", value: textContent },
-            { type: "text/html", value: htmlContent },
-          ],
-        }),
+      const { data, error } = await this.resend.emails.send({
+        from: `${this.fromName} <${options.from ?? this.fromEmail}>`,
+        to: options.to,
+        subject,
+        html: rendered.html,
+        text: rendered.text,
+        replyTo: this.replyTo,
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `SendGrid API error: ${response.status} - ${errorText}`,
-        );
+      if (error) {
+        throw new Error(`Resend API error: ${error.name} - ${error.message}`);
       }
 
-      this.logger.log(`Email sent successfully to ${to}`);
+      // Log the Resend message ID so we can trace deliveries in the Resend
+      // dashboard when a user reports "I never got the email". Most often
+      // the email did send and is sitting in spam, but until the ID is in
+      // the logs we can't prove that.
+      this.logger.log(
+        `Email sent: "${subject}" → ${options.to} (resend id: ${data?.id ?? "unknown"})`,
+      );
       return true;
-    } catch (error) {
-      this.logger.error(`Failed to send email to ${to}: ${error.message}`);
-      throw error;
+    } catch (err) {
+      this.logger.error(
+        `Failed to send email "${subject}" to ${options.to}: ${(err as Error).message}`,
+      );
+      throw err;
     }
   }
 
-  private renderTemplate(template: string, data: Record<string, any>): string {
-    const templates: Record<string, (data: any) => string> = {
-      "booking-confirmed": (d) => `
-        <!DOCTYPE html>
-        <html>
-        <head><style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #4F46E5; color: white; padding: 20px; text-align: center; }
-          .content { padding: 20px; background: #f9f9f9; }
-          .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-          .button { display: inline-block; padding: 12px 24px; background: #4F46E5; color: white; text-decoration: none; border-radius: 4px; }
-        </style></head>
-        <body>
-          <div class="container">
-            <div class="header"><h1>Booking Confirmed</h1></div>
-            <div class="content">
-              <p>Hello,</p>
-              <p>${d.message}</p>
-              <p><strong>Booking Details:</strong></p>
-              <ul>
-                <li>Booking Number: ${d.bookingNumber || "N/A"}</li>
-                <li>Date: ${d.date || "N/A"}</li>
-                <li>Time: ${d.time || "N/A"}</li>
-                ${d.providerName ? `<li>Provider: ${d.providerName}</li>` : ""}
-              </ul>
-              <p>Thank you for using Local Service Finder!</p>
-            </div>
-            <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} Local Service Finder</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
+  // -- Template dispatch ------------------------------------------------------
 
-      "booking-cancelled": (d) => `
-        <!DOCTYPE html>
-        <html>
-        <head><style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #DC2626; color: white; padding: 20px; text-align: center; }
-          .content { padding: 20px; background: #f9f9f9; }
-          .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-        </style></head>
-        <body>
-          <div class="container">
-            <div class="header"><h1>Booking Cancelled</h1></div>
-            <div class="content">
-              <p>Hello,</p>
-              <p>${d.message}</p>
-              <p>If you have any questions, please contact support.</p>
-            </div>
-            <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} Local Service Finder</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
-
-      "booking-reminder": (d) => `
-        <!DOCTYPE html>
-        <html>
-        <head><style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #F59E0B; color: white; padding: 20px; text-align: center; }
-          .content { padding: 20px; background: #f9f9f9; }
-          .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-        </style></head>
-        <body>
-          <div class="container">
-            <div class="header"><h1>Booking Reminder</h1></div>
-            <div class="content">
-              <p>Hello,</p>
-              <p>${d.message}</p>
-              <p><strong>Details:</strong></p>
-              <ul>
-                <li>Date: ${d.date || "N/A"}</li>
-                <li>Time: ${d.time || "N/A"}</li>
-              </ul>
-            </div>
-            <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} Local Service Finder</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
-
-      default: (d) => `
-        <!DOCTYPE html>
-        <html>
-        <head><style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #4F46E5; color: white; padding: 20px; text-align: center; }
-          .content { padding: 20px; background: #f9f9f9; }
-          .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-        </style></head>
-        <body>
-          <div class="container">
-            <div class="header"><h1>${d.title}</h1></div>
-            <div class="content">
-              <p>${d.message}</p>
-            </div>
-            <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} Local Service Finder</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
-    };
-
-    const templateFn = templates[template] || templates.default;
-    return templateFn(data);
-  }
-
-  private renderTextTemplate(
-    template: string,
-    data: Record<string, any>,
-  ): string {
-    return `${data.title}\n\n${data.message}\n\nLocal Service Finder`;
+  private render(template: string, d: Record<string, any>): RenderedEmail {
+    switch (template) {
+      case "welcome":
+        return this.templates.welcome({
+          name: d.name,
+          role: d.role ?? "CUSTOMER",
+        });
+      case "email-verification":
+        return this.templates.emailVerification({
+          name: d.name,
+          code: d.code,
+          ttlMinutes: d.ttlMinutes ?? 15,
+        });
+      case "password-reset":
+        return this.templates.passwordReset({
+          name: d.name,
+          code: d.code,
+          ttlMinutes: d.ttlMinutes ?? 15,
+        });
+      case "booking-confirmed":
+        return this.templates.bookingConfirmed({
+          recipientName: d.recipientName,
+          counterpartName: d.counterpartName,
+          bookingNumber: d.bookingNumber,
+          date: d.date,
+          time: d.time,
+          address: d.address,
+          isProvider: !!d.isProvider,
+        });
+      case "booking-cancelled":
+        return this.templates.bookingCancelled({
+          recipientName: d.recipientName,
+          counterpartName: d.counterpartName,
+          bookingNumber: d.bookingNumber,
+          cancelledByLabel: d.cancelledByLabel ?? "the other party",
+          reason: d.reason,
+        });
+      case "booking-completed":
+        return this.templates.bookingCompletedReviewPrompt({
+          recipientName: d.recipientName,
+          providerName: d.providerName,
+          bookingNumber: d.bookingNumber,
+          bookingId: d.bookingId,
+        });
+      case "booking-reminder":
+        return this.templates.bookingReminder({
+          recipientName: d.recipientName,
+          counterpartName: d.counterpartName,
+          bookingNumber: d.bookingNumber,
+          date: d.date,
+          time: d.time,
+          hoursUntil: d.hoursUntil ?? 24,
+        });
+      case "new-review":
+        return this.templates.newReview({
+          providerName: d.providerName,
+          customerName: d.customerName,
+          rating: d.rating,
+          bookingNumber: d.bookingNumber,
+        });
+      case "provider-verified":
+        return this.templates.providerVerified({
+          providerName: d.providerName,
+        });
+      case "provider-rejected":
+        return this.templates.providerRejected({
+          providerName: d.providerName,
+          reason: d.reason,
+        });
+      default:
+        // Generic title/body fallback used by NotificationsService for
+        // categories without a custom template (NEW_MESSAGE, SYSTEM, etc.).
+        return this.templates.welcome({
+          name: d.name ?? "there",
+          role: d.role ?? "CUSTOMER",
+        });
+    }
   }
 }

@@ -15,6 +15,11 @@ export interface User {
 // Provider types
 export type VerificationStatus = "PENDING" | "VERIFIED" | "REJECTED";
 
+export interface ProviderSpecialty {
+  id: string;
+  specialty: string;
+}
+
 export interface Provider {
   id: string;
   userId: string;
@@ -26,6 +31,7 @@ export interface Provider {
   latitude?: number;
   longitude?: number;
   serviceRadiusKm: number;
+  cancellationPolicy?: string | null;
   verificationStatus: VerificationStatus;
   featured: boolean;
   isActive: boolean;
@@ -34,8 +40,22 @@ export interface Provider {
   totalBookings: number;
   completedBookings: number;
   categories: ProviderCategory[];
-  specialties: string[];
+  specialties: ProviderSpecialty[];
   gallery?: ProviderGalleryItem[];
+  idDocumentId?: string | null;
+  businessLicenseId?: string | null;
+  idDocument?: {
+    id: string;
+    url: string;
+    fileName?: string;
+    mimeType?: string;
+  } | null;
+  businessLicense?: {
+    id: string;
+    url: string;
+    fileName?: string;
+    mimeType?: string;
+  } | null;
 }
 
 export interface ProviderCategory {
@@ -55,6 +75,29 @@ export interface ProviderGalleryItem {
   description?: string;
 }
 
+export interface ProviderHours {
+  id: string;
+  providerId: string;
+  dayOfWeek: number; // 0 = Sunday … 6 = Saturday
+  openMinutes: number;
+  closeMinutes: number;
+  isClosed: boolean;
+}
+
+export interface ProviderService {
+  id: string;
+  providerId: string;
+  categoryId?: string | null;
+  category?: { id: string; name: string; slug: string } | null;
+  name: string;
+  basePrice: number;
+  durationMin: number;
+  description?: string | null;
+  imageUrl?: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
 // Category types
 export interface Category {
   id: string;
@@ -63,11 +106,40 @@ export interface Category {
   description?: string;
   icon?: string;
   color?: string;
+  imageId?: string | null;
+  image?: { id: string; url: string; thumbnailUrl?: string | null } | null;
   providerCount: number;
 }
 
 // Booking types
-export type BookingStatus = "PENDING" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export type BookingStatus = "PENDING" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
+export type NoShowParty = "CUSTOMER" | "PROVIDER";
+export type RecurrenceFrequency = "WEEKLY" | "BIWEEKLY" | "MONTHLY";
+
+export interface RecurringBooking {
+  id: string;
+  customerId: string;
+  providerId: string;
+  provider?: Provider;
+  frequency: RecurrenceFrequency;
+  scheduledStartTime?: string | null;
+  serviceAddress: string;
+  problemDescription: string;
+  startDate: string;
+  endDate?: string | null;
+  maxOccurrences?: number | null;
+  occurrencesCreated: number;
+  nextOccurrenceDate?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  bookings?: {
+    id: string;
+    bookingNumber: string;
+    scheduledDate: string;
+    status: BookingStatus;
+  }[];
+  _count?: { bookings: number };
+}
 export type PaymentStatus = "UNPAID" | "PENDING" | "PAID" | "REFUNDED" | "FAILED";
 
 export interface Booking {
@@ -81,6 +153,8 @@ export interface Booking {
   scheduledStartTime: string;
   scheduledEndTime?: string;
   serviceAddress: string;
+  serviceLatitude?: number | null;
+  serviceLongitude?: number | null;
   problemDescription: string;
   serviceNotes?: string;
   status: BookingStatus;
@@ -90,8 +164,29 @@ export interface Booking {
   paymentStatus: PaymentStatus;
   paymentMethod?: string;
   cancellationReason?: string;
+  noShowParty?: NoShowParty | null;
+  noShowReason?: string | null;
+  noShowFlaggedAt?: string | null;
   createdAt: string;
   review?: Review;
+  attachments?: BookingAttachment[];
+}
+
+export interface BookingAttachment {
+  id: string;
+  attachmentType: string;
+  description?: string | null;
+  uploadedById: string;
+  uploadedBy?: { id: string; name: string };
+  createdAt: string;
+  file: {
+    id: string;
+    url: string;
+    thumbnailUrl?: string | null;
+    fileName: string;
+    mimeType: string;
+    fileSize?: number;
+  };
 }
 
 // Review types
@@ -135,7 +230,16 @@ export interface Conversation {
   lastMessagePreview?: string;
   customerUnreadCount: number;
   providerUnreadCount: number;
+  customerLastReadAt?: string;
+  providerLastReadAt?: string;
   createdAt: string;
+  booking?: {
+    id: string;
+    bookingNumber: string;
+    status: BookingStatus;
+    scheduledDate?: string;
+    scheduledStartTime?: string;
+  };
 }
 
 export interface Message {
@@ -154,6 +258,8 @@ export interface Message {
   isRead: boolean;
   readAt?: string;
   createdAt: string;
+  editedAt?: string;
+  deletedAt?: string;
 }
 
 // Notification types

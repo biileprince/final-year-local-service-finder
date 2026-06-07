@@ -1,10 +1,11 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Inject, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../database/prisma.service";
 import { NotificationType as PrismaNotificationType } from "@prisma/client";
 import { NotificationsRepository } from "./notifications.repository";
 import { EmailService } from "./services/email.service";
 import { SmsService } from "./services/sms.service";
+import { NotificationsGateway } from "./notifications.gateway";
 
 // Internal notification categories (stored in referenceType)
 export enum NotificationCategory {
@@ -35,6 +36,17 @@ export interface SendNotificationOptions {
   referenceId?: string;
   channels?: ("in_app" | "email" | "sms" | "push")[];
   priority?: NotificationPriority;
+  /**
+   * When set, overrides the default email payload so each transactional template
+   * (welcome, booking-confirmed, etc.) gets the rich data it needs to render.
+   * Without this, the email falls back to the generic title/body block.
+   */
+  email?: {
+    template: string;
+    data: Record<string, any>;
+    /** Optional override; templates supply their own subject by default. */
+    subject?: string;
+  };
 }
 
 export interface BookingNotificationData {
@@ -58,6 +70,8 @@ export class NotificationsService {
     private readonly repository: NotificationsRepository,
     private readonly emailService: EmailService,
     private readonly smsService: SmsService,
+    @Inject(forwardRef(() => NotificationsGateway))
+    private readonly gateway: NotificationsGateway,
   ) {}
 
   // ============================================================================
@@ -80,6 +94,7 @@ export class NotificationsService {
       where: { id: userId },
       select: {
         id: true,
+        name: true,
         email: true,
         phone: true,
         notificationPreferences: true,
@@ -97,7 +112,7 @@ export class NotificationsService {
     // Create in-app notification
     if (channels.includes("in_app")) {
       try {
-        await this.repository.create({
+        const created = await this.repository.create({
           userId,
           title,
           body,
@@ -106,8 +121,15 @@ export class NotificationsService {
           referenceId,
         });
         results.inApp = true;
+        // Fan out to any open sockets for this user. Failures here must not
+        // block notification delivery — the row is already persisted.
+        this.gateway.emitNewNotification(userId, created).catch((err) => {
+          this.logger.warn(
+            `Socket emit failed for user ${userId}: ${(err as Error).message}`,
+          );
+        });
       } catch (error) {
-        this.logger.error(`Failed to create in-app notification: ${error.message}`);
+        this.logger.error(`Failed to create in-app notification: ${(error as Error).message}`);
         results.inApp = false;
       }
     }
@@ -119,11 +141,12 @@ export class NotificationsService {
       this.isChannelEnabled(preferences, category, "email")
     ) {
       try {
+        const emailOverride = options.email;
         await this.emailService.send({
           to: user.email,
-          subject: title,
-          template: this.getEmailTemplate(category),
-          data: { title, body, referenceId },
+          subject: emailOverride?.subject ?? title,
+          template: emailOverride?.template ?? this.getEmailTemplate(category),
+          data: emailOverride?.data ?? { title, body, name: user.name, referenceId },
         });
 
         // Record email notification
@@ -138,7 +161,7 @@ export class NotificationsService {
 
         results.email = true;
       } catch (error) {
-        this.logger.error(`Failed to send email: ${error.message}`);
+        this.logger.error(`Failed to send email: ${(error as Error).message}`);
         results.email = false;
       }
     }
@@ -168,7 +191,7 @@ export class NotificationsService {
 
         results.sms = true;
       } catch (error) {
-        this.logger.error(`Failed to send SMS: ${error.message}`);
+        this.logger.error(`Failed to send SMS: ${(error as Error).message}`);
         results.sms = false;
       }
     }
@@ -194,6 +217,17 @@ export class NotificationsService {
       referenceId: data.bookingId,
       channels: ["in_app", "email", "sms"],
       priority: NotificationPriority.HIGH,
+      email: {
+        template: "booking-confirmed",
+        data: {
+          recipientName: data.customerName,
+          counterpartName: data.providerName,
+          bookingNumber: data.bookingNumber,
+          date: data.date,
+          time: data.time,
+          isProvider: false,
+        },
+      },
     });
 
     // Notify provider
@@ -205,6 +239,17 @@ export class NotificationsService {
       referenceId: data.bookingId,
       channels: ["in_app", "email", "sms"],
       priority: NotificationPriority.HIGH,
+      email: {
+        template: "booking-confirmed",
+        data: {
+          recipientName: data.providerName,
+          counterpartName: data.customerName,
+          bookingNumber: data.bookingNumber,
+          date: data.date,
+          time: data.time,
+          isProvider: true,
+        },
+      },
     });
   }
 
@@ -212,8 +257,15 @@ export class NotificationsService {
     customerId: string,
     providerId: string,
     data: BookingNotificationData,
-    cancelledBy: "customer" | "provider",
+    cancelledBy: "customer" | "provider" | "admin",
   ) {
+    const cancelledByLabel =
+      cancelledBy === "customer"
+        ? "the customer"
+        : cancelledBy === "provider"
+          ? "the provider"
+          : "an admin";
+
     // Notify customer
     await this.send({
       userId: customerId,
@@ -222,10 +274,19 @@ export class NotificationsService {
       body:
         cancelledBy === "customer"
           ? `Your booking #${data.bookingNumber} has been cancelled.`
-          : `Your booking #${data.bookingNumber} with ${data.providerName} has been cancelled by the provider.`,
+          : `Your booking #${data.bookingNumber} with ${data.providerName} has been cancelled by ${cancelledByLabel}.`,
       referenceId: data.bookingId,
       channels: ["in_app", "email"],
       priority: NotificationPriority.HIGH,
+      email: {
+        template: "booking-cancelled",
+        data: {
+          recipientName: data.customerName,
+          counterpartName: data.providerName,
+          bookingNumber: data.bookingNumber,
+          cancelledByLabel,
+        },
+      },
     });
 
     // Notify provider
@@ -236,10 +297,19 @@ export class NotificationsService {
       body:
         cancelledBy === "provider"
           ? `You have cancelled booking #${data.bookingNumber}.`
-          : `Booking #${data.bookingNumber} from ${data.customerName} has been cancelled.`,
+          : `Booking #${data.bookingNumber} from ${data.customerName} has been cancelled by ${cancelledByLabel}.`,
       referenceId: data.bookingId,
       channels: ["in_app", "email"],
       priority: NotificationPriority.HIGH,
+      email: {
+        template: "booking-cancelled",
+        data: {
+          recipientName: data.providerName,
+          counterpartName: data.customerName,
+          bookingNumber: data.bookingNumber,
+          cancelledByLabel,
+        },
+      },
     });
   }
 
@@ -247,6 +317,7 @@ export class NotificationsService {
     userId: string,
     data: BookingNotificationData,
     hoursUntil: number,
+    isProvider = false,
   ) {
     await this.send({
       userId,
@@ -256,6 +327,17 @@ export class NotificationsService {
       referenceId: data.bookingId,
       channels: ["in_app", "email", "sms"],
       priority: NotificationPriority.HIGH,
+      email: {
+        template: "booking-reminder",
+        data: {
+          recipientName: isProvider ? data.providerName : data.customerName,
+          counterpartName: isProvider ? data.customerName : data.providerName,
+          bookingNumber: data.bookingNumber,
+          date: data.date,
+          time: data.time,
+          hoursUntil,
+        },
+      },
     });
   }
 
@@ -273,6 +355,15 @@ export class NotificationsService {
       referenceId: data.bookingId,
       channels: ["in_app", "email"],
       priority: NotificationPriority.NORMAL,
+      email: {
+        template: "booking-completed",
+        data: {
+          recipientName: data.customerName,
+          providerName: data.providerName,
+          bookingNumber: data.bookingNumber,
+          bookingId: data.bookingId,
+        },
+      },
     });
 
     // Notify provider
@@ -297,6 +388,7 @@ export class NotificationsService {
     rating: number,
     bookingNumber: string,
     reviewId?: string,
+    providerName?: string,
   ) {
     await this.send({
       userId: providerId,
@@ -306,6 +398,15 @@ export class NotificationsService {
       referenceId: reviewId,
       channels: ["in_app", "email"],
       priority: NotificationPriority.NORMAL,
+      email: {
+        template: "new-review",
+        data: {
+          providerName: providerName ?? "there",
+          customerName: reviewerName,
+          rating,
+          bookingNumber,
+        },
+      },
     });
   }
 
@@ -359,6 +460,29 @@ export class NotificationsService {
       body: `Congratulations! Your provider account has been verified. You can now receive bookings.`,
       channels: ["in_app", "email"],
       priority: NotificationPriority.HIGH,
+      email: {
+        template: "provider-verified",
+        data: { providerName },
+      },
+    });
+  }
+
+  async sendProviderRejected(
+    providerId: string,
+    providerName: string,
+    reason: string,
+  ) {
+    await this.send({
+      userId: providerId,
+      category: NotificationCategory.PROVIDER_SUSPENDED,
+      title: "Verification needs another look",
+      body: `Your provider verification was not accepted. ${reason ? `Reason: ${reason}. ` : ""}Update your documents and re-submit.`,
+      channels: ["in_app", "email"],
+      priority: NotificationPriority.HIGH,
+      email: {
+        template: "provider-rejected",
+        data: { providerName, reason },
+      },
     });
   }
 
@@ -373,6 +497,26 @@ export class NotificationsService {
     });
   }
 
+  async sendWelcomeEmail(
+    userId: string,
+    name: string,
+    role: "CUSTOMER" | "PROVIDER",
+    email: string,
+  ) {
+    try {
+      await this.emailService.send({
+        to: email,
+        template: "welcome",
+        data: { name, role },
+      });
+      this.logger.log(`Welcome email sent to ${email}`);
+    } catch (err) {
+      this.logger.error(
+        `Failed to send welcome email to ${email}: ${(err as Error).message}`,
+      );
+    }
+  }
+
   // ============================================================================
   // User CRUD Operations
   // ============================================================================
@@ -385,11 +529,15 @@ export class NotificationsService {
   }
 
   async markAsRead(notificationId: string, userId: string) {
-    return this.repository.markAsRead(notificationId, userId);
+    const result = await this.repository.markAsRead(notificationId, userId);
+    this.gateway.emitUnreadCount(userId).catch(() => undefined);
+    return result;
   }
 
   async markAllAsRead(userId: string) {
-    return this.repository.markAllAsRead(userId);
+    const result = await this.repository.markAllAsRead(userId);
+    this.gateway.emitUnreadCount(userId).catch(() => undefined);
+    return result;
   }
 
   async getUnreadCount(userId: string) {
@@ -397,7 +545,9 @@ export class NotificationsService {
   }
 
   async deleteNotification(notificationId: string, userId: string) {
-    return this.repository.delete(notificationId, userId);
+    const result = await this.repository.delete(notificationId, userId);
+    this.gateway.emitUnreadCount(userId).catch(() => undefined);
+    return result;
   }
 
   // ============================================================================

@@ -50,4 +50,12 @@ export const messagesService = {
   async getUnreadCount(): Promise<{ total: number; asCustomer: number; asProvider: number }> {
     return apiClient.get("/messages/unread-count", true);
   },
+
+  async editMessage(messageId: string, content: string): Promise<Message> {
+    return apiClient.put<Message>(`/messages/${messageId}`, { content }, true);
+  },
+
+  async deleteMessage(messageId: string): Promise<{ success: boolean }> {
+    return apiClient.delete<{ success: boolean }>(`/messages/${messageId}`, true);
+  },
 };
