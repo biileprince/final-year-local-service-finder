@@ -3,6 +3,7 @@ import { CITIES } from "@/lib/seo";
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_FETCH_TIMEOUT_MS = 5000;
 
 // Rebuild the sitemap hourly so newly-listed providers get indexed without a
 // full redeploy.
@@ -36,27 +37,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Category landing pages + the category × city long-tail matrix.
   const categoryRoutes: MetadataRoute.Sitemap = [];
   try {
-    const res = await fetch(`${API_URL}/categories`, {
-      next: { revalidate: 3600 },
-    });
-    if (res.ok) {
-      const cats = (await res.json()) as CategoryRow[];
-      for (const c of cats) {
-        categoryRoutes.push({
-          url: `${SITE_URL}/categories/${c.slug}`,
-          lastModified: c.updatedAt ? new Date(c.updatedAt) : new Date(),
-          changeFrequency: "weekly",
-          priority: 0.7,
-        });
-        for (const city of CITIES) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), API_FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${API_URL}/categories`, {
+        next: { revalidate: 3600 },
+        signal: controller.signal,
+      });
+      if (res.ok) {
+        const cats = (await res.json()) as CategoryRow[];
+        for (const c of cats) {
           categoryRoutes.push({
-            url: `${SITE_URL}/categories/${c.slug}/${city.slug}`,
-            lastModified: new Date(),
+            url: `${SITE_URL}/categories/${c.slug}`,
+            lastModified: c.updatedAt ? new Date(c.updatedAt) : new Date(),
             changeFrequency: "weekly",
-            priority: 0.6,
+            priority: 0.7,
           });
+          for (const city of CITIES) {
+            categoryRoutes.push({
+              url: `${SITE_URL}/categories/${c.slug}/${city.slug}`,
+              lastModified: new Date(),
+              changeFrequency: "weekly",
+              priority: 0.6,
+            });
+          }
         }
       }
+    } finally {
+      clearTimeout(timeout);
     }
   } catch {
     // Static routes still produce a valid sitemap.
@@ -64,20 +72,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   let providerRoutes: MetadataRoute.Sitemap = [];
   try {
-    const res = await fetch(`${API_URL}/providers?limit=500`, {
-      next: { revalidate: 3600 },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const list: ProviderRow[] = Array.isArray(data)
-        ? data
-        : (data.items ?? data.providers ?? []);
-      providerRoutes = list.map((p) => ({
-        url: `${SITE_URL}/providers/${p.id}`,
-        lastModified: p.updatedAt ? new Date(p.updatedAt) : new Date(),
-        changeFrequency: "weekly" as const,
-        priority: 0.7,
-      }));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), API_FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${API_URL}/providers?limit=500`, {
+        next: { revalidate: 3600 },
+        signal: controller.signal,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const list: ProviderRow[] = Array.isArray(data)
+          ? data
+          : (data.items ?? data.providers ?? []);
+        providerRoutes = list.map((p) => ({
+          url: `${SITE_URL}/providers/${p.id}`,
+          lastModified: p.updatedAt ? new Date(p.updatedAt) : new Date(),
+          changeFrequency: "weekly" as const,
+          priority: 0.7,
+        }));
+      }
+    } finally {
+      clearTimeout(timeout);
     }
   } catch {
     // Network/API hiccup — the static routes still produce a valid sitemap.
