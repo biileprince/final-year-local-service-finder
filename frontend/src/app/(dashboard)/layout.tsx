@@ -234,7 +234,7 @@ export default function DashboardLayout({
                   {user.name}
                 </p>
                 <p className="truncate text-sm text-secondary-500">
-                  {user.role === "PROVIDER" ? "Service Provider" : "Customer"}
+                  {user.role === "ADMIN" ? "Admin" : user.role === "PROVIDER" ? "Service Provider" : "Customer"}
                 </p>
               </div>
             </div>
